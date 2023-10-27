@@ -1,0 +1,4 @@
+---
+hosts:
+  - host: ras3
+  - host: ras4
