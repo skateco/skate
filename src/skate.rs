@@ -94,18 +94,18 @@ fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dy
                 let kind = mapping.get(&kind_key).and_then(serde_yaml::Value::as_str);
                 match (api_version, kind) {
                     (Some(api_version), Some(kind)) if
-                    api_version == <k8s_openapi::api::core::v1::Pod as k8s_openapi::Resource>::API_VERSION &&
-                        kind == <k8s_openapi::api::core::v1::Pod as k8s_openapi::Resource>::KIND =>
+                    api_version == <Pod as Resource>::API_VERSION &&
+                        kind == <Pod as Resource>::KIND =>
                         {
-                            let pod: k8s_openapi::api::core::v1::Pod = serde::Deserialize::deserialize(document)?;
+                            let pod: Pod = serde::Deserialize::deserialize(document)?;
                             result.push(SupportedResources::Pod(pod))
                         }
 
                     (Some(api_version), Some(kind)) if
-                    api_version == <k8s_openapi::api::apps::v1::Deployment as k8s_openapi::Resource>::API_VERSION &&
-                        kind == <k8s_openapi::api::apps::v1::Deployment as k8s_openapi::Resource>::KIND =>
+                    api_version == <Deployment as Resource>::API_VERSION &&
+                        kind == <Deployment as Resource>::KIND =>
                         {
-                            let deployment: k8s_openapi::api::apps::v1::Deployment = serde::Deserialize::deserialize(document)?;
+                            let deployment: Deployment = serde::Deserialize::deserialize(document)?;
                             result.push(SupportedResources::Deployment(deployment))
                         }
                     _ => {}
