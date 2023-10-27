@@ -2,6 +2,10 @@
 
 use std::error::Error;
 use clap::{Args, Command, Parser, Subcommand};
+use k8s_openapi::{List, NamespaceResourceScope, Resource, ResourceScope};
+use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::core::v1::Pod;
+use kube::api::ApiResource;
 use serde_yaml;
 use serde::Deserialize;
 use tokio;
@@ -70,11 +74,18 @@ fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
     Ok(data)
 }
 
-fn read_config(filenames: Vec<String>) -> Result<(), Box<dyn Error>> {
+enum SupportedResources {
+    Pod(Pod),
+    Deployment(Deployment)
+}
+
+fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
     let api_version_key = serde_yaml::Value::String("apiVersion".to_owned());
     let kind_key = serde_yaml::Value::String("kind".to_owned());
 
-    for filename in filenames {
+    let mut result: Vec<SupportedResources> = Vec::new();
+
+    for filename in  filenames {
         let file = std::fs::File::open(filename)?;
         let file: serde_yaml::Sequence = serde_yaml::from_reader(file)?;
         for document in file {
@@ -87,6 +98,7 @@ fn read_config(filenames: Vec<String>) -> Result<(), Box<dyn Error>> {
                         kind == <k8s_openapi::api::core::v1::Pod as k8s_openapi::Resource>::KIND =>
                         {
                             let pod: k8s_openapi::api::core::v1::Pod = serde::Deserialize::deserialize(document)?;
+                            result.push(SupportedResources::Pod(pod))
                         }
 
                     (Some(api_version), Some(kind)) if
@@ -94,11 +106,12 @@ fn read_config(filenames: Vec<String>) -> Result<(), Box<dyn Error>> {
                         kind == <k8s_openapi::api::apps::v1::Deployment as k8s_openapi::Resource>::KIND =>
                         {
                             let deployment: k8s_openapi::api::apps::v1::Deployment = serde::Deserialize::deserialize(document)?;
+                            result.push(SupportedResources::Deployment(deployment))
                         }
                     _ => {}
                 }
             }
         }
     }
-    Ok(())
+    Ok(result)
 }
