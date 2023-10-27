@@ -5,10 +5,11 @@ use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
-use kube::api::ApiResource;
 use serde_yaml;
 use serde::Deserialize;
 use tokio;
+use crate::apply::{apply, ApplyArgs};
+use crate::on::{on, OnArgs};
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -21,71 +22,57 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Apply(ApplyArgs),
+    On(OnArgs),
 }
 
 #[derive(Debug, Args)]
-struct HostFileArgs {
+pub struct HostFileArgs {
     #[arg(env = "SKATE_HOSTS_FILE", long, long_help = "The files that contain the list of hosts.", default_value = "~/.hosts.yaml")]
-    hosts_file: String,
-}
-
-#[derive(Debug, Args)]
-#[command(arg_required_else_help(true))]
-struct ApplyArgs {
-    #[arg(short, long, long_help = "The files that contain the configurations to apply.")]
-    filename: Vec<String>,
-    #[arg(long, default_value_t = - 1, long_help = "Period of time in seconds given to the resource to terminate gracefully. Ignored if negative. Set to 1 for \
-immediate shutdown.")]
-    grace_period: i32,
-    #[command(flatten)]
-    hosts: HostFileArgs,
+    pub hosts_file: String,
 }
 
 pub async fn skate() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     match args.command {
-        Commands::Apply(apply_args) => apply(apply_args),
+        Commands::Apply(args) => apply(args),
+        Commands::On(args) => on(args).await,
         _ => Ok(())
     }
 }
 
-fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    let hosts = read_hosts(args.hosts.hosts_file)?;
-    let merged_config = read_config(args.filename)?; // huge
-    // let game_plan = schedule(merged_config, hosts)?;
-    // game_plan.play()
-    Ok(())
+#[derive(Deserialize)]
+pub struct Host {
+    pub host: String,
+    pub port: Option<u16>,
+    pub user: String,
+    pub key: String,
 }
 
 #[derive(Deserialize)]
-struct Host {
-    host: String,
-}
-
-#[derive(Deserialize)]
-struct Hosts {
-    hosts: Vec<Host>,
+pub struct Hosts {
+    pub hosts: Vec<Host>,
 }
 
 
-fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
+pub enum SupportedResources {
+    Pod(Pod),
+    Deployment(Deployment),
+}
+
+pub fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
     let f = std::fs::File::open(".hosts.yaml")?;
     let data: Hosts = serde_yaml::from_reader(f)?;
     Ok(data)
 }
 
-enum SupportedResources {
-    Pod(Pod),
-    Deployment(Deployment)
-}
 
-fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
+pub fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
     let api_version_key = serde_yaml::Value::String("apiVersion".to_owned());
     let kind_key = serde_yaml::Value::String("kind".to_owned());
 
     let mut result: Vec<SupportedResources> = Vec::new();
 
-    for filename in  filenames {
+    for filename in filenames {
         let file = std::fs::File::open(filename)?;
         let file: serde_yaml::Sequence = serde_yaml::from_reader(file)?;
         for document in file {

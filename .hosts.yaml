@@ -1,4 +1,8 @@
 ---
 hosts:
   - host: ras3
+    user: donalbyrne
+    key: /Users/donalbyrne/.ssh/id_rsa
   - host: ras4
+    user: donalbyrne
+    key: /Users/donalbyrne/.ssh/id_rsa

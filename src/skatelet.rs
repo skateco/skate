@@ -37,9 +37,14 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
 // up
 // - provisions ssh access
 // - ensures podman is installed and correct version
+// later:
+// - install wireshare
+// - install cron job every minute (skatelet cron)
+// - set up systemd scheduler?
 // ??
 fn up(_up_args: UpArgs) -> Result<(), Box<dyn Error>> {
     // ensure ssh public key provided
+
     Ok(())
 }
 
