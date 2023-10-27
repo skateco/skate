@@ -10,7 +10,7 @@ package local {
 [Human] -> [Skate]
 }
 package "remote host" {
-[Skate] -> [Skatelet]: ssh
+[Skate] <-> [Skatelet]: ssh
 }
 ```
 
