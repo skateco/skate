@@ -14,4 +14,6 @@ futures = "0.3.29"
 k8s-openapi = { version = "0.20.0", features = ["latest"] }
 serde = { version = "1.0.190", features = ["derive"] }
 serde_yaml = "0.9.27"
+strum_macros = "0.25.3"
+thiserror = "1.0.50"
 tokio = { version = "1.33.0", features = ["full"] }

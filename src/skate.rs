@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use std::error::Error;
+use async_trait::async_trait;
 use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::Deployment;
@@ -46,31 +47,29 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 pub struct Host {
     pub host: String,
     pub port: Option<u16>,
-    pub user: String,
-    pub key: String,
-    #[serde(skip)]
-    client: Option<Client>,
+    pub user: Option<String>,
+    pub key: Option<String>,
 }
 
 impl Host {
-    pub async fn connect(&mut self) -> Result<(), Box<dyn Error>> {
-        let auth_method = AuthMethod::with_key_file(&*self.key, None);
-        self.client = Some(Client::connect(
+    pub async fn connect(&self) -> Result<Client, SshError> {
+        let default_key = "";
+        let key = self.key.clone().unwrap_or(default_key.to_string());
+
+        let auth_method = AuthMethod::with_key_file(key.clone().as_str(), None);
+        return Client::connect(
             (&*self.host, self.port.unwrap_or(22)),
-            &*self.user,
+            self.user.clone().unwrap_or(String::from("")).as_str(),
             auth_method,
             ServerCheckMethod::NoCheck,
-        ).await?);
-        Ok(())
-    }
-
-    pub async fn execute(self, command: String) -> Result<CommandExecutedResult, SshError> {
-        self.client.unwrap().execute("echo Hello SSH").await
+        ).await;
     }
 }
 
 #[derive(Deserialize)]
 pub struct Hosts {
+    pub user: Option<String>,
+    pub key: Option<String>,
     pub hosts: Vec<Host>,
 }
 
@@ -83,7 +82,18 @@ pub enum SupportedResources {
 pub fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
     let f = std::fs::File::open(".hosts.yaml")?;
     let data: Hosts = serde_yaml::from_reader(f)?;
-    Ok(data)
+    let hosts: Vec<Host> = data.hosts.into_iter().map(|h| Host {
+        host: h.host,
+        port: h.port,
+        user: h.user.or(data.user.clone()),
+        key: h.key.or(data.key.clone()),
+    }).collect();
+
+    Ok(Hosts{
+        user: data.user,
+        key: data.key,
+        hosts,
+    })
 }
 
 
