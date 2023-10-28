@@ -1,11 +1,14 @@
 use std::error::Error;
+use std::fs;
 use clap::{Args, Parser, Subcommand};
 use std::process::{Command, ExitStatus, Output};
+use semver::{Version, VersionReq};
 use thiserror::Error;
 use crate::skatelet::Os::{Darwin, Linux, Unknown};
-use crate::skatelet::UpError::CommandError;
+use crate::skatelet::UpError::{CommandError, UnsupportedError};
 use strum_macros::EnumString;
 
+const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
@@ -43,9 +46,11 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
 enum UpError {
     #[error("exit code: {0}")]
     CommandError(ExitStatus, String),
+    #[error("{0} is not supported")]
+    UnsupportedError(String)
 }
 
-#[derive(Debug)]
+#[derive(Debug, EnumString)]
 enum Os {
     Unknown,
     Linux,
@@ -53,16 +58,37 @@ enum Os {
 }
 
 
-fn exec(command: &str, args: Option<Vec<&str>>) -> Result<String, UpError> {
+fn exec_cmd(command: &str, args: &[&str]) -> Result<String, UpError> {
     let output = Command::new(command)
-        .args(args.unwrap_or(vec![]))
+        .args(args)
         .output()
         .expect("failed to find os");
     if !output.status.success() {
         return Err(CommandError(output.status, String::from_utf8_lossy(&output.stderr).to_string()));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).into())
+    Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
+}
+
+#[derive(Debug)]
+struct Platform {
+    arch: String,
+    os: Os,
+}
+
+fn platform() -> Platform {
+    let parts: Vec<&str> = TARGET.split('-').collect();
+
+    let os = match parts.last().expect("failed to find os").to_lowercase() {
+        s if s.starts_with("linux") => Linux,
+        s if s.starts_with("darwin") => Darwin,
+        _ => Unknown
+    };
+
+    let arch = parts.first().expect("failed to find arch");
+
+
+    Platform { arch: arch.to_string(), os }
 }
 
 // up
@@ -73,15 +99,42 @@ fn exec(command: &str, args: Option<Vec<&str>>) -> Result<String, UpError> {
 // - set up systemd scheduler?
 // ??
 fn up(_up_args: UpArgs) -> Result<(), UpError> {
-    let os = exec("uname", Some(vec!["-s"]))?;
+    let platform = platform();
+    let podman_version = exec_cmd("podman", &["--version"]);
+    match podman_version {
+        Ok(version) => {
+            let req = VersionReq::parse(">=1.0.0").unwrap();
+            let version = version.split_whitespace().last().unwrap();
+            // Check whether it matches 1.3.0 (yes it does)
+            let version = Version::parse(version).unwrap();
 
-    let os = match os.to_lowercase() {
-        s if s.starts_with("linux") => Linux,
-        s if s.starts_with("darwin") => Darwin,
-        _ => Unknown
-    };
-    println!("{:?}", os);
+            if !req.matches(&version) {
+                match platform.os {
+                    Linux => {
+                        let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
+                        match issue.to_lowercase() {
+                            issue if issue.starts_with("raspbian") ||
+                                issue.starts_with("debian") ||
+                                issue.starts_with("ubuntu") => {}
+                            _ => {
+                                return Err(UnsupportedError("distribution".into()))
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(UnsupportedError("operating system".into()))
+                    }
+                }
+                // instruct on installing newer podman version
+            }
+        }
+        Err(err) => {
 
+            // not installed
+        }
+    }
+
+    println!("{:?}", platform);
     Ok(())
 }
 

@@ -1351,6 +1351,7 @@ dependencies = [
  "clap",
  "futures",
  "k8s-openapi",
+ "semver",
  "serde",
  "serde_yaml",
  "strum",
