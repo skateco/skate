@@ -10,6 +10,8 @@ use serde::Deserialize;
 use tokio;
 use crate::apply::{apply, ApplyArgs};
 use crate::on::{on, OnArgs};
+use async_ssh2_tokio::client::{Client, AuthMethod, ServerCheckMethod, CommandExecutedResult};
+use async_ssh2_tokio::Error as SshError;
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -46,6 +48,25 @@ pub struct Host {
     pub port: Option<u16>,
     pub user: String,
     pub key: String,
+    #[serde(skip)]
+    client: Option<Client>,
+}
+
+impl Host {
+    pub async fn connect(&mut self) -> Result<(), Box<dyn Error>> {
+        let auth_method = AuthMethod::with_key_file(&*self.key, None);
+        self.client = Some(Client::connect(
+            (&*self.host, self.port.unwrap_or(22)),
+            &*self.user,
+            auth_method,
+            ServerCheckMethod::NoCheck,
+        ).await?);
+        Ok(())
+    }
+
+    pub async fn execute(self, command: String) -> Result<CommandExecutedResult, SshError> {
+        self.client.unwrap().execute("echo Hello SSH").await
+    }
 }
 
 #[derive(Deserialize)]

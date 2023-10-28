@@ -1,5 +1,5 @@
 use std::error::Error;
-use clap::{Args, Command, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
