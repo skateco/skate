@@ -13,6 +13,7 @@ use crate::apply::{apply, ApplyArgs};
 use crate::on::{on, OnArgs};
 use async_ssh2_tokio::client::{Client, AuthMethod, ServerCheckMethod, CommandExecutedResult};
 use async_ssh2_tokio::Error as SshError;
+use crate::ssh_client::SshClient;
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -52,17 +53,19 @@ pub struct Host {
 }
 
 impl Host {
-    pub async fn connect(&self) -> Result<Client, SshError> {
+    pub async fn connect(&self) -> Result<SshClient, SshError> {
         let default_key = "";
         let key = self.key.clone().unwrap_or(default_key.to_string());
 
         let auth_method = AuthMethod::with_key_file(key.clone().as_str(), None);
-        return Client::connect(
+        let ssh_client = Client::connect(
             (&*self.host, self.port.unwrap_or(22)),
             self.user.clone().unwrap_or(String::from("")).as_str(),
             auth_method,
             ServerCheckMethod::NoCheck,
-        ).await;
+        ).await.expect("failed to connect");
+
+        Ok(SshClient { client: ssh_client })
     }
 }
 
@@ -89,7 +92,7 @@ pub fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
         key: h.key.or(data.key.clone()),
     }).collect();
 
-    Ok(Hosts{
+    Ok(Hosts {
         user: data.user,
         key: data.key,
         hosts,

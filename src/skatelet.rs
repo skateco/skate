@@ -4,9 +4,10 @@ use clap::{Args, Parser, Subcommand};
 use std::process::{Command, ExitStatus, Output};
 use semver::{Version, VersionReq};
 use thiserror::Error;
-use crate::skatelet::Os::{Darwin, Linux, Unknown};
 use crate::skatelet::UpError::{CommandError, UnsupportedError};
 use strum_macros::EnumString;
+use crate::ssh_client::Os::{Darwin, Linux, Unknown};
+use crate::ssh_client::Platform;
 
 const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
@@ -47,15 +48,9 @@ enum UpError {
     #[error("exit code: {0}")]
     CommandError(ExitStatus, String),
     #[error("{0} is not supported")]
-    UnsupportedError(String)
+    UnsupportedError(String),
 }
 
-#[derive(Debug, EnumString)]
-enum Os {
-    Unknown,
-    Linux,
-    Darwin,
-}
 
 
 fn exec_cmd(command: &str, args: &[&str]) -> Result<String, UpError> {
@@ -70,11 +65,7 @@ fn exec_cmd(command: &str, args: &[&str]) -> Result<String, UpError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
 }
 
-#[derive(Debug)]
-struct Platform {
-    arch: String,
-    os: Os,
-}
+
 
 fn platform() -> Platform {
     let parts: Vec<&str> = TARGET.split('-').collect();
@@ -87,8 +78,15 @@ fn platform() -> Platform {
 
     let arch = parts.first().expect("failed to find arch");
 
+    let distro: Option<String> = match os {
+        Linux => {
+            let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
+            Some(issue.split_whitespace().next().expect("no distribution found in /etc/issue").into())
+        }
+        _ => None
+    };
 
-    Platform { arch: arch.to_string(), os }
+    return Platform { arch: arch.to_string(), os, distribution: distro };
 }
 
 // up
@@ -111,26 +109,18 @@ fn up(_up_args: UpArgs) -> Result<(), UpError> {
             if !req.matches(&version) {
                 match platform.os {
                     Linux => {
-                        let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
-                        match issue.to_lowercase() {
-                            issue if issue.starts_with("raspbian") ||
-                                issue.starts_with("debian") ||
-                                issue.starts_with("ubuntu") => {}
-                            _ => {
-                                return Err(UnsupportedError("distribution".into()))
-                            }
-                        }
+                        // what we gonna do???
                     }
                     _ => {
-                        return Err(UnsupportedError("operating system".into()))
+                        return Err(UnsupportedError("operating system".into()));
                     }
                 }
-                // instruct on installing newer podman version
             }
         }
+        // instruct on installing newer podman version
         Err(err) => {
 
-            // not installed
+// not installed
         }
     }
 
