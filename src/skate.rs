@@ -11,9 +11,15 @@ use serde::Deserialize;
 use tokio;
 use crate::apply::{apply, ApplyArgs};
 use crate::on::{on, OnArgs};
-use async_ssh2_tokio::client::{Client, AuthMethod, ServerCheckMethod, CommandExecutedResult};
+use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
 use async_ssh2_tokio::Error as SshError;
+use strum_macros::EnumString;
+use std::fs;
+use crate::skate::Distribution::{Debian, Raspbian, Unknown};
+use crate::skate::Os::{Darwin, Linux};
 use crate::ssh_client::SshClient;
+
+const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -136,3 +142,61 @@ pub fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Bo
     }
     Ok(result)
 }
+
+#[derive(Debug, EnumString, Clone)]
+pub enum Os {
+    Unknown,
+    Linux,
+    Darwin,
+}
+
+#[derive(Debug, Clone)]
+pub struct Platform {
+    pub arch: String,
+    pub os: Os,
+    pub distribution: Distribution,
+}
+
+impl Platform {
+    pub fn target() -> Self {
+        let parts: Vec<&str> = TARGET.split('-').collect();
+
+        let os = match parts.last().expect("failed to find os").to_lowercase() {
+            s if s.starts_with("linux") => Linux,
+            s if s.starts_with("darwin") => Darwin,
+            _ => Os::Unknown
+        };
+
+        let arch = parts.first().expect("failed to find arch");
+
+        let distro: Option<String> = match os {
+            Linux => {
+                let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
+                Some(issue.split_whitespace().next().expect("no distribution found in /etc/issue").into())
+            }
+            _ => None
+        };
+
+        return Platform { arch: arch.to_string(), os, distribution: Distribution::from(distro.unwrap_or_default()) };
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Distribution {
+    Unknown,
+    Debian,
+    Raspbian,
+}
+
+impl From<String> for Distribution {
+    fn from(s: String) -> Self {
+        match s.to_lowercase() {
+            s if s.starts_with("debian") => Debian,
+            s if s.starts_with("raspbian") => Raspbian,
+            _ => Unknown
+        }
+    }
+}
+
+
+

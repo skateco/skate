@@ -1,39 +1,20 @@
 use std::error::Error;
-use async_ssh2_tokio::client::{Client};
-use strum_macros::EnumString;
+use async_ssh2_tokio::client::Client;
+use crate::skate::{Distribution, Os, Platform};
 
 pub struct SshClient {
     pub client: Client,
 }
 
-#[derive(Debug, EnumString)]
-pub enum Os {
-    Unknown,
-    Linux,
-    Darwin,
-}
-
-#[derive(Debug)]
-pub struct Platform {
-    pub arch: String,
-    pub os: Os,
-    pub distribution: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct HostInfo {
+#[derive(Debug, Clone)]
+pub struct HostInfoResponse {
     pub hostname: String,
     pub platform: Platform,
     pub skatelet_version: Option<String>,
 }
 
 impl SshClient {
-    pub async fn get_host_info(self) -> Result<HostInfo, Box<dyn Error>> {
-        // returns for example:
-        // ras-pi
-        // armv7l
-        // Linux
-        // Raspbian
+    pub async fn get_host_info(&self) -> Result<HostInfoResponse, Box<dyn Error>> {
         let command = "\
 hostname=`hostname`;
 arch=`arch`;
@@ -55,10 +36,11 @@ echo $skatelet_version;
         let hostname = lines.next().expect("missing hostname").to_string();
         let arch = lines.next().expect("missing arch").to_string();
         lines.next();
-        let distro = lines.next().map(String::from).filter(|s| !s.is_empty());
-        let skatelet_version = lines.next().map(String::from).filter(|s| !s.is_empty());;
+        let distro = Distribution::from(lines.next().map(String::from).unwrap_or_default());
+        let skatelet_version = lines.next().map(String::from).filter(|s| !s.is_empty());
+        ;
 
-        return Ok(HostInfo {
+        return Ok(HostInfoResponse {
             hostname,
             platform: Platform {
                 arch,
@@ -67,5 +49,9 @@ echo $skatelet_version;
             },
             skatelet_version,
         });
+    }
+
+    pub async fn download_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
+        Ok(())
     }
 }

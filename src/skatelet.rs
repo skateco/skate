@@ -1,15 +1,12 @@
 use std::error::Error;
-use std::fs;
 use clap::{Args, Parser, Subcommand};
-use std::process::{Command, ExitStatus, Output};
+use std::process::{Command, ExitStatus};
 use semver::{Version, VersionReq};
 use thiserror::Error;
 use crate::skatelet::UpError::{CommandError, UnsupportedError};
 use strum_macros::EnumString;
-use crate::ssh_client::Os::{Darwin, Linux, Unknown};
-use crate::ssh_client::Platform;
-
-const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
+use crate::skate;
+use crate::skate::Os::Linux;
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
@@ -52,7 +49,6 @@ enum UpError {
 }
 
 
-
 fn exec_cmd(command: &str, args: &[&str]) -> Result<String, UpError> {
     let output = Command::new(command)
         .args(args)
@@ -65,30 +61,6 @@ fn exec_cmd(command: &str, args: &[&str]) -> Result<String, UpError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
 }
 
-
-
-fn platform() -> Platform {
-    let parts: Vec<&str> = TARGET.split('-').collect();
-
-    let os = match parts.last().expect("failed to find os").to_lowercase() {
-        s if s.starts_with("linux") => Linux,
-        s if s.starts_with("darwin") => Darwin,
-        _ => Unknown
-    };
-
-    let arch = parts.first().expect("failed to find arch");
-
-    let distro: Option<String> = match os {
-        Linux => {
-            let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
-            Some(issue.split_whitespace().next().expect("no distribution found in /etc/issue").into())
-        }
-        _ => None
-    };
-
-    return Platform { arch: arch.to_string(), os, distribution: distro };
-}
-
 // up
 // - ensures podman is installed and correct version
 // later:
@@ -97,7 +69,8 @@ fn platform() -> Platform {
 // - set up systemd scheduler?
 // ??
 fn up(_up_args: UpArgs) -> Result<(), UpError> {
-    let platform = platform();
+    let platform = skate::Platform::target();
+
     let podman_version = exec_cmd("podman", &["--version"]);
     match podman_version {
         Ok(version) => {
