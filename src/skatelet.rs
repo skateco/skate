@@ -10,7 +10,7 @@ use crate::skate::Os::Linux;
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
-#[command(about = "Skatelet", long_about = "Skate agent to be run on nodes", arg_required_else_help = true)]
+#[command(about = "Skatelet", version, long_about = "Skate agent to be run on nodes", arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

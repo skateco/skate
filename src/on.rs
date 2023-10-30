@@ -4,13 +4,13 @@ use async_ssh2_tokio::Error as SshError;
 use clap::Args;
 use strum_macros::EnumString;
 use thiserror::Error;
-use crate::skate::{HostFileArgs};
+use crate::skate::{NodeFileArgs};
 use crate::ssh_client::HostInfoResponse;
 
 #[derive(Debug, Args)]
 pub struct OnArgs {
     #[command(flatten)]
-    hosts: HostFileArgs,
+    hosts: NodeFileArgs,
     #[arg(long, long_help = "Url prefix where to find binaries", default_value = "https://skate.on/releases/", env)]
     binary_url_prefix: String,
 }
@@ -22,13 +22,12 @@ enum OnError {
 }
 
 pub async fn on(args: OnArgs) -> Result<(), Box<dyn Error>> {
-    let hosts = crate::skate::read_hosts(args.hosts.hosts_file)?.hosts;
+    let hosts = crate::skate::read_nodes(args.hosts.nodes_file)?.nodes;
 
     let results = futures::future::join_all(hosts.into_iter().map(|h| tokio::spawn(async move {
         let c = h.connect().await.unwrap();
 
         let result = c.get_host_info().await.expect("failed to get host info");
-        println!("{:?}", result);
         if result.skatelet_version.is_some() {
             return Ok::<HostInfoResponse, OnError>(result.clone());
         }
@@ -44,14 +43,13 @@ pub async fn on(args: OnArgs) -> Result<(), Box<dyn Error>> {
         Err(OnError::InstallationError("skatelet version not found despite installing".to_string()))
     }))).await;
 
-    for result in results {}
-
-    // for mut host in hosts.hosts {
-    //     host.connect().await?;
-    //
-    //     let result = host.execute("hostname;uname -a;").await?;
-    //     println!("{}", &result.stdout);
-    // }
+    for result in results {
+        let result = result.expect("failed to run all host checks");
+        match result {
+            Ok(host_info) => {}
+            Err(err) => {}
+        }
+    }
 
 
     // - contact all hosts and check ssh access

@@ -23,7 +23,7 @@ const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
-#[command(about = "Skate CLI", long_about = None, arg_required_else_help = true)]
+#[command(about = "Skate CLI", long_about = None, arg_required_else_help = true, version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -36,9 +36,9 @@ enum Commands {
 }
 
 #[derive(Debug, Args)]
-pub struct HostFileArgs {
-    #[arg(env = "SKATE_HOSTS_FILE", long, long_help = "The files that contain the list of hosts.", default_value = "~/.hosts.yaml")]
-    pub hosts_file: String,
+pub struct NodeFileArgs {
+    #[arg(env = "SKATE_NODES_FILE", long, long_help = "The files that contain the list of nodes.", default_value = "./.nodes.yaml")]
+    pub nodes_file: String,
 }
 
 pub async fn skate() -> Result<(), Box<dyn Error>> {
@@ -51,14 +51,14 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(Deserialize)]
-pub struct Host {
+pub struct Node {
     pub host: String,
     pub port: Option<u16>,
     pub user: Option<String>,
     pub key: Option<String>,
 }
 
-impl Host {
+impl Node {
     pub async fn connect(&self) -> Result<SshClient, SshError> {
         let default_key = "";
         let key = self.key.clone().unwrap_or(default_key.to_string());
@@ -76,10 +76,10 @@ impl Host {
 }
 
 #[derive(Deserialize)]
-pub struct Hosts {
+pub struct Nodes {
     pub user: Option<String>,
     pub key: Option<String>,
-    pub hosts: Vec<Host>,
+    pub nodes: Vec<Node>,
 }
 
 
@@ -88,20 +88,20 @@ pub enum SupportedResources {
     Deployment(Deployment),
 }
 
-pub fn read_hosts(hosts_file: String) -> Result<Hosts, Box<dyn Error>> {
-    let f = std::fs::File::open(".hosts.yaml")?;
-    let data: Hosts = serde_yaml::from_reader(f)?;
-    let hosts: Vec<Host> = data.hosts.into_iter().map(|h| Host {
+pub fn read_nodes(nodes_file: String) -> Result<Nodes, Box<dyn Error>> {
+    let f = std::fs::File::open(nodes_file)?;
+    let data: Nodes = serde_yaml::from_reader(f)?;
+    let hosts: Vec<Node> = data.nodes.into_iter().map(|h| Node {
         host: h.host,
         port: h.port,
         user: h.user.or(data.user.clone()),
         key: h.key.or(data.key.clone()),
     }).collect();
 
-    Ok(Hosts {
+    Ok(Nodes {
         user: data.user,
         key: data.key,
-        hosts,
+        nodes: hosts,
     })
 }
 
