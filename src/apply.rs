@@ -1,6 +1,6 @@
 use std::error::Error;
 use clap::Args;
-use crate::skate::NodeFileArgs;
+use crate::skate::ConfigFileArgs;
 
 
 #[derive(Debug, Args)]
@@ -12,12 +12,12 @@ pub struct ApplyArgs {
 immediate shutdown.")]
     grace_period: i32,
     #[command(flatten)]
-    hosts: NodeFileArgs,
+    hosts: ConfigFileArgs,
 }
 
 pub fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    let hosts = crate::skate::read_nodes(args.hosts.nodes_file)?;
-    let merged_config = crate::skate::read_config(args.filename)?; // huge
+    let hosts = crate::skate::read_config(args.hosts.skateconfig)?;
+    let merged_config = crate::skate::read_manifests(args.filename)?; // huge
     // let game_plan = schedule(merged_config, hosts)?;
     // game_plan.play()
     Ok(())

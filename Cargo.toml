@@ -20,3 +20,6 @@ strum_macros = "0.25.3"
 thiserror = "1.0.50"
 tokio = { version = "1.33.0", features = ["full"] }
 openssl = { version = "0.10.35", features = ["vendored"] }
+itertools = "0.11.0"
+path-absolutize = "3.1.1"
+shellexpand = "3.1.0"

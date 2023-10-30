@@ -14,7 +14,13 @@ use crate::on::{on, OnArgs};
 use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
 use async_ssh2_tokio::Error as SshError;
 use strum_macros::EnumString;
-use std::fs;
+use std::{fs, process};
+use std::env::var;
+use std::fs::create_dir;
+use std::path::Path;
+use path_absolutize::*;
+use anyhow::anyhow;
+use crate::config::{Config, Node};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh_client::SshClient;
@@ -36,12 +42,39 @@ enum Commands {
 }
 
 #[derive(Debug, Args)]
-pub struct NodeFileArgs {
-    #[arg(env = "SKATE_NODES_FILE", long, long_help = "The files that contain the list of nodes.", default_value = "./.nodes.yaml")]
-    pub nodes_file: String,
+pub struct ConfigFileArgs {
+    #[arg(long, long_help = "Configuration for skate.", default_value = "~/.skate/config.yaml")]
+    pub skateconfig: String,
+}
+
+
+fn ensure_config() -> Result<(), Box<dyn Error>> {
+    let dot_dir = shellexpand::tilde("~/.skate").to_string();
+    let path = Path::new(dot_dir.as_str());
+    if !path.exists() {
+        create_dir(path).expect("couldn't create skate config path")
+    }
+    let path = path.join("config.yaml");
+
+    let default_config = Config {
+        current_context: None,
+        clusters: vec![],
+    };
+
+    if !path.exists() {
+        let f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path)
+            .expect("couldn't open config file");
+        serde_yaml::to_writer(f, &default_config).unwrap();
+    }
+
+    Ok(())
 }
 
 pub async fn skate() -> Result<(), Box<dyn Error>> {
+    ensure_config();
     let args = Cli::parse();
     match args.command {
         Commands::Apply(args) => apply(args),
@@ -50,36 +83,23 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
     }
 }
 
-#[derive(Deserialize)]
-pub struct Node {
-    pub host: String,
-    pub port: Option<u16>,
-    pub user: Option<String>,
-    pub key: Option<String>,
-}
 
 impl Node {
     pub async fn connect(&self) -> Result<SshClient, SshError> {
         let default_key = "";
         let key = self.key.clone().unwrap_or(default_key.to_string());
+        let key = shellexpand::tilde(&key);
 
-        let auth_method = AuthMethod::with_key_file(key.clone().as_str(), None);
+        let auth_method = AuthMethod::with_key_file(&key, None);
         let ssh_client = Client::connect(
             (&*self.host, self.port.unwrap_or(22)),
             self.user.clone().unwrap_or(String::from("")).as_str(),
             auth_method,
             ServerCheckMethod::NoCheck,
-        ).await.expect("failed to connect");
+        ).await?;
 
         Ok(SshClient { client: ssh_client })
     }
-}
-
-#[derive(Deserialize)]
-pub struct Nodes {
-    pub user: Option<String>,
-    pub key: Option<String>,
-    pub nodes: Vec<Node>,
 }
 
 
@@ -88,25 +108,16 @@ pub enum SupportedResources {
     Deployment(Deployment),
 }
 
-pub fn read_nodes(nodes_file: String) -> Result<Nodes, Box<dyn Error>> {
-    let f = std::fs::File::open(nodes_file)?;
-    let data: Nodes = serde_yaml::from_reader(f)?;
-    let hosts: Vec<Node> = data.nodes.into_iter().map(|h| Node {
-        host: h.host,
-        port: h.port,
-        user: h.user.or(data.user.clone()),
-        key: h.key.or(data.key.clone()),
-    }).collect();
-
-    Ok(Nodes {
-        user: data.user,
-        key: data.key,
-        nodes: hosts,
-    })
+pub fn read_config(path: String) -> Result<Config, Box<dyn Error>> {
+    let path = shellexpand::tilde(&path).to_string();
+    let path = Path::new(&path);
+    let f = std::fs::File::open(path)?;
+    let data: Config = serde_yaml::from_reader(f)?;
+    Ok(data)
 }
 
 
-pub fn read_config(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
+pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
     let api_version_key = serde_yaml::Value::String("apiVersion".to_owned());
     let kind_key = serde_yaml::Value::String("kind".to_owned());
 
@@ -196,6 +207,19 @@ impl From<String> for Distribution {
             _ => Unknown
         }
     }
+}
+
+
+pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
+    let output = process::Command::new(command)
+        .args(args)
+        .output()
+        .expect("failed to find os");
+    if !output.status.success() {
+        return Err(anyhow!("{}, {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
 }
 
 
