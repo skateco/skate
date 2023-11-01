@@ -12,8 +12,8 @@ pub struct CandidateNode {
 
 #[derive(Debug)]
 pub struct ScheduleResult {
-    object: SupportedResources,
-    node: CandidateNode,
+    pub object: SupportedResources,
+    pub node: CandidateNode,
 }
 
 #[async_trait]
