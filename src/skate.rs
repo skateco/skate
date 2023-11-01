@@ -18,12 +18,13 @@ use std::{fs, process};
 use std::env::var;
 use std::fs::create_dir;
 use std::path::Path;
+use std::time::Duration;
 use path_absolutize::*;
 use anyhow::anyhow;
 use crate::config::{Config, Node};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
-use crate::ssh_client::SshClient;
+use crate::ssh::SshClient;
 
 const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
@@ -77,7 +78,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
     ensure_config();
     let args = Cli::parse();
     match args.command {
-        Commands::Apply(args) => apply(args),
+        Commands::Apply(args) => apply(args).await,
         Commands::On(args) => on(args).await,
         _ => Ok(())
     }
@@ -85,24 +86,33 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 
 
 impl Node {
-    pub async fn connect(&self) -> Result<SshClient, SshError> {
+    pub async fn connect(&self) -> Result<SshClient, Box<dyn Error>> {
         let default_key = "";
         let key = self.key.clone().unwrap_or(default_key.to_string());
         let key = shellexpand::tilde(&key);
+        let timeout = Duration::from_secs(5);
 
         let auth_method = AuthMethod::with_key_file(&key, None);
-        let ssh_client = Client::connect(
+        let result = tokio::time::timeout(timeout, Client::connect(
             (&*self.host, self.port.unwrap_or(22)),
             self.user.clone().unwrap_or(String::from("")).as_str(),
             auth_method,
             ServerCheckMethod::NoCheck,
-        ).await?;
+        )).await;
 
-        Ok(SshClient { client: ssh_client })
+        let result: Result<_, Box<dyn Error>> = match result {
+            Ok(r2) => r2.map_err(|e| e.into()),
+            _ => Err(anyhow!("timeout").into())
+        };
+
+        let ssh_client = result?;
+
+        Ok(SshClient { node_name: self.name.clone(), client: ssh_client })
     }
 }
 
 
+#[derive(Debug)]
 pub enum SupportedResources {
     Pod(Pod),
     Deployment(Deployment),
