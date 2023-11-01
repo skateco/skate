@@ -17,10 +17,12 @@ use strum_macros::EnumString;
 use std::{fs, process};
 use std::env::var;
 use std::fs::create_dir;
+use std::io::Read;
 use std::path::Path;
 use std::time::Duration;
 use path_absolutize::*;
 use anyhow::anyhow;
+use serde_yaml::Value;
 use crate::config::{Config, Node};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
@@ -121,31 +123,31 @@ pub enum SupportedResources {
 pub fn read_config(path: String) -> Result<Config, Box<dyn Error>> {
     let path = shellexpand::tilde(&path).to_string();
     let path = Path::new(&path);
-    let f = std::fs::File::open(path)?;
+    let f = fs::File::open(path)?;
     let data: Config = serde_yaml::from_reader(f)?;
     Ok(data)
 }
 
 
 pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
-    let api_version_key = serde_yaml::Value::String("apiVersion".to_owned());
-    let kind_key = serde_yaml::Value::String("kind".to_owned());
+    let api_version_key = Value::String("apiVersion".to_owned());
+    let kind_key = Value::String("kind".to_owned());
 
     let mut result: Vec<SupportedResources> = Vec::new();
 
     for filename in filenames {
-        let file = std::fs::File::open(filename)?;
-        let file: serde_yaml::Sequence = serde_yaml::from_reader(file)?;
-        for document in file {
-            if let serde_yaml::Value::Mapping(mapping) = &document {
-                let api_version = mapping.get(&api_version_key).and_then(serde_yaml::Value::as_str);
-                let kind = mapping.get(&kind_key).and_then(serde_yaml::Value::as_str);
+        let str_file = fs::read_to_string(filename).expect("failed to read file");
+        for document in serde_yaml::Deserializer::from_str(&str_file) {
+            let value = Value::deserialize(document).expect("failed to read document");
+            if let Value::Mapping(mapping) = &value {
+                let api_version = mapping.get(&api_version_key).and_then(Value::as_str);
+                let kind = mapping.get(&kind_key).and_then(Value::as_str);
                 match (api_version, kind) {
                     (Some(api_version), Some(kind)) if
                     api_version == <Pod as Resource>::API_VERSION &&
                         kind == <Pod as Resource>::KIND =>
                         {
-                            let pod: Pod = serde::Deserialize::deserialize(document)?;
+                            let pod: Pod = serde::Deserialize::deserialize(value)?;
                             result.push(SupportedResources::Pod(pod))
                         }
 
@@ -153,7 +155,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                     api_version == <Deployment as Resource>::API_VERSION &&
                         kind == <Deployment as Resource>::KIND =>
                         {
-                            let deployment: Deployment = serde::Deserialize::deserialize(document)?;
+                            let deployment: Deployment = serde::Deserialize::deserialize(value)?;
                             result.push(SupportedResources::Deployment(deployment))
                         }
                     _ => {}
