@@ -7,10 +7,10 @@ use k8s_openapi::{List, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
 use serde_yaml;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio;
 use crate::apply::{apply, ApplyArgs};
-use crate::on::{on, OnArgs};
+use crate::refresh::{refresh, RefreshArgs};
 use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
 use async_ssh2_tokio::Error as SshError;
 use strum_macros::EnumString;
@@ -41,7 +41,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Apply(ApplyArgs),
-    On(OnArgs),
+    Refresh(RefreshArgs),
 }
 
 #[derive(Debug, Args)]
@@ -81,7 +81,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     match args.command {
         Commands::Apply(args) => apply(args).await,
-        Commands::On(args) => on(args).await,
+        Commands::Refresh(args) => refresh(args).await,
         _ => Ok(())
     }
 }
@@ -114,7 +114,7 @@ impl Node {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SupportedResources {
     Pod(Pod),
     Deployment(Deployment),
@@ -226,12 +226,33 @@ pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn E
     let output = process::Command::new(command)
         .args(args)
         .output()
-        .expect("failed to find os");
+        .expect("failed to run command");
     if !output.status.success() {
-        return Err(anyhow!("{}, {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
+}
+
+
+#[derive(Serialize, Deserialize)]
+pub enum NodeStatus {
+    Healthy,
+    Unhealthy,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NodeState {
+    pub node_name: String,
+    pub status: NodeStatus,
+    pub inventory_found: bool,
+    pub inventory: Vec<SupportedResources>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct State {
+    pub cluster_name: String,
+    pub nodes: Vec<NodeState>,
 }
 
 

@@ -4,6 +4,7 @@ use itertools::{Either, Itertools};
 use crate::scheduler::{CandidateNode, DefaultScheduler, Scheduler};
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
+use crate::ssh::SshClients;
 
 
 #[derive(Debug, Args)]
@@ -19,24 +20,34 @@ immediate shutdown.")]
 }
 
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    let config = crate::skate::read_config(args.hosts.skateconfig)?;
-    let objects = crate::skate::read_manifests(args.filename)?; // huge
+    let config = crate::skate::read_config(args.hosts.skateconfig).expect("failed to load skate config");
+    let objects = crate::skate::read_manifests(args.filename).unwrap(); // huge
     let (conns, errors) = ssh::connections(config.current_cluster()?).await;
-    if errors.is_some() {
-        eprintln!("{}", errors.ok_or("")?)
-    }
+    match errors {
+        Some(e) => {
+            eprintln!("{}", e)
+        }
+        _ => {}
+    };
 
-    if conns.is_none() {
-        return Ok(());
-    }
+    match conns {
+        None => {
+            return Ok(());
+        }
+        _ => {}
+    };
+
     let conns = conns.ok_or("no clients")?;
 
     let host_infos = conns.get_hosts_info().await;
 
     let (candidate_nodes, errors): (Vec<_>, Vec<_>) = host_infos.into_iter().partition_map(|i| match i {
-        Ok(info) => Either::Left(CandidateNode { info: info.clone(), node: config.current_cluster()
-            .expect("no cluster").nodes.iter()
-            .find(|n| n.name == info.node_name).expect("no node").clone() }),
+        Ok(info) => Either::Left(CandidateNode {
+            info: info.clone(),
+            node: config.current_cluster()
+                .expect("no cluster").nodes.iter()
+                .find(|n| n.name == info.node_name).expect("no node").clone(),
+        }),
         Err(err) => Either::Right(err)
     });
 
