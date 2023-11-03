@@ -26,7 +26,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
     let cluster = config.current_cluster()?;
 
 
-    let (clients, errors) = ssh::connections(&cluster).await;
+    let (clients, errors) = ssh::cluster_connections(&cluster).await;
 
     if errors.is_some() {
         eprintln!();

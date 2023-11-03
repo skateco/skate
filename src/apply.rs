@@ -23,7 +23,7 @@ immediate shutdown.")]
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig)).expect("failed to load skate config");
     let objects = crate::skate::read_manifests(args.filename).unwrap(); // huge
-    let (conns, errors) = ssh::connections(config.current_cluster()?).await;
+    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
     match errors {
         Some(e) => {
             eprintln!("{}", e)

@@ -1,5 +1,8 @@
 use std::error::Error;
 use std::fmt;
+use std::time::Duration;
+use anyhow::anyhow;
+use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
 use async_ssh2_tokio::client::{Client, CommandExecutedResult};
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
@@ -95,23 +98,30 @@ impl fmt::Display for SshErrors {
 }
 
 
-pub async fn connections(cluster: &Cluster) -> (Option<SshClients>, Option<SshErrors>) {
-    let resolved_hosts = cluster.nodes.iter().map(|n| Node {
-        name: n.name.clone(),
-        host: n.host.clone(),
-        port: n.port.or(Some(22)),
-        user: n.user.clone().or(cluster.default_user.clone()),
-        key: n.key.clone().or(cluster.default_key.clone()),
-    });
-
-    let fut: FuturesUnordered<_> = resolved_hosts.into_iter().map(|n| async move {
-        match n.connect().await {
-            Ok(c) => Ok(c),
-            Err(err) => {
-                Err(SshError { node_name: n.name.clone(), error: err.into() })
-            }
+impl Node {
+    fn with_cluster_defaults(&self, cluster: &Cluster) -> Node {
+        Node {
+            name: self.name.clone(),
+            host: self.host.clone(),
+            port: self.port.or(Some(22)),
+            user: self.user.clone().or(cluster.default_user.clone()),
+            key: self.key.clone().or(cluster.default_key.clone()),
         }
-    }).collect();
+    }
+}
+
+pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<SshClient, SshError> {
+    let node = node.with_cluster_defaults(cluster);
+    match connect_node(&node).await {
+        Ok(c) => Ok(c),
+        Err(err) => {
+            Err(SshError { node_name: node.name.clone(), error: err.into() })
+        }
+    }
+}
+
+pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Option<SshErrors>) {
+    let fut: FuturesUnordered<_> = cluster.nodes.iter().map(|n| node_connection(cluster, n)).collect();
 
 
     let results: Vec<_> = fut.collect().await;
@@ -130,6 +140,30 @@ pub async fn connections(cluster: &Cluster) -> (Option<SshClients>, Option<SshEr
             0 => None,
             _ => Some(SshErrors { errors: errs })
         });
+}
+
+async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {
+    let default_key = "";
+    let key = node.key.clone().unwrap_or(default_key.to_string());
+    let key = shellexpand::tilde(&key);
+    let timeout = Duration::from_secs(5);
+
+    let auth_method = AuthMethod::with_key_file(&key, None);
+    let result = tokio::time::timeout(timeout, Client::connect(
+        (&*node.host, node.port.unwrap_or(22)),
+        node.user.clone().unwrap_or(String::from("")).as_str(),
+        auth_method,
+        ServerCheckMethod::NoCheck,
+    )).await;
+
+    let result: Result<_, Box<dyn Error>> = match result {
+        Ok(r2) => r2.map_err(|e| e.into()),
+        _ => Err(anyhow!("timeout").into())
+    };
+
+    let ssh_client = result?;
+
+    Ok(SshClient { node_name: node.name.clone(), client: ssh_client })
 }
 
 impl SshClients {

@@ -67,6 +67,9 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         return Err(anyhow!("a node with the host {} already exists in the cluster", args.host).into());
     } else {}
 
+    // try and provision
+
+
     config.clusters[cluster_index].nodes.push(Node {
         name: args.name,
         host: args.host,
@@ -74,6 +77,10 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         user: args.user,
         key: args.key,
     });
+
+
+
+
     config.persist(Some(args.config.skateconfig))?;
 
 
