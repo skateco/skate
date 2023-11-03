@@ -1,12 +1,15 @@
+use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use anyhow::anyhow;
 use itertools::{Either, Itertools};
 use clap::Args;
-use crate::config::Node;
+use crate::config::{cache_dir, Config, Node};
 use crate::skate::{ConfigFileArgs, NodeState, NodeStatus, State};
 use crate::ssh;
 use crate::ssh::{HostInfoResponse};
 use std::fs::File;
+use std::hash::{Hash, Hasher};
+use std::path::Path;
 use crate::util::slugify;
 
 #[derive(Debug, Args)]
@@ -19,7 +22,7 @@ pub struct RefreshArgs {
 
 
 pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
-    let config = crate::skate::read_config(args.config.skateconfig)?;
+    let config = Config::load(Some(args.config.skateconfig))?;
     let cluster = config.current_cluster()?;
 
 
@@ -39,6 +42,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
 
     let mut state = State {
         cluster_name: cluster.name.clone(),
+        hash: cluster.hash_string(),
         nodes: vec![],
     };
 
@@ -69,10 +73,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
         })
     }
 
-    let file = File::create(format!("./.{}.skstate", slugify(cluster.name.clone()))).expect("unable to open state file");
-
-
-    let _ = serde_json::to_writer(file, &state).expect("failed to write json state");
+    let _ = state.persist().expect("failed to save state");
 
     Ok(())
 }

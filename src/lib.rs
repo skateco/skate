@@ -6,6 +6,7 @@ mod ssh;
 mod config;
 mod scheduler;
 mod util;
+mod create;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

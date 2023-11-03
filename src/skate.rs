@@ -16,17 +16,20 @@ use async_ssh2_tokio::Error as SshError;
 use strum_macros::EnumString;
 use std::{fs, process};
 use std::env::var;
-use std::fs::create_dir;
+use std::fs::{create_dir, File};
 use std::io::Read;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use path_absolutize::*;
 use anyhow::anyhow;
 use serde_yaml::Value;
-use crate::config::{Config, Node};
+use crate::config;
+use crate::config::{cache_dir, Config, Node};
+use crate::create::{create, CreateArgs};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
+use crate::util::slugify;
 
 const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
@@ -40,6 +43,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    Create(CreateArgs),
     Apply(ApplyArgs),
     Refresh(RefreshArgs),
 }
@@ -48,38 +52,15 @@ enum Commands {
 pub struct ConfigFileArgs {
     #[arg(long, long_help = "Configuration for skate.", default_value = "~/.skate/config.yaml")]
     pub skateconfig: String,
-}
-
-
-fn ensure_config() -> Result<(), Box<dyn Error>> {
-    let dot_dir = shellexpand::tilde("~/.skate").to_string();
-    let path = Path::new(dot_dir.as_str());
-    if !path.exists() {
-        create_dir(path).expect("couldn't create skate config path")
-    }
-    let path = path.join("config.yaml");
-
-    let default_config = Config {
-        current_context: None,
-        clusters: vec![],
-    };
-
-    if !path.exists() {
-        let f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(path)
-            .expect("couldn't open config file");
-        serde_yaml::to_writer(f, &default_config).unwrap();
-    }
-
-    Ok(())
+    #[arg(long, long_help = "Name of the context to use.")]
+    pub context: Option<String>,
 }
 
 pub async fn skate() -> Result<(), Box<dyn Error>> {
-    ensure_config();
+    config::ensure_config();
     let args = Cli::parse();
     match args.command {
+        Commands::Create(args) => create(args).await,
         Commands::Apply(args) => apply(args).await,
         Commands::Refresh(args) => refresh(args).await,
         _ => Ok(())
@@ -118,14 +99,6 @@ impl Node {
 pub enum SupportedResources {
     Pod(Pod),
     Deployment(Deployment),
-}
-
-pub fn read_config(path: String) -> Result<Config, Box<dyn Error>> {
-    let path = shellexpand::tilde(&path).to_string();
-    let path = Path::new(&path);
-    let f = fs::File::open(path)?;
-    let data: Config = serde_yaml::from_reader(f)?;
-    Ok(data)
 }
 
 
@@ -252,7 +225,24 @@ pub struct NodeState {
 #[derive(Serialize, Deserialize)]
 pub struct State {
     pub cluster_name: String,
+    pub hash: String,
     pub nodes: Vec<NodeState>,
+}
+
+impl State {
+    fn path(cluster_name: &str) -> String {
+        format!("{}/{}.state", cache_dir(), slugify(cluster_name))
+    }
+    pub fn persist(&self) -> Result<(), Box<dyn Error>> {
+        let state_file = File::create(Path::new(State::path(&self.cluster_name.clone()).as_str())).expect("unable to open state file");
+        Ok(serde_json::to_writer(state_file, self).expect("failed to write json state"))
+    }
+
+    pub fn load(cluster_name: &str) -> Self {
+        let file = fs::File::open(State::path(cluster_name))
+            .expect("file should open read only");
+        serde_json::from_reader(file).expect("failed to deserialize")
+    }
 }
 
 

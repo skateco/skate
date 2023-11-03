@@ -1,6 +1,7 @@
 use std::error::Error;
 use clap::Args;
 use itertools::{Either, Itertools};
+use crate::config::Config;
 use crate::scheduler::{CandidateNode, DefaultScheduler, Scheduler};
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
@@ -16,11 +17,11 @@ pub struct ApplyArgs {
 immediate shutdown.")]
     grace_period: i32,
     #[command(flatten)]
-    hosts: ConfigFileArgs,
+    config: ConfigFileArgs,
 }
 
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    let config = crate::skate::read_config(args.hosts.skateconfig).expect("failed to load skate config");
+    let config = Config::load(Some(args.config.skateconfig)).expect("failed to load skate config");
     let objects = crate::skate::read_manifests(args.filename).unwrap(); // huge
     let (conns, errors) = ssh::connections(config.current_cluster()?).await;
     match errors {
