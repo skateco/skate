@@ -7,6 +7,7 @@ mod config;
 mod scheduler;
 mod util;
 mod create;
+mod delete;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

@@ -26,6 +26,7 @@ use serde_yaml::Value;
 use crate::config;
 use crate::config::{cache_dir, Config, Node};
 use crate::create::{create, CreateArgs};
+use crate::delete::{delete, DeleteArgs};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
@@ -44,6 +45,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Create(CreateArgs),
+    Delete(DeleteArgs),
     Apply(ApplyArgs),
     Refresh(RefreshArgs),
 }
@@ -61,6 +63,8 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     match args.command {
         Commands::Create(args) => create(args).await,
+        Commands::Delete(args) => delete(args).await,
+
         Commands::Apply(args) => apply(args).await,
         Commands::Refresh(args) => refresh(args).await,
         _ => Ok(())
