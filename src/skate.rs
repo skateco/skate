@@ -72,8 +72,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 }
 
 
-impl Node {
-}
+impl Node {}
 
 
 #[derive(Debug, Serialize, Deserialize)]
