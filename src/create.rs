@@ -5,6 +5,7 @@ use itertools::Itertools;
 use k8s_openapi::chrono::format::Pad;
 use crate::config::{Config, Node};
 use crate::skate::ConfigFileArgs;
+use crate::ssh::node_connection;
 
 #[derive(Debug, Args)]
 pub struct CreateArgs {
@@ -57,32 +58,40 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     }.map_err(Into::<Box<dyn Error>>::into)?;
 
     let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
-    let mut nodes_iter = cluster.nodes.iter();
+    let mut nodes_iter = cluster.nodes.clone().into_iter();
 
-    if nodes_iter.any(|n| n.name == args.name) {
-        return Err(anyhow!("a node with the name {} already exists in the cluster", args.name).into());
+    let existing_node = nodes_iter.find(|n| n.name == args.name || n.host == args.host);
+
+    let (new, node) = match existing_node {
+        Some(node) => (false, node.clone()),
+        None => {
+            let node = Node {
+                name: args.name,
+                host: args.host,
+                port: args.port,
+                user: args.user,
+                key: args.key,
+            };
+            config.clusters[cluster_index].nodes.push(node.clone());
+            (true, node)
+        }
+    };
+
+    let conn = node_connection(&config.clusters[cluster_index], &node).await.expect("failed to connect");
+    let info = conn.get_host_info().await.expect("failed to get host info");
+    match info.skatelet_version {
+        None => {
+            // install skatelet
+            let _ = conn.install_skatelet(info.platform).await.expect("failed to install skatelet");
+        }
+        _ => {
+            println!("skatelet already installed")
+        }
     }
 
-    if nodes_iter.any(|n| n.host == args.host) {
-        return Err(anyhow!("a node with the host {} already exists in the cluster", args.host).into());
-    } else {}
-
-    // try and provision
-
-
-    config.clusters[cluster_index].nodes.push(Node {
-        name: args.name,
-        host: args.host,
-        port: args.port,
-        user: args.user,
-        key: args.key,
-    });
-
-
-
-
-    config.persist(Some(args.config.skateconfig))?;
-
+    if new {
+        config.persist(Some(args.config.skateconfig))?;
+    }
 
     Ok(())
 }

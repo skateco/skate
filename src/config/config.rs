@@ -24,13 +24,6 @@ pub struct Cluster {
     pub nodes: Vec<Node>,
 }
 
-impl Cluster {
-    pub fn hash_string(&self) -> String {
-        let mut hasher = DefaultHasher::new();
-        self.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct Node {

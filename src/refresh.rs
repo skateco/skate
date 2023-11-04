@@ -1,16 +1,11 @@
-use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use anyhow::anyhow;
-use itertools::{Either, Itertools};
 use clap::Args;
 use crate::config::{cache_dir, Config, Node};
 use crate::skate::{ConfigFileArgs, NodeState, NodeStatus, State};
 use crate::ssh;
-use crate::ssh::{HostInfoResponse};
-use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::path::Path;
-use crate::util::slugify;
+use crate::util::hash_string;
 
 #[derive(Debug, Args)]
 pub struct RefreshArgs {
@@ -42,7 +37,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
 
     let mut state = State {
         cluster_name: cluster.name.clone(),
-        hash: cluster.hash_string(),
+        hash: hash_string(cluster),
         nodes: vec![],
     };
 

@@ -67,7 +67,13 @@ echo $skatelet_version;
         });
     }
 
-    pub async fn download_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
+    pub async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
+
+        // TODO - download from bucket etc
+
+        let _ = self.client.execute(format!("sudo mv /tmp/skatelet /usr/local/bin/skatelet && sudo chmod +x /usr/local/bin/skatelet")
+            .as_str()).await.expect("failed to fetch binary");
+
         Ok(())
     }
 }

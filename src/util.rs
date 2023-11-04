@@ -1,4 +1,7 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
+
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())
 }
@@ -57,3 +60,13 @@ fn _slugify(s: &str) -> String {
     string.shrink_to_fit();
     string
 }
+
+pub fn hash_string<T>(obj: T) -> String
+    where
+        T: Hash,
+{
+    let mut hasher = DefaultHasher::new();
+    obj.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
