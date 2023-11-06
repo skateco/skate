@@ -3,6 +3,7 @@ use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
 
 pub const CHECKBOX_CHAR: char = '✅';
+pub const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())

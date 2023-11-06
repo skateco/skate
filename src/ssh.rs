@@ -36,6 +36,13 @@ pub struct HostInfoResponse {
     pub skatelet_version: Option<String>,
 }
 
+impl HostInfoResponse {
+    pub fn healthy(&self) -> bool {
+        // TODO - actual checks for things that matter
+        self.skatelet_version.is_some()
+    }
+}
+
 impl SshClient {
     pub async fn get_host_info(&self) -> Result<HostInfoResponse, Box<dyn Error>> {
         let command = "\
@@ -44,12 +51,14 @@ arch=`arch`;
 os=`uname -s`;
 distro=`cat /etc/issue|head -1|awk '{print $1}'`;
 skatelet_version=`skatelet --version`;
+uptime=`uptime`
 
 echo $hostname;
 echo $arch;
 echo $os;
 echo $distro;
 echo $skatelet_version;
+echo $uptime;
 ";
 
         let result = self.client.execute(command).await.expect("ssh command failed");

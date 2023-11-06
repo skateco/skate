@@ -31,9 +31,8 @@ use crate::delete::{delete, DeleteArgs};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
-use crate::util::slugify;
+use crate::util::{slugify, TARGET};
 
-const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -121,14 +120,14 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
     Ok(result)
 }
 
-#[derive(Debug, EnumString, Clone)]
+#[derive(Debug, EnumString, Clone, Serialize)]
 pub enum Os {
     Unknown,
     Linux,
     Darwin,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Platform {
     pub arch: String,
     pub os: Os,
@@ -159,7 +158,7 @@ impl Platform {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Distribution {
     Unknown,
     Debian,

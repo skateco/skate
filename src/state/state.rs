@@ -85,7 +85,7 @@ impl State {
         let new_len = new.len();
         self.orphaned_nodes = Some(orphaned_nodes);
 
-
+        // now that we have our list, go through and mark them healthy or unhealthy
         self.nodes = self.nodes.iter().map(|mut node| {
             let mut node = node.clone();
             match host_info.iter().find(|h| h.node_name == node.node_name) {

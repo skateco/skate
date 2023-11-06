@@ -2,6 +2,7 @@ use std::error::Error;
 use clap::{Args, Parser, Subcommand};
 use crate::skatelet::apply;
 use crate::skatelet::apply::ApplyArgs;
+use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::up::{up, UpArgs};
 
 #[derive(Debug, Parser)]
@@ -16,6 +17,7 @@ struct Cli {
 enum Commands {
     Up(UpArgs),
     Apply(ApplyArgs),
+    System(SystemArgs)
 }
 
 pub async fn skatelet() -> Result<(), Box<dyn Error>> {
@@ -23,6 +25,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     match args.command {
         Commands::Up(args) => up(args).map_err(|e| e.into()),
         Commands::Apply(args) => apply::apply(args),
+        Commands::System(args) => system(args).await
         // _ => Ok(())
     }
 }
