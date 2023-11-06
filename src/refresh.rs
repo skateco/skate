@@ -1,10 +1,11 @@
 use std::error::Error;
 use anyhow::anyhow;
 use clap::Args;
-use crate::config::{cache_dir, Config, Node};
-use crate::skate::{ConfigFileArgs, NodeState, NodeStatus, State};
+use crate::config::Config;
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use crate::state::state::{NodeState, NodeStatus, State};
 use crate::util::{CHECKBOX_CHAR, hash_string};
 
 #[derive(Debug, Args)]
@@ -39,6 +40,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
         cluster_name: cluster.name.clone(),
         hash: hash_string(cluster),
         nodes: vec![],
+        orphaned_nodes: None,
     };
 
     for result in results {

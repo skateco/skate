@@ -4,9 +4,9 @@ use itertools::{Either, Itertools};
 use crate::config::Config;
 use crate::scheduler::{CandidateNode, DefaultScheduler, Scheduler};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
-use crate::skate::{ConfigFileArgs, State};
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
-use crate::ssh::SshClients;
+use crate::state::state::State;
 use crate::util::CHECKBOX_CHAR;
 
 
@@ -71,6 +71,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
             cluster_name: cluster.name.clone(),
             hash: "".to_string(),
             nodes: vec![],
+            orphaned_nodes: None,
         }
     };
 

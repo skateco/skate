@@ -1,11 +1,10 @@
 use std::error::Error;
-use anyhow::anyhow;
 use async_trait::async_trait;
-use k8s_openapi::api::core::v1::Pod;
 use crate::config::Node;
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
-use crate::skate::{Distribution, Os, Platform, State, SupportedResources};
-use crate::ssh::{HostInfoResponse, SshClient, SshClients};
+use crate::skate::SupportedResources;
+use crate::ssh::{HostInfoResponse, SshClients};
+use crate::state::state::State;
 
 #[derive(Debug)]
 pub struct CandidateNode {
