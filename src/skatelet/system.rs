@@ -4,7 +4,7 @@ use sysinfo::{CpuRefreshKind, Networks, RefreshKind, System, SystemExt};
 use std::error::Error;
 use std::str::FromStr;
 use clap::{Args, Subcommand};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use crate::skate::{Distribution, Os, Platform};
 use crate::util::TARGET;
 
@@ -29,14 +29,14 @@ pub async fn system(args: SystemArgs) -> Result<(), Box<dyn Error>> {
 }
 
 
-#[derive(Serialize)]
-struct SystemInfo {
-    platform: Platform,
-    total_memory_mib: u64,
-    used_memory_mib: u64,
-    total_swap_mib: u64,
-    used_swap_mib: u64,
-    num_cpus: usize,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub platform: Platform,
+    pub total_memory_mib: u64,
+    pub used_memory_mib: u64,
+    pub total_swap_mib: u64,
+    pub used_swap_mib: u64,
+    pub num_cpus: usize,
 }
 
 async fn info() -> Result<(), Box<dyn Error>> {

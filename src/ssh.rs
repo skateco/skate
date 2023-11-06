@@ -10,6 +10,7 @@ use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
 use crate::skate::{Distribution, Os, Platform, SupportedResources};
 use futures::StreamExt;
+use crate::skatelet::SystemInfo;
 use crate::util::hash_string;
 
 
@@ -34,6 +35,7 @@ pub struct HostInfoResponse {
     pub hostname: String,
     pub platform: Platform,
     pub skatelet_version: Option<String>,
+    pub system_info: Option<SystemInfo>,
 }
 
 impl HostInfoResponse {
@@ -51,14 +53,14 @@ arch=`arch`;
 os=`uname -s`;
 distro=`cat /etc/issue|head -1|awk '{print $1}'`;
 skatelet_version=`skatelet --version`;
-uptime=`uptime`
+system_info=`skatelet system info`
 
 echo $hostname;
 echo $arch;
 echo $os;
 echo $distro;
 echo $skatelet_version;
-echo $uptime;
+echo $system_info;
 ";
 
         let result = self.client.execute(command).await.expect("ssh command failed");
@@ -70,7 +72,7 @@ echo $uptime;
         lines.next();
         let distro = Distribution::from(lines.next().map(String::from).unwrap_or_default());
         let skatelet_version = lines.next().map(String::from).filter(|s| !s.is_empty());
-        ;
+        let skatelet_system_info: serde_json::error::Result<SystemInfo> = serde_json::from_str(&lines.next().expect("missing system info").to_string());
 
         return Ok(HostInfoResponse {
             node_name: self.node_name.clone(),
@@ -81,6 +83,10 @@ echo $uptime;
                 distribution: distro,
             },
             skatelet_version,
+            system_info: match skatelet_system_info {
+                Ok(i) => Some(i),
+                Err(_) => None
+            },
         });
     }
 

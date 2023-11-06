@@ -120,14 +120,14 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
     Ok(result)
 }
 
-#[derive(Debug, EnumString, Clone, Serialize)]
+#[derive(Debug, EnumString, Clone, Serialize, Deserialize)]
 pub enum Os {
     Unknown,
     Linux,
     Darwin,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
     pub arch: String,
     pub os: Os,
@@ -158,7 +158,7 @@ impl Platform {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Distribution {
     Unknown,
     Debian,

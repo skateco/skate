@@ -44,6 +44,7 @@ impl Scheduler for DefaultScheduler {
             match object {
                 SupportedResources::Pod(_) | SupportedResources::Deployment(_) => {
                     let serialized = serde_yaml::to_string(&object)?;
+                    println!("scheduling {} on node {}", object, node_name);
                     let result = client.apply_resource(&serialized).await;
                     results.push(ScheduleResult {
                         object,
