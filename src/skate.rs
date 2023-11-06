@@ -13,16 +13,17 @@ use crate::apply::{apply, ApplyArgs};
 use crate::refresh::{refresh, RefreshArgs};
 use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
 use async_ssh2_tokio::Error as SshError;
-use strum_macros::EnumString;
+use strum_macros::{Display, EnumString};
 use std::{fs, process};
 use std::env::var;
+use std::fmt::{Display, Formatter};
 use std::fs::{create_dir, File};
 use std::io::Read;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use path_absolutize::*;
 use anyhow::anyhow;
-use serde_yaml::Value;
+use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::config;
 use crate::config::{cache_dir, Config, Node};
 use crate::create::{create, CreateArgs};
@@ -75,9 +76,11 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 impl Node {}
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Display)]
 pub enum SupportedResources {
+    #[strum(serialize = "Pod")]
     Pod(Pod),
+    #[strum(serialize = "Deployment")]
     Deployment(Deployment),
 }
 
@@ -218,10 +221,11 @@ impl State {
         Ok(serde_json::to_writer(state_file, self).expect("failed to write json state"))
     }
 
-    pub fn load(cluster_name: &str) -> Self {
-        let file = fs::File::open(State::path(cluster_name))
+    pub fn load(cluster_name: &str) -> Result<Self, Box<dyn Error>> {
+        let file = File::open(State::path(cluster_name))
             .expect("file should open read only");
-        serde_json::from_reader(file).expect("failed to deserialize")
+        let result: State = serde_json::from_reader(file).expect("failed to decode state");
+        Ok(result)
     }
 }
 

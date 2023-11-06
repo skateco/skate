@@ -11,8 +11,6 @@ use crate::util::hash_string;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
-    #[arg(short, long, long_help = "The files that contain the configurations to apply.")]
-    filename: Vec<String>,
     #[arg(short, long, long_help("Delete previously applied objects that are not in the set passed to the current invocation."))]
     prune: bool,
     #[command(subcommand)]
@@ -27,7 +25,7 @@ pub enum StdinCommand {
 }
 
 pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    match apply_args.command {
+    let file_path = match apply_args.command {
         StdinCommand::Stdin {} => {
             let mut stdin = io::stdin();
             let mut buffer = String::new();
@@ -36,19 +34,21 @@ pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
             let file_path = format!("/tmp/skate-{}.yaml", hash_string(&buffer));
             let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");
             file.write_all(buffer.as_ref()).expect("failed to write manifest to file");
-
-            let output = process::Command::new("podman")
-                .args(["play", "kube", &file_path])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .output()
-
-                .expect("failed to run command");
-            if !output.status.success() {
-                return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
-            }
-
-            Ok(())
+            file_path
         }
+    };
+
+
+    let output = process::Command::new("podman")
+        .args(["play", "kube", "--replace", &file_path])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .output()
+
+        .expect("failed to run command");
+    if !output.status.success() {
+        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
     }
+
+    Ok(())
 }

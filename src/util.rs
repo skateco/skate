@@ -2,6 +2,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
 
+pub const CHECKBOX_CHAR: char = '✅';
+
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())
 }

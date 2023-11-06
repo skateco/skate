@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 use std::time::Duration;
 use anyhow::anyhow;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
@@ -7,13 +8,20 @@ use async_ssh2_tokio::client::{Client, CommandExecutedResult};
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Os, Platform};
+use crate::skate::{Distribution, Os, Platform, SupportedResources};
 use futures::StreamExt;
+use crate::util::hash_string;
 
 
 pub struct SshClient {
     pub node_name: String,
     pub client: Client,
+}
+
+impl Debug for SshClient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SshClient").field("node_name", &self.node_name).finish()
+    }
 }
 
 pub struct SshClients {
@@ -75,6 +83,24 @@ echo $skatelet_version;
             .as_str()).await.expect("failed to fetch binary");
 
         Ok(())
+    }
+    pub async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
+        let hash = hash_string(manifest);
+        let file_name = format!("/tmp/skate-{}.yaml", hash);
+        let result = self.client.execute(&format!("echo \"{}\" > {} && \
+        cat {} | skatelet apply -", manifest, file_name, file_name)).await?;
+        match result.exit_status {
+            0 => {
+                Ok((result.stdout, result.stderr))
+            }
+            _ => {
+                let message = match result.stderr.len() {
+                    0 => result.stdout,
+                    _ => result.stderr
+                };
+                Err(anyhow!("failed to apply resource: exit code {}, {}", result.exit_status, message).into())
+            }
+        }
     }
 }
 
@@ -173,6 +199,9 @@ async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {
 }
 
 impl SshClients {
+    pub fn find(&self, node_name: &str) -> Option<&SshClient> {
+        self.clients.iter().find(|c| c.node_name == node_name)
+    }
     pub fn execute(&self, command: &str, args: &[&str]) -> Vec<(Node, Result<CommandExecutedResult, SshError>)> {
         todo!();
     }

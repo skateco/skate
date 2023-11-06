@@ -1,9 +1,11 @@
 use std::error::Error;
+use anyhow::anyhow;
 use async_trait::async_trait;
 use k8s_openapi::api::core::v1::Pod;
 use crate::config::Node;
-use crate::skate::{Distribution, Os, Platform, SupportedResources};
-use crate::ssh::HostInfoResponse;
+use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
+use crate::skate::{Distribution, Os, Platform, State, SupportedResources};
+use crate::ssh::{HostInfoResponse, SshClient, SshClients};
 
 #[derive(Debug)]
 pub struct CandidateNode {
@@ -13,7 +15,7 @@ pub struct CandidateNode {
 
 #[derive(Debug)]
 pub enum Status {
-    Scheduled,
+    Scheduled(String),
     Error(String),
 }
 
@@ -26,22 +28,42 @@ pub struct ScheduleResult {
 
 #[async_trait]
 pub trait Scheduler {
-    async fn schedule(&self, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
+    async fn schedule(&self, conns: SshClients, prev_state: &mut State, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
 
 #[async_trait]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
-        Ok(vec![ScheduleResult {
-            object: SupportedResources::Pod(Pod {
-                metadata: Default::default(),
-                spec: None,
-                status: None,
-            }),
-            node_name: "".to_string(),
-            status: Status::Error("failed".to_string()),
-        }])
+    async fn schedule(&self, conns: SshClients, prev_state: &mut State, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
+        let node_name = &(nodes).first().ok_or("no nodes")?.node.name;
+
+        let client = conns.find(node_name).ok_or("failed to find connection for node")?;
+
+        let mut results: Vec<ScheduleResult> = vec![];
+        for object in objects {
+            match object {
+                SupportedResources::Pod(_) | SupportedResources::Deployment(_) => {
+                    let serialized = serde_yaml::to_string(&object)?;
+                    let result = client.apply_resource(&serialized).await;
+                    results.push(ScheduleResult {
+                        object,
+                        node_name: node_name.clone(),
+                        status: match result {
+                            Ok((stdout, stderr)) => {
+                                let mut builder = String::new();
+                                builder.push_str(&stdout);
+                                if stderr.len() > 0 {
+                                    builder.push_str(&format!(" ( stderr: {} )", stderr))
+                                }
+                                Scheduled(format!("{}", builder.replace("\n", "\\n")))
+                            }
+                            Err(err) => ScheduleError(err.to_string())
+                        },
+                    });
+                }
+            }
+        }
+        Ok(results)
     }
 }

@@ -29,8 +29,11 @@ pub struct Cluster {
 pub struct Node {
     pub name: String,
     pub host: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
 }
 

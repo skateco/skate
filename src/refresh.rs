@@ -5,7 +5,7 @@ use crate::config::{cache_dir, Config, Node};
 use crate::skate::{ConfigFileArgs, NodeState, NodeStatus, State};
 use crate::ssh;
 use std::hash::{Hash, Hasher};
-use crate::util::hash_string;
+use crate::util::{CHECKBOX_CHAR, hash_string};
 
 #[derive(Debug, Args)]
 pub struct RefreshArgs {
@@ -44,7 +44,8 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
     for result in results {
         state.nodes.push(match result {
             Ok(info) => {
-                println!("✅  {} ({:?} - {}) running skatelet version {}",
+                println!("{} {} ({:?} - {}) running skatelet version {}",
+                         CHECKBOX_CHAR,
                          info.hostname,
                          info.platform.os,
                          info.platform.arch,

@@ -3,9 +3,11 @@ use clap::Args;
 use itertools::{Either, Itertools};
 use crate::config::Config;
 use crate::scheduler::{CandidateNode, DefaultScheduler, Scheduler};
-use crate::skate::ConfigFileArgs;
+use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
+use crate::skate::{ConfigFileArgs, State};
 use crate::ssh;
 use crate::ssh::SshClients;
+use crate::util::CHECKBOX_CHAR;
 
 
 #[derive(Debug, Args)]
@@ -23,7 +25,8 @@ immediate shutdown.")]
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig)).expect("failed to load skate config");
     let objects = crate::skate::read_manifests(args.filename).unwrap(); // huge
-    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
+    let cluster = config.current_cluster()?;
+    let (conns, errors) = ssh::cluster_connections(cluster).await;
     match errors {
         Some(e) => {
             eprintln!("{}", e)
@@ -43,12 +46,16 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let host_infos = conns.get_hosts_info().await;
 
     let (candidate_nodes, errors): (Vec<_>, Vec<_>) = host_infos.into_iter().partition_map(|i| match i {
-        Ok(info) => Either::Left(CandidateNode {
-            info: info.clone(),
-            node: config.current_cluster()
+        Ok(info) => {
+            let node = config.current_cluster()
                 .expect("no cluster").nodes.iter()
-                .find(|n| n.name == info.node_name).expect("no node").clone(),
-        }),
+                .find(|n| n.name == info.node_name).expect("no node").clone();
+
+            Either::Left(CandidateNode {
+                info: info.clone(),
+                node,
+            })
+        }
         Err(err) => Either::Right(err)
     });
 
@@ -58,9 +65,27 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    let mut state = match State::load(&cluster.name) {
+        Ok(state) => state,
+        Err(_) => State {
+            cluster_name: cluster.name.clone(),
+            hash: "".to_string(),
+            nodes: vec![],
+        }
+    };
+
     let scheduler = DefaultScheduler {};
-    let result = scheduler.schedule(candidate_nodes, objects).await?;
-    println!("{:?}", result);
+    let results = scheduler.schedule(conns, &mut state, candidate_nodes, objects).await?;
+
+
+    let mut should_err = false;
+    for result in results {
+        match result.status {
+            Scheduled(message) => println!("{} {} resource applied ({})", CHECKBOX_CHAR, result.object, message),
+            ScheduleError(err) => eprintln!("{} resource apply failed: {}", result.object, err)
+        }
+    }
+
     // let game_plan = schedule(merged_config, hosts)?;
     // game_plan.play()
     Ok(())
