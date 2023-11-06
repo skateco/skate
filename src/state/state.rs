@@ -5,8 +5,9 @@ use std::fs::File;
 use std::path::Path;
 use crate::config::{cache_dir, Config};
 use crate::skate::SupportedResources;
-use crate::state::state::NodeStatus::Unknown;
-use crate::util::slugify;
+use crate::ssh::HostInfoResponse;
+use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
+use crate::util::{hash_string, slugify};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum NodeStatus {
@@ -52,9 +53,13 @@ impl State {
         Ok(result)
     }
 
-    pub fn reconcile_config(&mut self, config: &Config) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile(&mut self, config: &Config, host_info: &Vec<HostInfoResponse>) -> Result<ReconciledResult, Box<dyn Error>> {
+        let cluster = config.current_cluster()?;
+        self.hash = hash_string(cluster);
+
         let state_hosts: HashSet<String> = self.nodes.iter().map(|n| n.node_name.clone()).collect();
-        let config_hosts: HashSet<String> = config.current_cluster()?.nodes.iter().map(|n| n.name.clone()).collect();
+        let config_hosts: HashSet<String> = cluster.nodes.iter().map(|n| n.name.clone()).collect();
+
 
         let new = &config_hosts - &state_hosts;
         let orphaned = &state_hosts - &config_hosts;
@@ -79,6 +84,21 @@ impl State {
         let orphaned_len = orphaned_nodes.len();
         let new_len = new.len();
         self.orphaned_nodes = Some(orphaned_nodes);
+
+
+        self.nodes = self.nodes.iter().map(|mut node| {
+            let mut node = node.clone();
+            match host_info.iter().find(|h| h.node_name == node.node_name) {
+                Some(_) => {
+                    node.status = Healthy;
+                }
+                None => {
+                    node.status = Unhealthy;
+                }
+            };
+            node
+        }).collect();
+
 
         Ok(ReconciledResult {
             orphaned_nodes: orphaned_len,

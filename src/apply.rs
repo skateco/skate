@@ -44,6 +44,10 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let conns = conns.ok_or("no clients")?;
 
     let host_infos = conns.get_hosts_info().await;
+    let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
+        Ok(r) => Some((*r).clone()),
+        Err(_) => None,
+    }).collect();
 
     let (candidate_nodes, errors): (Vec<_>, Vec<_>) = host_infos.into_iter().partition_map(|i| match i {
         Ok(info) => {
@@ -75,6 +79,8 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
+    let recon_result = state.reconcile(&config, &healthy_host_infos)?;
+
     let scheduler = DefaultScheduler {};
     let results = scheduler.schedule(conns, &mut state, candidate_nodes, objects).await?;
 
@@ -87,6 +93,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    state.persist()?;
     // let game_plan = schedule(merged_config, hosts)?;
     // game_plan.play()
     Ok(())
