@@ -10,6 +10,7 @@ mod create;
 mod delete;
 
 mod state;
+mod get;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

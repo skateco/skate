@@ -4,6 +4,7 @@ use std::env::consts::ARCH;
 use sysinfo::{CpuRefreshKind, Networks, RefreshKind, System, SystemExt};
 use std::error::Error;
 use std::str::FromStr;
+use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
@@ -41,13 +42,13 @@ pub struct SystemInfo {
     pub pods: Option<Vec<PodmanPodInfo>>,
 }
 
-#[derive(Debug,Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PodmanPodInfo {
     pub id: String,
     pub name: String,
     pub status: String,
-    pub created: String,
+    pub created: DateTime<Local>,
     pub labels: HashMap<String, String>,
     pub containers: Vec<PodmanContainerInfo>,
 }
@@ -71,7 +72,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
     let result = exec_cmd(
         "podman",
-        &["pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"]
+        &["pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
     )?;
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&result)?;
 
@@ -87,7 +88,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
         total_swap_mib: sys.total_swap(),
         used_swap_mib: sys.used_swap(),
         num_cpus: sys.cpus().len(),
-        pods:  Some(podman_pod_info),
+        pods: Some(podman_pod_info),
     };
     let json = serde_json::to_string(&info)?;
     println!("{}", json);

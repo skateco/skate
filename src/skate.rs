@@ -30,6 +30,7 @@ use crate::config;
 use crate::config::{cache_dir, Config, Node};
 use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
+use crate::get::{get, GetArgs};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
@@ -50,9 +51,10 @@ enum Commands {
     Delete(DeleteArgs),
     Apply(ApplyArgs),
     Refresh(RefreshArgs),
+    Get(GetArgs),
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Clone, Args)]
 pub struct ConfigFileArgs {
     #[arg(long, long_help = "Configuration for skate.", default_value = "~/.skate/config.yaml")]
     pub skateconfig: String,
@@ -69,6 +71,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 
         Commands::Apply(args) => apply(args).await,
         Commands::Refresh(args) => refresh(args).await,
+        Commands::Get(args) => get(args).await,
         _ => Ok(())
     }
 }

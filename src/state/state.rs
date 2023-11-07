@@ -10,14 +10,14 @@ use crate::ssh::HostInfoResponse;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
 
-#[derive(Serialize, Deserialize, Clone, Display)]
+#[derive(Serialize, Deserialize, Clone, Debug, Display)]
 pub enum NodeStatus {
     Unknown,
     Healthy,
     Unhealthy,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
@@ -26,7 +26,7 @@ pub struct NodeState {
     pub inventory: Vec<SupportedResources>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ClusterState {
     pub cluster_name: String,
     pub hash: String,
