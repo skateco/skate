@@ -118,8 +118,9 @@ impl SupportedResources {
             SupportedResources::Deployment(ref mut d) => {
                 let original_name = d.metadata.name.clone().unwrap_or("".to_string());
 
-                let mut extra_labels = HashMap::new();
-                extra_labels.insert("skate.io/deployment".to_string(), original_name);
+                let mut extra_labels = HashMap::from([
+                    ("skate.io/deployment".to_string(), original_name)
+                ]);
                 d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()));
 
                 d.spec = match d.spec.clone() {

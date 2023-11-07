@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use chrono::format::Fixed::RFC3339;
 use chrono::SecondsFormat;
@@ -32,7 +33,7 @@ pub struct GetPodArgs {
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
     #[command(subcommand)]
-    id: IdCommand,
+    id: Option<IdCommand>,
 }
 
 #[derive(Clone, Debug, Args)]
@@ -42,7 +43,7 @@ pub struct GetDeploymentArgs {
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
     #[command(subcommand)]
-    id: IdCommand,
+    id: Option<IdCommand>,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -83,7 +84,10 @@ async fn get_pod(global_args: GetArgs, args: GetPodArgs) -> Result<(), Box<dyn E
         n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().find(|p| {
             let ns = args.namespace.clone().unwrap_or_default();
             let id = match args.id.clone() {
-                IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
+                Some(cmd) => match cmd {
+                    IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
+                }
+                None => "".to_string()
             };
 
             return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
@@ -93,15 +97,22 @@ async fn get_pod(global_args: GetArgs, args: GetPodArgs) -> Result<(), Box<dyn E
 
 
     println!(
-        "{0: <30} | {1: <10} | {2: <10} | {3: <10} | {4: <30}",
+        "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
         "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
     );
     for pod in pods {
+        let num_containers = pod.containers.len();
+        let healthy_containers = pod.containers.iter().filter(|c| {
+            match c.status.as_str() {
+                "running" => true,
+                _ => false
+            }
+        }).collect::<Vec<_>>().len();
         let restarts = pod.containers.iter().map(|c| c.restart_count)
             .reduce(|a, c| a + c).unwrap_or_default();
         println!(
-            "{0: <30} | {1: <10} | {2: <10} | {3: <10} | {4: <30}",
-            pod.name, "1/1", pod.status, restarts, pod.created.to_rfc3339_opts(SecondsFormat::Secs, true)
+            "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
+            pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, pod.created.to_rfc3339_opts(SecondsFormat::Secs, true)
         )
     }
 
@@ -109,5 +120,76 @@ async fn get_pod(global_args: GetArgs, args: GetPodArgs) -> Result<(), Box<dyn E
 }
 
 async fn get_deployment(global_args: GetArgs, args: GetDeploymentArgs) -> Result<(), Box<dyn Error>> {
+    let config = Config::load(Some(args.config.skateconfig))?;
+    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
+    match errors {
+        Some(e) => {
+            eprintln!("{}", e)
+        }
+        _ => {}
+    };
+
+    match conns {
+        None => {
+            return Ok(());
+        }
+        _ => {}
+    };
+    let conns = conns.ok_or("no clients")?;
+
+    let state = refreshed_state(&config.current_context.clone().unwrap_or("".to_string()), &conns, &config).await?;
+
+    let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
+        let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
+            let ns = args.namespace.clone();
+            let id = match args.id.clone() {
+                Some(cmd) => match cmd {
+                    IdCommand::Id(ids) => Some(ids.into_iter().next().unwrap_or("".to_string()))
+                }
+                None => None
+            };
+            let deployment = p.labels.get("skate.io/deployment");
+            match deployment {
+                Some(deployment) => {
+                    let match_ns = match ns {
+                        Some(ns) => {
+                            ns == p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone()
+                        }
+                        None => false
+                    };
+                    let match_id = match id {
+                        Some(id) => {
+                            id == deployment.clone()
+                        }
+                        None => false
+                    };
+                    if match_ns || match_id {
+                        return Some((deployment.clone(), p));
+                    }
+                    None
+                }
+                None => None
+            }
+        }).collect();
+        match items.len() {
+            0 => None,
+            _ => Some(items)
+        }
+    }).flatten().collect();
+
+
+    println!(
+        "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
+        "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
+    );
+    for (deployment, pod) in pods {
+        let restarts = pod.containers.iter().map(|c| c.restart_count)
+            .reduce(|a, c| a + c).unwrap_or_default();
+        println!(
+            "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
+            pod.name, "1/1", pod.status, restarts, pod.created.to_rfc3339_opts(SecondsFormat::Secs, true)
+        )
+    }
+
     Ok(())
 }
