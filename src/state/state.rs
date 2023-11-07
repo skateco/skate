@@ -21,12 +21,13 @@ pub enum NodeStatus {
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
+    pub host_info: Option<HostInfoResponse>,
     pub inventory_found: bool,
     pub inventory: Vec<SupportedResources>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct State {
+pub struct ClusterState {
     pub cluster_name: String,
     pub hash: String,
     pub nodes: Vec<NodeState>,
@@ -38,19 +39,19 @@ pub struct ReconciledResult {
     pub new_nodes: usize,
 }
 
-impl State {
+impl ClusterState {
     fn path(cluster_name: &str) -> String {
         format!("{}/{}.state", cache_dir(), slugify(cluster_name))
     }
     pub fn persist(&self) -> Result<(), Box<dyn Error>> {
-        let state_file = File::create(Path::new(State::path(&self.cluster_name.clone()).as_str())).expect("unable to open state file");
+        let state_file = File::create(Path::new(ClusterState::path(&self.cluster_name.clone()).as_str())).expect("unable to open state file");
         Ok(serde_json::to_writer(state_file, self).expect("failed to write json state"))
     }
 
     pub fn load(cluster_name: &str) -> Result<Self, Box<dyn Error>> {
-        let file = File::open(State::path(cluster_name))
+        let file = File::open(ClusterState::path(cluster_name))
             .expect("file should open read only");
-        let result: State = serde_json::from_reader(file).expect("failed to decode state");
+        let result: ClusterState = serde_json::from_reader(file).expect("failed to decode state");
         Ok(result)
     }
 
@@ -70,6 +71,7 @@ impl State {
                 true => Some(NodeState {
                     node_name: n.name.clone(),
                     status: Unknown,
+                    host_info: None,
                     inventory_found: false,
                     inventory: vec![],
                 }),
@@ -87,14 +89,18 @@ impl State {
         self.orphaned_nodes = Some(orphaned_nodes);
 
         // now that we have our list, go through and mark them healthy or unhealthy
-        self.nodes = self.nodes.iter().map(|mut node| {
+        self.nodes = self.nodes.iter().map(|node| {
             let mut node = node.clone();
             match host_info.iter().find(|h| h.node_name == node.node_name) {
-                Some(_) => {
-                    node.status = Healthy;
+                Some(info) => {
+                    node.status = match info.healthy() {
+                        true => Healthy,
+                        false => Unhealthy
+                    };
+                    node.host_info = Some(info.clone())
                 }
                 None => {
-                    node.status = Unhealthy;
+                    node.status = Unknown;
                 }
             };
             node

@@ -47,7 +47,7 @@ pub fn up(_up_args: UpArgs) -> Result<(), UpError> {
             }
         }
         // instruct on installing newer podman version
-        Err(err) => {
+        Err(_) => {
 
 // not installed
         }

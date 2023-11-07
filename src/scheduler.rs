@@ -1,10 +1,9 @@
 use std::error::Error;
 use async_trait::async_trait;
-use crate::config::Node;
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::SupportedResources;
-use crate::ssh::{HostInfoResponse, SshClients};
-use crate::state::state::State;
+use crate::ssh::SshClients;
+use crate::state::state::ClusterState;
 
 
 #[derive(Debug)]
@@ -22,14 +21,14 @@ pub struct ScheduleResult {
 
 #[async_trait]
 pub trait Scheduler {
-    async fn schedule(&self, conns: SshClients, state: &mut State, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
+    async fn schedule(&self, conns: SshClients, state: & ClusterState, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
 
 #[async_trait]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: SshClients, state: &mut State, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
+    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
         let node_name = &state.nodes.first().ok_or("no nodes")?.node_name;
 
         let client = conns.find(node_name).ok_or("failed to find connection for node")?;

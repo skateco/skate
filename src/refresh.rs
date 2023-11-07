@@ -6,7 +6,7 @@ use crate::skate::ConfigFileArgs;
 use crate::ssh;
 use std::hash::Hash;
 use crate::ssh::SshClients;
-use crate::state::state::{NodeStatus, State};
+use crate::state::state::{NodeStatus, ClusterState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 #[derive(Debug, Args)]
@@ -57,7 +57,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
 }
 
 
-pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<State, Box<dyn Error>> {
+pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, Box<dyn Error>> {
     let host_infos = conns.get_hosts_info().await;
     let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
         Ok(r) => Some((*r).clone()),
@@ -65,10 +65,10 @@ pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Co
     }).collect();
 
 
-    let mut state = match State::load(cluster_name) {
+    let mut state = match ClusterState::load(cluster_name) {
         Ok(state) => state,
-        Err(_) => State {
-            cluster_name: cluster_name.clone().to_string(),
+        Err(_) => ClusterState {
+            cluster_name: cluster_name.to_string(),
             hash: "".to_string(),
             nodes: vec![],
             orphaned_nodes: None,

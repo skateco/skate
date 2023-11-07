@@ -7,8 +7,8 @@ use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
-use crate::state::state::State;
-use crate::util::CHECKBOX_EMOJI;
+use crate::state::state::ClusterState;
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 
 #[derive(Debug, Args)]
@@ -42,6 +42,8 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         _ => {}
     };
 
+    let objects = objects.into_iter().map(|mut sr| sr.fixup()).collect();
+
     let conns = conns.ok_or("no clients")?;
 
     let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
@@ -51,11 +53,10 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let results = scheduler.schedule(conns, &mut state, objects).await?;
 
 
-    let mut should_err = false;
     for result in results {
         match result.status {
-            Scheduled(message) => println!("{} {} resource applied ({})", CHECKBOX_EMOJI, result.object, message),
-            ScheduleError(err) => eprintln!("{} resource apply failed: {}", result.object, err)
+            Scheduled(message) => println!("{} resource applied ({}) {} ", result.object, message, CHECKBOX_EMOJI),
+            ScheduleError(err) => eprintln!("{} resource apply failed: {} {} ", result.object, err, CROSS_EMOJI)
         }
     }
 

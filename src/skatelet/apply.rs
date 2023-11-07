@@ -1,8 +1,7 @@
 use clap::{Args, Subcommand};
 use std::error::Error;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::{io, process};
-use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process::Stdio;
@@ -29,7 +28,7 @@ pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         StdinCommand::Stdin {} => {
             let mut stdin = io::stdin();
             let mut buffer = String::new();
-            stdin.read_to_string(&mut buffer);
+            stdin.read_to_string(&mut buffer)?;
 
             let file_path = format!("/tmp/skate-{}.yaml", hash_string(&buffer));
             let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");

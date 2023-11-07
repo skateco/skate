@@ -10,6 +10,7 @@ use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
 use crate::skate::{Distribution, Os, Platform, SupportedResources};
 use futures::StreamExt;
+use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
 use crate::util::hash_string;
 
@@ -29,7 +30,7 @@ pub struct SshClients {
     pub clients: Vec<SshClient>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostInfoResponse {
     pub node_name: String,
     pub hostname: String,

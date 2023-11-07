@@ -2,8 +2,7 @@ use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use k8s_openapi::chrono::format::Pad;
-use crate::config::{Config, Node};
+use crate::config::Config;
 use crate::skate::ConfigFileArgs;
 
 #[derive(Debug, Args)]
@@ -52,7 +51,7 @@ async fn delete_node(args: DeleteNodeArgs) -> Result<(), Box<dyn Error>> {
     let find_result = cluster.nodes.iter().find_position(|n| n.name == args.name);
 
     match find_result {
-        Some((p, n)) => {
+        Some((p,_)) => {
             config.clusters[cluster_index].nodes.remove(p);
             config.persist(Some(args.config.skateconfig))
         }

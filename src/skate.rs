@@ -3,8 +3,8 @@
 use std::error::Error;
 use async_trait::async_trait;
 use clap::{Args, Command, Parser, Subcommand};
-use k8s_openapi::{List, NamespaceResourceScope, Resource, ResourceScope};
-use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
+use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Pod;
 use serde_yaml;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,7 @@ use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, Server
 use async_ssh2_tokio::Error as SshError;
 use strum_macros::{Display, EnumString};
 use std::{fs, process};
+use std::collections::BTreeMap;
 use std::env::var;
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir, File};
@@ -23,6 +24,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 use path_absolutize::*;
 use anyhow::anyhow;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::config;
 use crate::config::{cache_dir, Config, Node};
@@ -72,14 +74,61 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
 }
 
 
-
-
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
 pub enum SupportedResources {
     #[strum(serialize = "Pod")]
     Pod(Pod),
     #[strum(serialize = "Deployment")]
     Deployment(Deployment),
+}
+
+impl SupportedResources {
+    fn fixup_metadata(meta: ObjectMeta) -> ObjectMeta {
+        let mut meta = meta.clone();
+        let ns = meta.namespace.clone().unwrap_or("default".to_string());
+        meta.name = Some(format!("{}.{}", ns, meta.name.clone().unwrap_or("".to_string())));
+        println!("{}", ns.clone());
+        let mut annotations = meta.annotations.unwrap_or_default();
+        // annotations seem only to apply to containers, not pods, adding anyway, but for no real reaosn
+        annotations.insert("skate.io/namespace".to_string(), ns.clone());
+        meta.annotations = Some(annotations);
+
+        // labels apply to both pods and containers
+        let mut labels = meta.labels.unwrap_or_default();
+        labels.insert("skate.io/namespace".to_string(), ns.clone());
+        println!("{}", ns.clone());
+        meta.labels = Some(labels);
+        meta
+    }
+    pub fn fixup(self) -> Self {
+        let mut resource = self.clone();
+        match resource {
+            SupportedResources::Pod(ref mut p) => {
+                p.metadata = Self::fixup_metadata(p.metadata.clone());
+                resource
+            }
+            SupportedResources::Deployment(ref mut d) => {
+                d.metadata = Self::fixup_metadata(d.metadata.clone());
+
+                d.spec = match d.spec.clone() {
+                    Some(mut spec) => {
+                        spec.template.metadata = match spec.template.metadata.clone() {
+                            Some(meta) => {
+                                let mut meta = meta.clone();
+                                // forward the namspace
+                                meta.namespace = d.metadata.namespace.clone();
+                                Some(Self::fixup_metadata(meta))
+                            }
+                            None => None
+                        };
+                        Some(spec)
+                    }
+                    None => None
+                };
+                resource
+            }
+        }
+    }
 }
 
 

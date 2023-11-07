@@ -2,7 +2,6 @@ use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use k8s_openapi::chrono::format::Pad;
 use crate::config::{Config, Node};
 use crate::skate::ConfigFileArgs;
 use crate::ssh::node_connection;
