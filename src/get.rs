@@ -27,17 +27,7 @@ pub enum IdCommand {
 }
 
 #[derive(Clone, Debug, Args)]
-pub struct GetPodArgs {
-    #[command(flatten)]
-    config: ConfigFileArgs,
-    #[arg(long, short, long_help = "Filter by resource namespace")]
-    namespace: Option<String>,
-    #[command(subcommand)]
-    id: Option<IdCommand>,
-}
-
-#[derive(Clone, Debug, Args)]
-pub struct GetDeploymentArgs {
+pub struct GetObjectArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
     #[arg(long, short, long_help = "Filter by resource namespace")]
@@ -48,8 +38,8 @@ pub struct GetDeploymentArgs {
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum GetCommands {
-    Pod(GetPodArgs),
-    Deployment(GetDeploymentArgs),
+    Pod(GetObjectArgs),
+    Deployment(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
@@ -60,23 +50,18 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn get_pod(global_args: GetArgs, args: GetPodArgs) -> Result<(), Box<dyn Error>> {
+async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
-    match errors {
-        Some(e) => {
-            eprintln!("{}", e)
-        }
-        _ => {}
-    };
+    if errors.is_some() {
+        eprintln!("{}", errors.unwrap())
+    }
 
-    match conns {
-        None => {
-            return Ok(());
-        }
-        _ => {}
-    };
-    let conns = conns.ok_or("no clients")?;
+    if conns.is_none() {
+        return Ok(());
+    }
+
+    let conns = conns.unwrap();
 
     let state = refreshed_state(&config.current_context.clone().unwrap_or("".to_string()), &conns, &config).await?;
 
@@ -119,23 +104,18 @@ async fn get_pod(global_args: GetArgs, args: GetPodArgs) -> Result<(), Box<dyn E
     Ok(())
 }
 
-async fn get_deployment(global_args: GetArgs, args: GetDeploymentArgs) -> Result<(), Box<dyn Error>> {
+async fn get_deployment(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
-    match errors {
-        Some(e) => {
-            eprintln!("{}", e)
-        }
-        _ => {}
-    };
+    if errors.is_some() {
+        eprintln!("{}", errors.unwrap())
+    }
 
-    match conns {
-        None => {
-            return Ok(());
-        }
-        _ => {}
-    };
-    let conns = conns.ok_or("no clients")?;
+    if conns.is_none() {
+        return Ok(());
+    }
+
+    let conns = conns.unwrap();
 
     let state = refreshed_state(&config.current_context.clone().unwrap_or("".to_string()), &conns, &config).await?;
 
