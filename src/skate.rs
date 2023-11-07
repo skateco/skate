@@ -15,7 +15,8 @@ use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, Server
 use async_ssh2_tokio::Error as SshError;
 use strum_macros::{Display, EnumString};
 use std::{fs, process};
-use std::collections::BTreeMap;
+use std::any::Any;
+use std::collections::{BTreeMap, HashMap};
 use std::env::var;
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir, File};
@@ -86,7 +87,7 @@ pub enum SupportedResources {
 }
 
 impl SupportedResources {
-    fn fixup_metadata(meta: ObjectMeta) -> ObjectMeta {
+    fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> ObjectMeta {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
         meta.name = Some(format!("{}.{}", ns, meta.name.clone().unwrap_or("".to_string())));
@@ -99,6 +100,10 @@ impl SupportedResources {
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
         labels.insert("skate.io/namespace".to_string(), ns.clone());
+        match extra_labels {
+            Some(extra_labels) => labels.extend(extra_labels),
+            _ => {}
+        };
         println!("{}", ns.clone());
         meta.labels = Some(labels);
         meta
@@ -107,11 +112,15 @@ impl SupportedResources {
         let mut resource = self.clone();
         match resource {
             SupportedResources::Pod(ref mut p) => {
-                p.metadata = Self::fixup_metadata(p.metadata.clone());
+                p.metadata = Self::fixup_metadata(p.metadata.clone(), None);
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {
-                d.metadata = Self::fixup_metadata(d.metadata.clone());
+                let original_name = d.metadata.name.clone().unwrap_or("".to_string());
+
+                let mut extra_labels = HashMap::new();
+                extra_labels.insert("skate.io/deployment".to_string(), original_name);
+                d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()));
 
                 d.spec = match d.spec.clone() {
                     Some(mut spec) => {
@@ -120,7 +129,8 @@ impl SupportedResources {
                                 let mut meta = meta.clone();
                                 // forward the namespace
                                 meta.namespace = d.metadata.namespace.clone();
-                                Some(Self::fixup_metadata(meta))
+
+                                Some(Self::fixup_metadata(meta, Some(extra_labels)))
                             }
                             None => None
                         };
