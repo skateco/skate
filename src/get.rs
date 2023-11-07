@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use chrono::format::Fixed::RFC3339;
-use chrono::SecondsFormat;
+use chrono::{DateTime, Local, SecondsFormat};
 use clap::{Args, Subcommand};
 use itertools::{Either, Itertools};
 use crate::config::Config;
@@ -9,6 +9,7 @@ use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::ConfigFileArgs;
+use crate::skatelet::PodmanPodInfo;
 use crate::ssh;
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
@@ -162,12 +163,24 @@ async fn get_deployment(global_args: GetArgs, args: GetObjectArgs) -> Result<(),
         "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
         "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
     );
-    for (deployment, pod) in pods {
-        let restarts = pod.containers.iter().map(|c| c.restart_count)
-            .reduce(|a, c| a + c).unwrap_or_default();
+    let pods = pods.into_iter().fold(HashMap::<String, Vec<PodmanPodInfo>>::new(), |mut acc, (depl, pod)| {
+        acc.entry(depl).or_insert(vec![]).push(pod);
+        acc
+    });
+
+    for (deployment, pods) in pods {
+        let health_pods = pods.iter().filter(|p| p.status == "Running").collect_vec().len();
+        let all_pods = pods.len();
+        let created = pods.iter().fold(Local::now(), |acc, item| {
+            if item.created < acc {
+                return item.created;
+            }
+            return acc;
+        });
+
         println!(
             "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-            pod.name, "1/1", pod.status, restarts, pod.created.to_rfc3339_opts(SecondsFormat::Secs, true)
+            deployment, format!("{}/{}", health_pods, all_pods), "", "", created.to_rfc3339_opts(SecondsFormat::Secs, true)
         )
     }
 
