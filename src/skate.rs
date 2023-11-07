@@ -115,7 +115,7 @@ impl SupportedResources {
                         spec.template.metadata = match spec.template.metadata.clone() {
                             Some(meta) => {
                                 let mut meta = meta.clone();
-                                // forward the namspace
+                                // forward the namespace
                                 meta.namespace = d.metadata.namespace.clone();
                                 Some(Self::fixup_metadata(meta))
                             }
