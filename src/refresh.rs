@@ -5,8 +5,9 @@ use crate::config::Config;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
 use std::hash::Hash;
-use crate::state::state::{NodeState, NodeStatus, State};
-use crate::util::{CHECKBOX_CHAR, hash_string};
+use crate::ssh::SshClients;
+use crate::state::state::{NodeStatus, State};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 #[derive(Debug, Args)]
 pub struct RefreshArgs {
@@ -34,44 +35,46 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
     }
     let clients = clients.expect("should have had clients");
 
-    let results = clients.get_hosts_info().await;
+    let state = refreshed_state(&cluster.name, &clients, &config).await.expect("failed to refresh state");
 
-    let mut state = State {
-        cluster_name: cluster.name.clone(),
-        hash: hash_string(cluster),
-        nodes: vec![],
-        orphaned_nodes: None,
-    };
-
-    for result in results {
-        state.nodes.push(match result {
-            Ok(info) => {
-                println!("{} {} ({:?} - {}) running skatelet version {}",
-                         CHECKBOX_CHAR,
-                         info.hostname,
-                         info.platform.os,
-                         info.platform.arch,
-                         info.skatelet_version.unwrap_or_default().split_whitespace().last().unwrap_or_default());
-                NodeState {
-                    node_name: info.node_name,
-                    status: NodeStatus::Healthy,
-                    inventory_found: true,
-                    inventory: vec![],
-                }
+    for node in &(state.nodes) {
+        match node.status {
+            NodeStatus::Unhealthy => {
+                println!("node {} {} - {} ", node.node_name, node.status, CROSS_EMOJI)
             }
-            Err(err) => {
-                eprintln!("{}", err);
-                NodeState {
-                    node_name: "".parse().unwrap(),
-                    status: NodeStatus::Unhealthy,
-                    inventory_found: false,
-                    inventory: vec![],
-                }
+            NodeStatus::Healthy => {
+                println!("node {} {} - {} ", node.node_name, node.status, CHECKBOX_EMOJI)
             }
-        })
+            NodeStatus::Unknown => {
+                println!("node {} {} - {} ", node.node_name, node.status, '?')
+            }
+        };
     }
 
     let _ = state.persist().expect("failed to save state");
 
     Ok(())
+}
+
+
+pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<State, Box<dyn Error>> {
+    let host_infos = conns.get_hosts_info().await;
+    let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
+        Ok(r) => Some((*r).clone()),
+        Err(_) => None,
+    }).collect();
+
+
+    let mut state = match State::load(cluster_name) {
+        Ok(state) => state,
+        Err(_) => State {
+            cluster_name: cluster_name.clone().to_string(),
+            hash: "".to_string(),
+            nodes: vec![],
+            orphaned_nodes: None,
+        }
+    };
+
+    let _ = state.reconcile(&config, &healthy_host_infos)?;
+    Ok(state)
 }

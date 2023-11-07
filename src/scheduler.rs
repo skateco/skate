@@ -6,11 +6,6 @@ use crate::skate::SupportedResources;
 use crate::ssh::{HostInfoResponse, SshClients};
 use crate::state::state::State;
 
-#[derive(Debug)]
-pub struct CandidateNode {
-    pub info: HostInfoResponse,
-    pub node: Node,
-}
 
 #[derive(Debug)]
 pub enum Status {
@@ -27,15 +22,15 @@ pub struct ScheduleResult {
 
 #[async_trait]
 pub trait Scheduler {
-    async fn schedule(&self, conns: SshClients, prev_state: &mut State, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
+    async fn schedule(&self, conns: SshClients, state: &mut State, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
 
 #[async_trait]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: SshClients, prev_state: &mut State, nodes: Vec<CandidateNode>, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
-        let node_name = &(nodes).first().ok_or("no nodes")?.node.name;
+    async fn schedule(&self, conns: SshClients, state: &mut State, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
+        let node_name = &state.nodes.first().ok_or("no nodes")?.node_name;
 
         let client = conns.find(node_name).ok_or("failed to find connection for node")?;
 

@@ -2,12 +2,13 @@ use std::error::Error;
 use clap::Args;
 use itertools::{Either, Itertools};
 use crate::config::Config;
-use crate::scheduler::{CandidateNode, DefaultScheduler, Scheduler};
+use crate::refresh::refreshed_state;
+use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
 use crate::state::state::State;
-use crate::util::CHECKBOX_CHAR;
+use crate::util::CHECKBOX_EMOJI;
 
 
 #[derive(Debug, Args)]
@@ -43,52 +44,17 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 
     let conns = conns.ok_or("no clients")?;
 
-    let host_infos = conns.get_hosts_info().await;
-    let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
-        Ok(r) => Some((*r).clone()),
-        Err(_) => None,
-    }).collect();
+    let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
-    let (candidate_nodes, errors): (Vec<_>, Vec<_>) = host_infos.into_iter().partition_map(|i| match i {
-        Ok(info) => {
-            let node = config.current_cluster()
-                .expect("no cluster").nodes.iter()
-                .find(|n| n.name == info.node_name).expect("no node").clone();
-
-            Either::Left(CandidateNode {
-                info: info.clone(),
-                node,
-            })
-        }
-        Err(err) => Either::Right(err)
-    });
-
-    if errors.len() > 0 {
-        for err in errors {
-            eprintln!("{}", err)
-        }
-    }
-
-    let mut state = match State::load(&cluster.name) {
-        Ok(state) => state,
-        Err(_) => State {
-            cluster_name: cluster.name.clone(),
-            hash: "".to_string(),
-            nodes: vec![],
-            orphaned_nodes: None,
-        }
-    };
-
-    let recon_result = state.reconcile(&config, &healthy_host_infos)?;
 
     let scheduler = DefaultScheduler {};
-    let results = scheduler.schedule(conns, &mut state, candidate_nodes, objects).await?;
+    let results = scheduler.schedule(conns, &mut state, objects).await?;
 
 
     let mut should_err = false;
     for result in results {
         match result.status {
-            Scheduled(message) => println!("{} {} resource applied ({})", CHECKBOX_CHAR, result.object, message),
+            Scheduled(message) => println!("{} {} resource applied ({})", CHECKBOX_EMOJI, result.object, message),
             ScheduleError(err) => eprintln!("{} resource apply failed: {}", result.object, err)
         }
     }

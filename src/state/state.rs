@@ -3,13 +3,14 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
+use strum_macros::Display;
 use crate::config::{cache_dir, Config};
 use crate::skate::SupportedResources;
 use crate::ssh::HostInfoResponse;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Display)]
 pub enum NodeStatus {
     Unknown,
     Healthy,
