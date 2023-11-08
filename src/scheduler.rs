@@ -26,6 +26,8 @@ pub trait Scheduler {
 
 pub struct DefaultScheduler {}
 
+
+
 #[async_trait]
 impl Scheduler for DefaultScheduler {
     async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
