@@ -39,9 +39,12 @@ pub struct GetObjectArgs {
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum GetCommands {
+    #[command(alias("pods"))]
     Pod(GetObjectArgs),
+    #[command(alias("deployments"))]
     Deployment(GetObjectArgs),
-    Node(GetObjectArgs)
+    #[command(alias("nodes"))]
+    Node(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
@@ -94,7 +97,7 @@ impl Lister<PodmanPodInfo> for PodLister {
                 };
 
                 return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
-                    || (!id.is_empty() && (p.id == id || p.name == id));
+                    || (!id.is_empty() && (p.id == id || p.name == id)) || (ns.is_empty() && id.is_empty());
             })
         }).collect();
         pods
@@ -145,19 +148,19 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
                 let deployment = p.labels.get("skate.io/deployment");
                 match deployment {
                     Some(deployment) => {
-                        let match_ns = match ns {
+                        let match_ns = match ns.clone() {
                             Some(ns) => {
                                 ns == p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone()
                             }
                             None => false
                         };
-                        let match_id = match id {
+                        let match_id = match id.clone() {
                             Some(id) => {
                                 id == deployment.clone()
                             }
                             None => false
                         };
-                        if match_ns || match_id {
+                        if match_ns || match_id || (id.is_none() && ns.is_none()) {
                             return Some((deployment.clone(), p));
                         }
                         None
@@ -220,7 +223,7 @@ impl Lister<NodeState> for NodeLister {
                 }
                 _ => true
             }
-        }).map(|n|n.clone()).collect()
+        }).map(|n| n.clone()).collect()
     }
 
     fn print(&self, items: Vec<NodeState>) {
