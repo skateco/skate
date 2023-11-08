@@ -73,23 +73,14 @@ impl DefaultScheduler {
             None => None
         };
         // naive - picks node with fewest pods
-        let next = state.nodes.iter().fold(current_node, |prev_node_opt, node| {
-            let node_pods = match node.clone().host_info {
-                Some(hi) => {
-                    match hi.system_info {
-                        Some(si) => {
-                            match si.pods {
-                                Some(pods) => pods.len(),
-                                None => 0
-                            }
-                        }
-                        _ => 0
-                    }
-                }
-                _ => 0
-            };
+        let next = state.nodes.iter().fold(current_node, |maybe_prev_node, node| {
+            let node_pods = node.clone().host_info.and_then(|h| {
+                h.system_info.and_then(|si| {
+                    si.pods.and_then(|p| Some(p.len()))
+                })
+            }).unwrap_or(0);
 
-            prev_node_opt.and_then(|prev_node| {
+            maybe_prev_node.and_then(|prev_node| {
                 prev_node.host_info.clone().and_then(|h| {
                     h.system_info.and_then(|si| {
                         si.pods.and_then(|prev_pods| {
@@ -101,7 +92,7 @@ impl DefaultScheduler {
                         })
                     })
                 })
-            }).or_else(||Some(node.clone()))
+            }).or_else(|| Some(node.clone()))
         });
         ApplyPlan {
             current: existing_resource,
@@ -114,14 +105,15 @@ impl DefaultScheduler {
     }
 
     async fn schedule_one(conns: &SshClients, state: &ClusterState, object: SupportedResources) -> ScheduleResult {
-        let serialized = serde_yaml::to_string(&object);
-        let serialized = match serialized {
-            Ok(serialized) => serialized,
-            Err(err) => return ScheduleResult {
-                object,
+        let serialized = match serde_yaml::to_string(&object).or_else(|err|
+            Err(ScheduleResult {
+                object: object.clone(),
                 node_name: "".to_string(),
                 status: ScheduleError(format!("{}", err)),
-            }
+            })
+        ) {
+            Ok(s) => s,
+            Err(sr) => return sr
         };
 
         let plan = Self::plan(state, &object);
@@ -142,6 +134,7 @@ impl DefaultScheduler {
             Ok(_) => {}
             Err(e) => eprintln!("failed to cleanup existing resource: {}", e)
         }
+
 
         let client = conns.find(&next_node.node_name).unwrap();
 

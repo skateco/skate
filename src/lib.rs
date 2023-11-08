@@ -11,6 +11,7 @@ mod delete;
 
 mod state;
 mod get;
+mod executor;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

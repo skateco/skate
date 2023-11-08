@@ -67,6 +67,14 @@ impl ClusterState {
         let new = &config_hosts - &state_hosts;
         let orphaned = &state_hosts - &config_hosts;
 
+
+        self.nodes = self.nodes.iter().filter_map(|n| {
+            match orphaned.contains(&n.node_name) {
+                false => Some(n.clone()),
+                true => None
+            }
+        }).collect();
+
         let mut new_nodes: Vec<NodeState> = config.current_cluster()?.nodes.iter().filter_map(|n| {
             match new.contains(&n.name) {
                 true => Some(NodeState {
@@ -81,6 +89,7 @@ impl ClusterState {
         }).collect();
 
         self.nodes.append(&mut new_nodes);
+
         let orphaned_nodes: Vec<_> = self.nodes.iter().filter_map(|n| match orphaned.contains(&n.node_name) {
             true => Some((*n).clone()),
             false => None
