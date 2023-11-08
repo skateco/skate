@@ -6,6 +6,7 @@ use std::path::Path;
 use strum_macros::Display;
 use crate::config::{cache_dir, Config};
 use crate::skate::SupportedResources;
+use crate::skatelet::PodmanPodInfo;
 use crate::ssh::HostInfoResponse;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
@@ -110,6 +111,49 @@ impl ClusterState {
         Ok(ReconciledResult {
             orphaned_nodes: orphaned_len,
             new_nodes: new_len,
+        })
+    }
+
+    pub fn locate_pod(&self, name: &str, namespace: &str) -> Option<(PodmanPodInfo, &NodeState)> {
+        self.nodes.iter().find_map(|n| {
+            match n.host_info.clone() {
+                Some(h) => match h.system_info {
+                    Some(i) => match i.pods {
+                        Some(i) => {
+                            let pod = i.iter().find(|p| p.name == name && p.namespace() == namespace);
+                            match pod {
+                                Some(pod) => Some((pod.clone(), n)),
+                                None => None
+                            }
+                        }
+                        None => None
+                    }
+                    None => None
+                }
+                None => None
+            }
+        })
+    }
+
+    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Option<(Vec<PodmanPodInfo>, &NodeState)> {
+        let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
+        self.nodes.iter().find_map(|n| {
+            match n.host_info.clone() {
+                Some(h) => match h.system_info {
+                    Some(i) => match i.pods {
+                        Some(i) => {
+                            let pods: Vec<_> = i.into_iter().filter(|p| &p.deployment() == name && &p.namespace() == namespace).collect();
+                            match pods.len() {
+                                0 => None,
+                                _ => Some((pods, n)),
+                            }
+                        }
+                        None => None
+                    }
+                    None => None
+                }
+                None => None
+            }
         })
     }
 }

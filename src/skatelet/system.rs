@@ -53,6 +53,15 @@ pub struct PodmanPodInfo {
     pub containers: Vec<PodmanContainerInfo>,
 }
 
+impl PodmanPodInfo {
+    pub fn namespace(&self) -> String {
+        self.labels.get("skate.io/namespace").map(|ns| ns.clone()).unwrap_or("".to_string())
+    }
+    pub fn deployment(&self) -> String {
+        self.labels.get("skate.io/deployment").map(|d| d.clone()).unwrap_or("".to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PodmanContainerInfo {
