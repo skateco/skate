@@ -75,6 +75,10 @@ echo $system_info;
         let skatelet_version = lines.next().map(String::from).filter(|s| !s.is_empty());
         let skatelet_system_info: serde_json::error::Result<SystemInfo> = serde_json::from_str(&lines.next().expect("missing system info").to_string());
 
+        if skatelet_version.is_some() &&skatelet_system_info.is_err() {
+            return Err(anyhow!("skatelet installed but failed to return system info").into())
+        }
+
         return Ok(HostInfoResponse {
             node_name: self.node_name.clone(),
             hostname,

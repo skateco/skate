@@ -116,7 +116,7 @@ impl Lister<PodmanPodInfo> for PodLister {
                     _ => false
                 }
             }).collect::<Vec<_>>().len();
-            let restarts = pod.containers.iter().map(|c| c.restart_count)
+            let restarts = pod.containers.iter().map(|c| c.restart_count.unwrap_or_default())
                 .reduce(|a, c| a + c).unwrap_or_default();
             println!(
                 "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",

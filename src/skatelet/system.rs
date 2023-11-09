@@ -69,7 +69,7 @@ pub struct PodmanContainerInfo {
     pub id: String,
     pub names: String,
     pub status: String,
-    pub restart_count: usize,
+    pub restart_count: Option<usize>,
 }
 
 async fn info() -> Result<(), Box<dyn Error>> {
