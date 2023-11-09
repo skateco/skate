@@ -8,7 +8,7 @@ use async_ssh2_tokio::client::{Client, CommandExecutedResult};
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Os, Platform, SupportedResources};
+use crate::skate::{Distribution, Os, Platform};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
@@ -95,7 +95,7 @@ echo $system_info;
         });
     }
 
-    pub async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
+    pub async fn install_skatelet(&self, _platform: Platform) -> Result<(), Box<dyn Error>> {
 
         // TODO - download from bucket etc
 
@@ -241,7 +241,7 @@ impl SshClients {
     pub fn find(&self, node_name: &str) -> Option<&SshClient> {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
-    pub fn execute(&self, command: &str, args: &[&str]) -> Vec<(Node, Result<CommandExecutedResult, SshError>)> {
+    pub fn execute(&self, _command: &str, _args: &[&str]) -> Vec<(Node, Result<CommandExecutedResult, SshError>)> {
         todo!();
     }
     pub async fn get_hosts_info(&self) -> Vec<Result<HostInfoResponse, Box<dyn Error>>> {

@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 use std::error::Error;
-use chrono::format::Fixed::RFC3339;
-use chrono::{DateTime, Local, SecondsFormat};
+
+use chrono::{Local, SecondsFormat};
 use clap::{Args, Subcommand};
-use itertools::{Either, Itertools};
+use itertools::{Itertools};
 use crate::config::Config;
 use crate::refresh::refreshed_state;
-use crate::scheduler::{DefaultScheduler, Scheduler};
-use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
+
+
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::PodmanPodInfo;
 use crate::ssh;
 use crate::state::state::{ClusterState, NodeState};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
+
 
 
 #[derive(Debug, Clone, Args)]
@@ -61,7 +61,7 @@ pub trait Lister<T> {
     fn print(&self, items: Vec<T>);
 }
 
-async fn get_objects<T>(global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
+async fn get_objects<T>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
     if errors.is_some() {

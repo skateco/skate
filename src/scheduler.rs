@@ -3,15 +3,15 @@ use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::{Metadata, NamespaceResourceScope, Resource};
-use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::{Metadata};
+
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use crate::config::Cluster;
-use crate::executor::{DefaultExecutor, Executor};
+
+
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
-use crate::ssh::{HostInfoResponse, SshClients};
+use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
 
 

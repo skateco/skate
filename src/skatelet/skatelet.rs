@@ -1,5 +1,5 @@
 use std::error::Error;
-use clap::{Args, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, remove, RemoveArgs};
 use crate::skatelet::system::{system, SystemArgs};

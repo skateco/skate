@@ -4,7 +4,7 @@ use clap::Args;
 use crate::config::Config;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
-use std::hash::Hash;
+
 use crate::ssh::SshClients;
 use crate::state::state::{NodeStatus, ClusterState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};

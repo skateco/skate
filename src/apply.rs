@@ -1,13 +1,13 @@
 use std::error::Error;
 use clap::Args;
-use itertools::{Either, Itertools};
+
 use crate::config::Config;
 use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
-use crate::state::state::ClusterState;
+
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 
@@ -42,7 +42,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         _ => {}
     };
 
-    let objects = objects.into_iter().map(|mut sr| sr.fixup()).collect();
+    let objects = objects.into_iter().map(|sr| sr.fixup()).collect();
 
     let conns = conns.ok_or("no clients")?;
 

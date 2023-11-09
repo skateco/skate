@@ -1,14 +1,14 @@
-use std::any::Any;
-use std::collections::{HashMap, HashSet};
+
+use std::collections::{HashMap};
 use std::env::consts::ARCH;
-use sysinfo::{CpuRefreshKind, Networks, RefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, RefreshKind, System, SystemExt};
 use std::error::Error;
 use std::str::FromStr;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
-use crate::util::TARGET;
+
 
 #[derive(Debug, Args)]
 pub struct SystemArgs {
