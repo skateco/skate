@@ -73,7 +73,7 @@ impl DefaultScheduler {
                         node: Some(n.clone()),
                         resource: SupportedResources::Pod(pod.clone().into()),
                         error: None,
-                        operation: OpType::Info,
+                        operation: OpType::Delete,
                     })
                 }).unwrap_or_default()
             }
@@ -86,7 +86,7 @@ impl DefaultScheduler {
                             node: Some(n.clone()),
                             resource: SupportedResources::Pod(pod.clone().into()),
                             error: None,
-                            operation: OpType::Info,
+                            operation: OpType::Delete,
                         }
                     }).collect()
                 }).unwrap_or_default()

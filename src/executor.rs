@@ -42,9 +42,15 @@ impl Executor for DefaultExecutor {
 
     fn remove(&self, manifest: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
-        let id = match object {
-            SupportedResources::Pod(p) => p.metadata.name.unwrap_or("".to_string()),
-            SupportedResources::Deployment(d) => d.metadata.name.unwrap_or("".to_string())
+        let (id, ns) = match object {
+            SupportedResources::Pod(p) => {
+                (p.metadata.name.unwrap_or("".to_string()),
+                 p.metadata.namespace.unwrap_or("".to_string()))
+            }
+            SupportedResources::Deployment(d) => {
+                (d.metadata.name.unwrap_or("".to_string()),
+                 d.metadata.namespace.unwrap_or("".to_string()))
+            }
         };
 
         println!("id {}", id);
@@ -52,7 +58,11 @@ impl Executor for DefaultExecutor {
         let grace = grace_period.unwrap_or(10);
 
         let output = process::Command::new("podman")
-            .args(["pod", "stop", &id, "-t", &format!("{}", grace)])
+            .args(["pod", "stop",
+                "-t", &format!("{}", grace),
+                "--filter", &format!("label=skate.io/name={}", &id),
+                "--filter", &format!("label=skate.io/namespace={}", &ns),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
@@ -62,7 +72,10 @@ impl Executor for DefaultExecutor {
             return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
         let output = process::Command::new("podman")
-            .args(["pod", "rm", &id])
+            .args(["pod", "rm",
+                "--filter", &format!("label=skate.io/name={}", &id),
+                "--filter", &format!("label=skate.io/namespace={}", &ns),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()

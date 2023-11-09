@@ -90,7 +90,8 @@ impl SupportedResources {
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> ObjectMeta {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
-        meta.name = Some(format!("{}.{}", ns, meta.name.clone().unwrap_or("".to_string())));
+        let orig_name = meta.name.clone().unwrap_or("".to_string());
+        meta.name = Some(format!("{}.{}", ns, &orig_name));
         let mut annotations = meta.annotations.unwrap_or_default();
         // annotations seem only to apply to containers, not pods, adding anyway, but for no real reaosn
         annotations.insert("skate.io/namespace".to_string(), ns.clone());
@@ -98,6 +99,7 @@ impl SupportedResources {
 
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
+        labels.insert("skate.io/name".to_string(), orig_name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
         match extra_labels {
             Some(extra_labels) => labels.extend(extra_labels),
