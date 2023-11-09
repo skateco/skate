@@ -53,10 +53,10 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let results = scheduler.schedule(conns, &mut state, objects).await?;
 
 
-    for result in results {
-        match result.status {
-            Scheduled(message) => println!("{} resource applied ({}) {} ", result.object, message, CHECKBOX_EMOJI),
-            ScheduleError(err) => eprintln!("{} resource apply failed: {} {} ", result.object, err, CROSS_EMOJI)
+    for placement in results.placements {
+        match placement.error {
+            None => println!("{} resource applied {} ", placement.resource, CHECKBOX_EMOJI),
+            Some(err) => eprintln!("{} resource apply failed: {} {} ", placement.resource, err, CROSS_EMOJI)
         }
     }
 

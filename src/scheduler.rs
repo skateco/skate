@@ -2,15 +2,9 @@ use std::cmp::Ordering;
 use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::{Metadata};
-
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-
-
-use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use crate::skate::SupportedResources;
-use crate::skatelet::PodmanPodInfo;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
 
@@ -23,70 +17,91 @@ pub enum Status {
 
 #[derive(Debug)]
 pub struct ScheduleResult {
-    pub object: SupportedResources,
-    pub node_name: String,
-    pub status: Status,
+    pub placements: Vec<ScheduledOperation<SupportedResources>>,
 }
 
 #[async_trait(? Send)]
 pub trait Scheduler {
-    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>>;
+    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
 
-#[derive(Debug, Clone)]
-struct ResourceAndNode<T> {
-    resource: T,
-    node: NodeState,
-}
 
-struct ApplyPlan {
-    pub current: Option<ExistingResource>,
-    pub next: Option<NodeState>,
+#[derive(Debug, Clone)]
+pub enum OpType {
+    Info,
+    Create,
+    Delete,
 }
 
 #[derive(Debug, Clone)]
-enum ExistingResource {
-    Pod(ResourceAndNode<PodmanPodInfo>),
-    Deployment(ResourceAndNode<Vec<PodmanPodInfo>>),
+pub struct ScheduledOperation<T> {
+    pub resource: T,
+    pub node: Option<NodeState>,
+    pub operation: OpType,
+    pub error: Option<String>,
+}
+
+pub struct ApplyPlan {
+    // pub existing: Vec<ScheduledOperation<SupportedResources>>,
+    pub actions: Vec<ScheduledOperation<SupportedResources>>,
 }
 
 impl DefaultScheduler {
     // returns tuple of (Option(prev node), Option(new node))
     fn plan(state: &ClusterState, object: &SupportedResources) -> ApplyPlan {
-        let existing_resource = match object {
+        // only support 1 replica for now
+        match object {
+            SupportedResources::Deployment(d) => {
+                d.spec.as_ref().and_then(|spec| spec.replicas.and_then(|mut replicas| {
+                    if replicas > 1 {
+                        return Some(1);
+                    }
+                    Some(replicas)
+                }));
+            }
+            _ => {}
+        };
+
+        let for_deletion: Vec<_> = match object {
             SupportedResources::Pod(p) => {
                 let name = p.metadata.name.clone().unwrap_or("".to_string());
                 let ns = p.metadata.namespace.clone().unwrap_or("".to_string());
-                state.locate_pod(&name, &ns).map(|(r, n)| {
-                    ExistingResource::Pod(ResourceAndNode { node: n.clone(), resource: r })
-                })
+                state.locate_pod(&name, &ns).map(|(pod, n)| {
+                    vec!(ScheduledOperation {
+                        node: Some(n.clone()),
+                        resource: SupportedResources::Pod(pod.clone().into()),
+                        error: None,
+                        operation: OpType::Info,
+                    })
+                }).unwrap_or_default()
             }
             SupportedResources::Deployment(d) => {
                 let name = d.metadata.name.clone().unwrap_or("".to_string());
                 let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
                 state.locate_deployment(&name, &ns).map(|(r, n)| {
-                    ExistingResource::Deployment(ResourceAndNode { node: n.clone(), resource: r })
-                })
+                    r.iter().map(|pod| {
+                        ScheduledOperation {
+                            node: Some(n.clone()),
+                            resource: SupportedResources::Pod(pod.clone().into()),
+                            error: None,
+                            operation: OpType::Info,
+                        }
+                    }).collect()
+                }).unwrap_or_default()
             }
         };
-        let current_node = match &existing_resource {
-            Some(e) => match e {
-                ExistingResource::Deployment(r) => Some(r.node.clone()),
-                ExistingResource::Pod(r) => Some(r.node.clone()),
-            },
-            None => None
-        };
+        // TODO - different node for each pod in deployment potentially
         // naive - picks node with fewest pods
-        let next = state.nodes.iter().fold(current_node, |maybe_prev_node, node| {
+        let scheduled_node = state.nodes.iter().fold(None, |maybe_prev_node, node| {
             let node_pods = node.clone().host_info.and_then(|h| {
                 h.system_info.and_then(|si| {
                     si.pods.and_then(|p| Some(p.len()))
                 })
             }).unwrap_or(0);
 
-            maybe_prev_node.and_then(|prev_node| {
+            maybe_prev_node.and_then(|prev_node: NodeState| {
                 prev_node.host_info.clone().and_then(|h| {
                     h.system_info.and_then(|si| {
                         si.pods.and_then(|prev_pods| {
@@ -100,76 +115,35 @@ impl DefaultScheduler {
                 })
             }).or_else(|| Some(node.clone()))
         });
+
+        let for_creation = match scheduled_node {
+            Some(n) => vec!(ScheduledOperation {
+                resource: object.clone(),
+                node: Some(n),
+                operation: OpType::Create,
+                error: None,
+            }),
+            _ => vec!()
+        };
+
         ApplyPlan {
-            current: existing_resource,
-            next,
+            actions: [for_deletion, for_creation].concat(),
         }
     }
 
-    async fn remove_existing(conns: &SshClients, resource: ExistingResource) -> Result<(), Box<dyn Error>> {
-        let (node, objects) = match resource {
-            ExistingResource::Pod(o) => {
-                (o.node, vec!(SupportedResources::Pod(Pod {
-                    metadata: ObjectMeta {
-                        annotations: None,
-                        creation_timestamp: None,
-                        deletion_grace_period_seconds: None,
-                        deletion_timestamp: None,
-                        finalizers: None,
-                        generate_name: None,
-                        generation: None,
-                        labels: None,
-                        managed_fields: None,
-                        name: Some(o.resource.name.clone()),
-                        namespace: Some(o.resource.namespace()),
-                        owner_references: None,
-                        resource_version: None,
-                        self_link: None,
-                        uid: None,
-                    },
-                    spec: None,
-                    status: None,
-                })))
-            }
-            ExistingResource::Deployment(o) => {
-                (o.node, o.resource.into_iter().map(|resource| SupportedResources::Pod(Pod{
-                    metadata: ObjectMeta {
-                        annotations: None,
-                        creation_timestamp: None,
-                        deletion_grace_period_seconds: None,
-                        deletion_timestamp: None,
-                        finalizers: None,
-                        generate_name: None,
-                        generation: None,
-                        labels: None,
-                        managed_fields: None,
-                        name: Some(resource.name.clone()),
-                        namespace: Some(resource.namespace()),
-                        owner_references: None,
-                        resource_version: None,
-                        self_link: None,
-                        uid: None,
-                    },
-                    spec: None,
-                    status: None,
-                })).collect())
-            }
-        };
-
-        let conn = conns.find(&node.node_name).ok_or("failed to find connection to host")?;
+    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(), Box<dyn Error>> {
+        let conn = conns.find(&resource.node.unwrap().node_name).ok_or("failed to find connection to host")?;
 
         let mut success = true;
         let mut error: String = "".to_string();
-        for object in objects {
-            let manifest = serde_yaml::to_string(&object).expect("failed to serialize manifest");
-            match conn.remove_resource(&manifest).await {
-                Ok(_) => {
-                    println!("removed existing resource")
-                }
-                Err(err) => {
-                    success = false;
-                    error = error + &format!("{}", err)
-                }
+        let manifest = serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");
+        match conn.remove_resource(&manifest).await {
+            Ok(_) => {
+                println!("removed existing resource")
+            }
+            Err(err) => {
+                success = false;
+                error = error + &format!("{}", err)
             }
         }
         if !success {
@@ -178,74 +152,77 @@ impl DefaultScheduler {
         Ok(())
     }
 
-    async fn schedule_one(conns: &SshClients, state: &ClusterState, object: SupportedResources) -> ScheduleResult {
-        let serialized = match serde_yaml::to_string(&object).or_else(|err|
-            Err(ScheduleResult {
-                object: object.clone(),
-                node_name: "".to_string(),
-                status: ScheduleError(format!("{}", err)),
-            })
-        ) {
-            Ok(s) => s,
-            Err(sr) => return sr
-        };
+    async fn schedule_one(conns: &SshClients, state: &ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
+        let serialized = serde_yaml::to_string(&object).expect("failed to serialize object");
 
         let plan = Self::plan(state, &object);
-        let next_node = match plan.next {
-            Some(node) => node,
-            None => return ScheduleResult {
-                object,
-                node_name: "".to_string(),
-                status: ScheduleError("failed to find schedulable node".to_string()),
-            }
-        };
-
-        let cleanup_result = match plan.current {
-            Some(e) => Self::remove_existing(conns, e).await,
-            None => Ok(())
-        };
-        match cleanup_result {
-            Ok(_) => {}
-            Err(e) => return ScheduleResult {
-                object,
-                node_name: "".to_string(),
-                status: ScheduleError(e.to_string()),
-            }
+        if plan.actions.len() == 0 {
+            return Err(anyhow!("failed to schedule resources").into());
         }
 
+        let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();
 
-        let client = conns.find(&next_node.node_name).unwrap();
-
-
-        println!("scheduling {} on node {}", object, next_node.node_name.clone());
-        let result = client.apply_resource(&serialized).await;
-        ScheduleResult {
-            object,
-            node_name: next_node.node_name.clone(),
-            status: match result {
-                Ok((stdout, stderr)) => {
-                    let mut builder = String::new();
-                    builder.push_str(&stdout);
-                    if stderr.len() > 0 {
-                        builder.push_str(&format!(" ( stderr: {} )", stderr))
+        for mut action in plan.actions {
+            match action.operation {
+                OpType::Delete => {
+                    let node_name = action.node.clone().unwrap().node_name;
+                    match Self::remove_existing(conns, action.clone()).await {
+                        Ok(_) => {
+                            println!("deleted {} on node {}", object, node_name);
+                            result.push(action.clone());
+                        }
+                        Err(err) => {
+                            action.error = Some(err.to_string());
+                            println!("failed to delete {} on node {}: {}", object, node_name, err.to_string());
+                            result.push(action.clone());
+                        }
                     }
-                    Scheduled(format!("{}", builder.replace("\n", "\\n")))
                 }
-                Err(err) => ScheduleError(err.to_string())
-            },
+                OpType::Create => {
+                    let node_name = action.node.clone().unwrap().node_name;
+                    let client = conns.find(&node_name).unwrap();
+                    match client.apply_resource(&serialized).await {
+                        Ok(_) => {
+                            println!("created {} on node {}", object, node_name);
+                            result.push(action.clone());
+                        }
+                        Err(err) => {
+                            action.error = Some(err.to_string());
+                            println!("failed to created {} on node {}: {}", object, node_name, err.to_string());
+                            result.push(action.clone());
+                        }
+                    }
+                }
+                OpType::Info => {
+                    result.push(action.clone());
+                }
+            }
         }
+
+        Ok(result)
     }
 }
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<Vec<ScheduleResult>, Box<dyn Error>> {
-        let mut results: Vec<ScheduleResult> = vec![];
+    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
+        let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
             match object {
                 SupportedResources::Pod(_) | SupportedResources::Deployment(_) => {
-                    let result = Self::schedule_one(&conns, state, object.clone()).await;
-                    results.push(result)
+                    match Self::schedule_one(&conns, state, object.clone()).await {
+                        Ok(placements) => {
+                            results.placements = [results.placements, placements].concat();
+                        }
+                        Err(err) => {
+                            results.placements = [results.placements, vec![ScheduledOperation {
+                                resource: object.clone(),
+                                node: None,
+                                operation: OpType::Info,
+                                error: Some(err.to_string()),
+                            }]].concat()
+                        }
+                    }
                 }
             }
         }

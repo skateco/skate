@@ -1,4 +1,3 @@
-
 use std::collections::{HashMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuRefreshKind, RefreshKind, System, SystemExt};
@@ -6,6 +5,8 @@ use std::error::Error;
 use std::str::FromStr;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
+use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
 
@@ -60,6 +61,33 @@ impl PodmanPodInfo {
     }
     pub fn deployment(&self) -> String {
         self.labels.get("skate.io/deployment").map(|d| d.clone()).unwrap_or("".to_string())
+    }
+}
+
+
+impl Into<Pod> for PodmanPodInfo {
+    fn into(self) -> Pod {
+        Pod {
+            metadata: ObjectMeta {
+                annotations: None,
+                creation_timestamp: None,
+                deletion_grace_period_seconds: None,
+                deletion_timestamp: None,
+                finalizers: None,
+                generate_name: None,
+                generation: None,
+                labels: None,
+                managed_fields: None,
+                name: Some(self.name.clone()),
+                namespace: Some(self.namespace()),
+                owner_references: None,
+                resource_version: None,
+                self_link: None,
+                uid: None,
+            },
+            spec: None,
+            status: None,
+        }
     }
 }
 
