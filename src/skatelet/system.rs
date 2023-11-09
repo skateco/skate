@@ -42,6 +42,7 @@ pub struct SystemInfo {
     pub pods: Option<Vec<PodmanPodInfo>>,
 }
 
+// TODO - have more generic ObjectMeta type for explaining existing resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PodmanPodInfo {

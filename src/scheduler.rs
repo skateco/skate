@@ -1,7 +1,13 @@
 use std::cmp::Ordering;
 use std::error::Error;
+use anyhow::anyhow;
 use async_trait::async_trait;
+use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::{Metadata, NamespaceResourceScope, Resource};
+use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use crate::config::Cluster;
+use crate::executor::{DefaultExecutor, Executor};
 use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
@@ -101,6 +107,74 @@ impl DefaultScheduler {
     }
 
     async fn remove_existing(conns: &SshClients, resource: ExistingResource) -> Result<(), Box<dyn Error>> {
+        let (node, objects) = match resource {
+            ExistingResource::Pod(o) => {
+                (o.node, vec!(SupportedResources::Pod(Pod {
+                    metadata: ObjectMeta {
+                        annotations: None,
+                        creation_timestamp: None,
+                        deletion_grace_period_seconds: None,
+                        deletion_timestamp: None,
+                        finalizers: None,
+                        generate_name: None,
+                        generation: None,
+                        labels: None,
+                        managed_fields: None,
+                        name: Some(o.resource.name.clone()),
+                        namespace: Some(o.resource.namespace()),
+                        owner_references: None,
+                        resource_version: None,
+                        self_link: None,
+                        uid: None,
+                    },
+                    spec: None,
+                    status: None,
+                })))
+            }
+            ExistingResource::Deployment(o) => {
+                (o.node, o.resource.into_iter().map(|resource| SupportedResources::Pod(Pod{
+                    metadata: ObjectMeta {
+                        annotations: None,
+                        creation_timestamp: None,
+                        deletion_grace_period_seconds: None,
+                        deletion_timestamp: None,
+                        finalizers: None,
+                        generate_name: None,
+                        generation: None,
+                        labels: None,
+                        managed_fields: None,
+                        name: Some(resource.name.clone()),
+                        namespace: Some(resource.namespace()),
+                        owner_references: None,
+                        resource_version: None,
+                        self_link: None,
+                        uid: None,
+                    },
+                    spec: None,
+                    status: None,
+                })).collect())
+            }
+        };
+
+        let conn = conns.find(&node.node_name).ok_or("failed to find connection to host")?;
+
+        let mut success = true;
+        let mut error: String = "".to_string();
+        for object in objects {
+            let manifest = serde_yaml::to_string(&object).expect("failed to serialize manifest");
+            match conn.remove_resource(&manifest).await {
+                Ok(_) => {
+                    println!("removed existing resource")
+                }
+                Err(err) => {
+                    success = false;
+                    error = error + &format!("{}", err)
+                }
+            }
+        }
+        if !success {
+            return Err(anyhow!(error).into());
+        }
         Ok(())
     }
 
@@ -132,7 +206,11 @@ impl DefaultScheduler {
         };
         match cleanup_result {
             Ok(_) => {}
-            Err(e) => eprintln!("failed to cleanup existing resource: {}", e)
+            Err(e) => return ScheduleResult {
+                object,
+                node_name: "".to_string(),
+                status: ScheduleError(e.to_string()),
+            }
         }
 
 

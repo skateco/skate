@@ -5,7 +5,6 @@ use std::process;
 use std::process::Stdio;
 use anyhow::anyhow;
 use crate::skate::SupportedResources;
-use crate::ssh::SshClient;
 use crate::util::hash_string;
 
 pub trait Executor {
@@ -28,8 +27,6 @@ impl Executor for DefaultExecutor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>> {
         let file_path = DefaultExecutor::write_to_file(manifest)?;
 
-        let _ = self.remove(manifest, None).expect("failed to remove resource");
-
         let output = process::Command::new("podman")
             .args(["play", "kube", &file_path])
             .stdin(Stdio::piped())
@@ -47,7 +44,7 @@ impl Executor for DefaultExecutor {
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         let id = match object {
             SupportedResources::Pod(p) => p.metadata.name.unwrap_or("".to_string()),
-            SupportedResources::Deployment(d) => d.metadata.name.unwrap_or("".to_string()) + "-pod"
+            SupportedResources::Deployment(d) => d.metadata.name.unwrap_or("".to_string())
         };
 
         println!("id {}", id);

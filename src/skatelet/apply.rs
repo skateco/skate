@@ -37,3 +37,25 @@ pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let executor = DefaultExecutor {};
     executor.apply(&manifest)
 }
+
+#[derive(Debug, Args)]
+pub struct RemoveArgs {
+    #[arg(short, long, long_help("Number of seconds to wait before hard killing."))]
+    termination_grace_period: Option<usize>,
+    #[command(subcommand)]
+    command: StdinCommand,
+}
+
+pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
+    let manifest = match args.command {
+        StdinCommand::Stdin {} => {
+            let mut stdin = io::stdin();
+            let mut buffer = String::new();
+            stdin.read_to_string(&mut buffer)?;
+            buffer
+        }
+    };
+
+    let executor = DefaultExecutor {};
+    executor.remove(&manifest, args.termination_grace_period)
+}

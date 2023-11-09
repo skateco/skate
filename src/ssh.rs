@@ -118,6 +118,25 @@ echo $system_info;
             }
         }
     }
+
+    pub async fn remove_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
+        let hash = hash_string(manifest);
+        let file_name = format!("/tmp/skate-{}.yaml", hash);
+        let result = self.client.execute(&format!("echo \"{}\" > {} && \
+        cat {} | skatelet remove -", manifest, file_name, file_name)).await?;
+        match result.exit_status {
+            0 => {
+                Ok((result.stdout, result.stderr))
+            }
+            _ => {
+                let message = match result.stderr.len() {
+                    0 => result.stdout,
+                    _ => result.stderr
+                };
+                Err(anyhow!("failed to remove resource: exit code {}, {}", result.exit_status, message).into())
+            }
+        }
+    }
 }
 
 
