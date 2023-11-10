@@ -11,7 +11,7 @@ use crate::ssh::HostInfoResponse;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
 
-#[derive(Serialize, Deserialize, Clone, Debug, Display)]
+#[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq)]
 pub enum NodeStatus {
     Unknown,
     Healthy,
@@ -50,9 +50,9 @@ impl ClusterState {
     }
 
     pub fn load(cluster_name: &str) -> Result<Self, Box<dyn Error>> {
-        let file = File::open(ClusterState::path(cluster_name))
-            .expect("file should open read only");
-        let result: ClusterState = serde_json::from_reader(file).expect("failed to decode state");
+        let file = File::open(ClusterState::path(cluster_name))?;
+
+        let result: ClusterState = serde_json::from_reader(file)?;
         Ok(result)
     }
 

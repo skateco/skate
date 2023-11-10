@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
+use serde::{Deserialize, Deserializer};
 
 pub const CHECKBOX_EMOJI: char = '✅';
 pub const CROSS_EMOJI: char = '❌';
@@ -74,3 +75,14 @@ pub fn hash_string<T>(obj: T) -> String
     format!("{:x}", hasher.finish())
 }
 
+
+// use with #[serde(deserialize_with = "deserialize_null_default")]
+// null or nonexistant values will be deserialized as T::default(
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+    where
+        T: Default + Deserialize<'de>,
+        D: Deserializer<'de>,
+{
+    let opt = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
+}

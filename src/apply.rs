@@ -1,4 +1,5 @@
 use std::error::Error;
+use anyhow::anyhow;
 use clap::Args;
 
 use crate::config::Config;
@@ -37,12 +38,13 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 
     match conns {
         None => {
-            return Ok(());
+            return Err(anyhow!("failed to create cluster connections").into());
         }
         _ => {}
     };
 
-    let objects = objects.into_iter().map(|sr| sr.fixup()).collect();
+    let objects:Vec<Result<_,_>> = objects.into_iter().map(|sr| sr.fixup()).collect();
+    let objects:Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
 
     let conns = conns.ok_or("no clients")?;
 
@@ -52,15 +54,13 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let scheduler = DefaultScheduler {};
     let results = scheduler.schedule(conns, &mut state, objects).await?;
 
-
-    for placement in results.placements {
-        match placement.error {
-            None => println!("{} resource applied {} ", placement.resource, CHECKBOX_EMOJI),
-            Some(err) => eprintln!("{} resource apply failed: {} {} ", placement.resource, err, CROSS_EMOJI)
+    match state.persist() {
+        Err(e) =>{
+            eprintln!("Warning!: failed to persist state: {}", e)
         }
+        _ => {}
     }
 
-    state.persist()?;
     // let game_plan = schedule(merged_config, hosts)?;
     // game_plan.play()
     Ok(())

@@ -87,7 +87,7 @@ pub enum SupportedResources {
 }
 
 impl SupportedResources {
-    fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> ObjectMeta {
+    fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
         let orig_name = meta.name.clone().unwrap_or("".to_string());
@@ -106,22 +106,35 @@ impl SupportedResources {
             _ => {}
         };
         meta.labels = Some(labels);
-        meta
+        Ok(meta)
     }
-    pub fn fixup(self) -> Self {
+    pub fn fixup(self) -> Result<Self, Box<dyn Error>> {
         let mut resource = self.clone();
-        match resource {
+        let resource = match resource {
             SupportedResources::Pod(ref mut p) => {
-                p.metadata = Self::fixup_metadata(p.metadata.clone(), None);
+
+                if p.metadata.name.is_none() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if p.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
+                p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {
                 let original_name = d.metadata.name.clone().unwrap_or("".to_string());
+                if original_name.is_empty() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if d.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
 
                 let mut extra_labels = HashMap::from([
                     ("skate.io/deployment".to_string(), original_name)
                 ]);
-                d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()));
+                d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
 
                 d.spec = match d.spec.clone() {
                     Some(mut spec) => {
@@ -130,8 +143,8 @@ impl SupportedResources {
                                 let mut meta = meta.clone();
                                 // forward the namespace
                                 meta.namespace = d.metadata.namespace.clone();
-
-                                Some(Self::fixup_metadata(meta, Some(extra_labels)))
+                                let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                                Some(meta)
                             }
                             None => None
                         };
@@ -141,7 +154,8 @@ impl SupportedResources {
                 };
                 resource
             }
-        }
+        };
+        Ok(resource)
     }
 }
 

@@ -9,10 +9,9 @@ use crate::refresh::refreshed_state;
 
 
 use crate::skate::ConfigFileArgs;
-use crate::skatelet::PodmanPodInfo;
+use crate::skatelet::{PodmanPodInfo, PodmanPodStatus};
 use crate::ssh;
 use crate::state::state::{ClusterState, NodeState};
-
 
 
 #[derive(Debug, Clone, Args)]
@@ -187,7 +186,7 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
         });
 
         for (deployment, pods) in pods {
-            let health_pods = pods.iter().filter(|p| p.status == "Running").collect_vec().len();
+            let health_pods = pods.iter().filter(|p| PodmanPodStatus::Running == p.status).collect_vec().len();
             let all_pods = pods.len();
             let created = pods.iter().fold(Local::now(), |acc, item| {
                 if item.created < acc {

@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::process;
 use std::process::Stdio;
 use anyhow::anyhow;
@@ -48,41 +48,50 @@ impl Executor for DefaultExecutor {
                  p.metadata.namespace.unwrap_or("".to_string()))
             }
             SupportedResources::Deployment(d) => {
-                (d.metadata.name.unwrap_or("".to_string()),
-                 d.metadata.namespace.unwrap_or("".to_string()))
+                return Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
             }
         };
+        let id = id.trim().to_string();
+        let ns = ns.trim().to_string();
 
-        println!("id {}", id);
+        if id.is_empty() {
+            return Err(anyhow!("no metadata.name found").into());
+        }
+        if ns.is_empty() {
+            return Err(anyhow!("no metadata.name found").into());
+        }
 
         let grace = grace_period.unwrap_or(10);
 
+        let grace_str = format!("{}", grace);
+        let stop_cmd = [
+            vec!("pod", "stop", "-t", &grace_str),
+            vec!(&id),
+        ].concat();
         let output = process::Command::new("podman")
-            .args(["pod", "stop",
-                "-t", &format!("{}", grace),
-                "--filter", &format!("label=skate.io/name={}", &id),
-                "--filter", &format!("label=skate.io/namespace={}", &ns),
-            ])
+            .args(stop_cmd.clone())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
             .expect("failed to stop pod");
 
         if !output.status.success() {
-            return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+            return Err(anyhow!("{:?} - exit code {}, stderr: {}", stop_cmd, output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
+
+        let rm_cmd = [
+            vec!("pod", "rm", "--force"),
+            vec!(&id),
+        ].concat();
         let output = process::Command::new("podman")
-            .args(["pod", "rm",
-                "--filter", &format!("label=skate.io/name={}", &id),
-                "--filter", &format!("label=skate.io/namespace={}", &ns),
-            ])
+            .args(rm_cmd.clone())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
             .expect("failed to remove pod");
 
         if !output.status.success() {
-            return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+            return Err(anyhow!("{:?} - exit code {}, stderr: {}", rm_cmd,  output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
         Ok(())
     }
