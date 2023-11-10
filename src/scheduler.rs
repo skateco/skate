@@ -161,7 +161,7 @@ impl DefaultScheduler {
     }
     fn plan_pod(state: &ClusterState, object: &Pod) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut pod = object.clone();
-        let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
+        //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
 
         let hash = hash_k8s_resource(&mut pod);
@@ -197,7 +197,7 @@ impl DefaultScheduler {
 
         let to_create = ScheduledOperation {
             resource: SupportedResources::Pod(pod),
-            node: Some(feasible_node.clone()),
+            node: None, // set later //Some(feasible_node.clone()),
             operation: OpType::Create,
             error: None,
         };
@@ -233,9 +233,10 @@ impl DefaultScheduler {
         let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();
 
         for mut action in plan.actions {
-            let node_name = action.node.clone().unwrap().node_name;
             match action.operation {
                 OpType::Delete => {
+                    let node_name = action.node.clone().unwrap().node_name;
+
                     match Self::remove_existing(conns, action.clone()).await {
                         Ok(_) => {
                             println!("{} deleted {} on node {} ", CHECKBOX_EMOJI, object, node_name);
@@ -249,11 +250,15 @@ impl DefaultScheduler {
                     }
                 }
                 OpType::Create => {
+                    let node_name = Self::choose_node(state.nodes.clone(), &action.resource).ok_or("failed to find feasible node")?.node_name.clone();
                     let client = conns.find(&node_name).unwrap();
                     let serialized = serde_yaml::to_string(&action.resource).expect("failed to serialize object");
 
                     match client.apply_resource(&serialized).await {
                         Ok(_) => {
+
+                            // todo update state
+
                             println!("{} created {} on node {}", CHECKBOX_EMOJI, object, node_name);
                             result.push(action.clone());
                         }
@@ -265,6 +270,7 @@ impl DefaultScheduler {
                     }
                 }
                 OpType::Info => {
+                    let node_name = action.node.clone().unwrap().node_name;
                     println!("{} {} on {}", CHECKBOX_EMOJI, object, node_name);
                     result.push(action.clone());
                 }
