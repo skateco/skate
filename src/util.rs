@@ -1,7 +1,10 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
-use serde::{Deserialize, Deserializer};
+use itertools::Itertools;
+use k8s_openapi::{Metadata, NamespaceResourceScope, Resource};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub const CHECKBOX_EMOJI: char = '✅';
 pub const CROSS_EMOJI: char = '❌';
@@ -85,4 +88,35 @@ fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 {
     let opt = Option::deserialize(deserializer)?;
     Ok(opt.unwrap_or_default())
+}
+
+pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String
+{
+    let mut obj = obj.clone();
+
+    let mut labels = obj.metadata().labels.clone().unwrap_or_default();
+    labels.remove("skate.io/hash");
+    labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+
+    let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
+
+    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    obj.metadata_mut().annotations = Option::from(annotations);
+
+    let serialized = serde_yaml::to_string(&obj).unwrap();
+
+    let mut hasher = DefaultHasher::new();
+    serialized.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String
+
+{
+    let hash = calc_k8s_resource_hash(obj.clone());
+
+    let mut labels = obj.metadata().labels.clone().unwrap_or_default();
+    labels.insert("skate.io/hash".to_string(), hash.clone());
+    obj.metadata_mut().labels = Option::from(labels);
+    hash
 }

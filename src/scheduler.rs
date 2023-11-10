@@ -1,16 +1,19 @@
 use std::cmp::Ordering;
 use std::error::Error;
+use std::hash::Hasher;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use itertools::Itertools;
+use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use crate::config::Node;
 use crate::skate::SupportedResources;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, hash_k8s_resource, hash_string};
 
 
 #[derive(Debug)]
@@ -71,7 +74,7 @@ impl DefaultScheduler {
         }).collect::<Vec<_>>();
 
 
-        filtered_nodes.into_iter().fold(None, |maybe_prev_node, node| {
+        let feasible_node = filtered_nodes.into_iter().fold(None, |maybe_prev_node, node| {
             let node_pods = node.clone().host_info.and_then(|h| {
                 h.system_info.and_then(|si| {
                     si.pods.and_then(|p| Some(p.len()))
@@ -91,82 +94,124 @@ impl DefaultScheduler {
                     })
                 })
             }).or_else(|| Some(node.clone()))
+        });
+
+        feasible_node
+    }
+
+    fn plan_deployment(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut d = d.clone();
+
+        let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
+        let mut actions = vec!();
+
+        for i in 0..replicas {
+            let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
+
+            let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
+            meta.name = Some(format!("{}-{}", d.metadata.name.as_ref().unwrap(), i));
+            meta.namespace = d.metadata.namespace.clone();
+            let mut labels = meta.labels.unwrap_or_default();
+            labels.insert("skate.io/deployment".to_string(), d.metadata.name.as_ref().unwrap().clone());
+            labels.insert("skate.io/replica".to_string(), i.to_string());
+            meta.labels = Some(labels.clone());
+            meta.labels = Some(labels);
+
+            let pod = Pod {
+                metadata: meta,
+                spec: Some(pod_spec),
+                status: None,
+            };
+
+            let result = Self::plan_pod(state, &pod)?;
+            actions.extend(result.actions);
+        }
+
+        let name = d.metadata.name.clone().unwrap_or("".to_string());
+        let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
+        let mut existing_pods: Vec<_> = state.locate_deployment(&name, &ns).map(|(r, n)| {
+            r.iter().map(|pod| {
+                let replica = pod.labels.clone().get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
+                let replica = replica.parse::<u32>().unwrap_or(0);
+
+                (replica, ScheduledOperation {
+                    node: Some(n.clone()),
+                    resource: SupportedResources::Pod(pod.clone().into()),
+                    error: None,
+                    operation: OpType::Delete,
+                })
+            }).collect()
+        }).unwrap_or_default();
+
+        let mut for_removal = vec!();
+
+        if existing_pods.len() > replicas as usize {
+            // cull the extra pods
+            for_removal = existing_pods.into_iter().filter_map(|(replica, op)| {
+                if replica >= replicas as u32 {
+                    return Some(op);
+                }
+                None
+            }).collect();
+        }
+
+        Ok((ApplyPlan {
+            actions: [actions, for_removal].concat()
+        }))
+    }
+    fn plan_pod(state: &ClusterState, object: &Pod) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut pod = object.clone();
+        let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
+
+
+        let hash = hash_k8s_resource(&mut pod);
+
+        let name = pod.metadata.name.clone().unwrap_or("".to_string());
+        let ns = pod.metadata.namespace.clone().unwrap_or("".to_string());
+        let existing_pod = state.locate_pod(&name, &ns);
+
+        let for_removal = match existing_pod.as_ref() {
+            Some((pod_info, node)) => {
+                let previous_hash = pod_info.labels.get("skate.io/hash").unwrap_or(&"".to_string()).clone();
+                match previous_hash.clone() != hash {
+                    false => None,
+                    true => Some(ScheduledOperation {
+                        node: Some(node.clone().clone()),
+                        resource: SupportedResources::Pod(pod_info.clone().into()),
+                        error: None,
+                        operation: OpType::Delete,
+                    })
+                }
+            }
+            _ => None
+        };
+        let for_removal: Vec<_> = vec!(for_removal).into_iter().filter_map(|item| item).collect();
+
+        if existing_pod.is_some() && for_removal.len() == 0 {
+            // nothing to do
+            return Ok(ApplyPlan {
+                actions: vec!()
+            });
+        }
+
+
+        let to_create = ScheduledOperation {
+            resource: SupportedResources::Pod(pod),
+            node: Some(feasible_node.clone()),
+            operation: OpType::Create,
+            error: None,
+        };
+
+        Ok(ApplyPlan {
+            actions: [for_removal, vec!(to_create)].concat()
         })
     }
     // returns tuple of (Option(prev node), Option(new node))
     fn plan(state: &ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
-        let for_deletion: Vec<_> = match object {
-            SupportedResources::Pod(p) => {
-                let name = p.metadata.name.clone().unwrap_or("".to_string());
-                let ns = p.metadata.namespace.clone().unwrap_or("".to_string());
-                state.locate_pod(&name, &ns).map(|(pod, n)| {
-                    vec!(ScheduledOperation {
-                        node: Some(n.clone()),
-                        resource: SupportedResources::Pod(pod.clone().into()),
-                        error: None,
-                        operation: OpType::Delete,
-                    })
-                }).unwrap_or_default()
-            }
-            SupportedResources::Deployment(d) => {
-                let name = d.metadata.name.clone().unwrap_or("".to_string());
-                let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
-                state.locate_deployment(&name, &ns).map(|(r, n)| {
-                    r.iter().map(|pod| {
-                        ScheduledOperation {
-                            node: Some(n.clone()),
-                            resource: SupportedResources::Pod(pod.clone().into()),
-                            error: None,
-                            operation: OpType::Delete,
-                        }
-                    }).collect()
-                }).unwrap_or_default()
-            }
-        };
-
-
-        let for_creation = match object {
-            SupportedResources::Pod(p) => {
-                let feasible_node = Self::choose_node(state.nodes.clone(), object).ok_or("failed to find feasible node")?;
-                vec!(ScheduledOperation {
-                    resource: object.clone(),
-                    node: Some(feasible_node.clone()),
-                    operation: OpType::Create,
-                    error: None,
-                })
-            }
-            SupportedResources::Deployment(d) => {
-                let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
-                let mut pods = vec!();
-                for i in 0..replicas {
-                    let feasible_node = Self::choose_node(state.nodes.clone(), object).ok_or("failed to find feasible node")?;
-                    let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
-
-                    let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
-                    meta.name = Some(format!("{}-{}", d.metadata.name.as_ref().unwrap(), i));
-                    meta.namespace = d.metadata.namespace.clone();
-                    let mut labels = meta.labels.unwrap_or_default();
-                    labels.insert("skate.io/deployment".to_string(), d.metadata.name.as_ref().unwrap().clone());
-                    meta.labels = Some(labels);
-                    let pod = Pod {
-                        metadata: meta,
-                        spec: Some(pod_spec),
-                        status: None,
-                    };
-                    pods.push(ScheduledOperation {
-                        resource: SupportedResources::Pod(pod),
-                        node: Some(feasible_node.clone()),
-                        operation: OpType::Create,
-                        error: None,
-                    });
-                }
-                pods
-            }
-        };
-
-        Ok(ApplyPlan {
-            actions: [for_deletion, for_creation].concat(),
-        })
+        match object {
+            SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
+            SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment)
+        }
     }
 
     async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(), Box<dyn Error>> {
