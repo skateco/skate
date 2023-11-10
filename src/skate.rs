@@ -89,18 +89,21 @@ pub enum SupportedResources {
 impl SupportedResources {
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
+
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
-        let orig_name = meta.name.clone().unwrap_or("".to_string());
-        meta.name = Some(format!("{}.{}", ns, &orig_name));
+        let name = meta.name.clone().unwrap_or("".to_string());
+
         let mut annotations = meta.annotations.unwrap_or_default();
+
         // annotations seem only to apply to containers, not pods, adding anyway, but for no real reaosn
         annotations.insert("skate.io/namespace".to_string(), ns.clone());
         meta.annotations = Some(annotations);
 
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
-        labels.insert("skate.io/name".to_string(), orig_name.clone());
+        labels.insert("skate.io/name".to_string(), name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
+
         match extra_labels {
             Some(extra_labels) => labels.extend(extra_labels),
             _ => {}
@@ -112,7 +115,6 @@ impl SupportedResources {
         let mut resource = self.clone();
         let resource = match resource {
             SupportedResources::Pod(ref mut p) => {
-
                 if p.metadata.name.is_none() {
                     return Err(anyhow!("metadata.name is empty").into());
                 }
