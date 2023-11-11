@@ -5,11 +5,11 @@ use clap::Args;
 use crate::config::Config;
 use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
-use crate::scheduler::Status::{Error as ScheduleError, Scheduled};
+
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
+
 
 
 #[derive(Debug, Args)]
@@ -52,7 +52,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 
 
     let scheduler = DefaultScheduler {};
-    let results = scheduler.schedule(conns, &mut state, objects).await?;
+    let _results = scheduler.schedule(conns, &mut state, objects).await?;
 
     match state.persist() {
         Err(e) =>{

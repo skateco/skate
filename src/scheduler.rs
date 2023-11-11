@@ -3,17 +3,17 @@ use std::error::Error;
 use std::hash::Hasher;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures::stream::FuturesUnordered;
+
 use futures::StreamExt;
-use itertools::{Either, Itertools};
+use itertools::{Itertools};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use crate::config::Node;
+
+
 use crate::skate::SupportedResources;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, hash_k8s_resource, hash_string};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, hash_k8s_resource};
 
 
 #[derive(Debug)]
@@ -57,7 +57,7 @@ pub struct ApplyPlan {
 }
 
 impl DefaultScheduler {
-    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> Option<NodeState> {
+    fn choose_node(nodes: Vec<NodeState>, _object: &SupportedResources) -> Option<NodeState> {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
 
@@ -101,7 +101,7 @@ impl DefaultScheduler {
     }
 
     fn plan_deployment(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut d = d.clone();
+        let d = d.clone();
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
         let mut actions = vec!();
@@ -155,9 +155,9 @@ impl DefaultScheduler {
         }
 
 
-        Ok((ApplyPlan {
+        Ok(ApplyPlan {
             actions: [actions].concat()
-        }))
+        })
     }
     fn plan_pod(state: &ClusterState, object: &Pod) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut new_pod = object.clone();

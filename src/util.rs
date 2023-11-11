@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
 use itertools::Itertools;
-use k8s_openapi::{Metadata, NamespaceResourceScope, Resource};
+use k8s_openapi::{Metadata, NamespaceResourceScope};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Deserializer, Serialize};
 

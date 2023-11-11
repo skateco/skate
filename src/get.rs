@@ -85,21 +85,19 @@ struct PodLister {}
 
 impl Lister<PodmanPodInfo> for PodLister {
     fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<PodmanPodInfo> {
-        let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
-            n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().find(|p| {
-                let ns = filters.namespace.clone().unwrap_or_default();
-                let id = match filters.id.clone() {
-                    Some(cmd) => match cmd {
-                        IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
-                    }
-                    None => "".to_string()
-                };
+        let ns = filters.namespace.clone().unwrap_or_default();
+        let id = match filters.id.clone() {
+            Some(cmd) => match cmd {
+                IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
+            }
+            None => "".to_string()
+        };
 
-                return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
-                    || (!id.is_empty() && (p.id == id || p.name == id)) || (ns.is_empty() && id.is_empty());
-            })
-        }).collect();
-        pods
+        let pods = state.filter_pods(&|p| {
+            return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
+                || (!id.is_empty() && (p.id == id || p.name == id)) || (ns.is_empty() && id.is_empty());
+        });
+        pods.iter().map(|(p, n)| p.clone()).collect()
     }
 
     fn print(&self, pods: Vec<PodmanPodInfo>) {

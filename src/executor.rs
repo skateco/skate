@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, Write};
+use std::io::{Write};
 use std::process;
 use std::process::Stdio;
 use anyhow::anyhow;
@@ -50,7 +50,7 @@ impl Executor for DefaultExecutor {
                 (p.metadata.name.unwrap_or("".to_string()),
                  p.metadata.namespace.unwrap_or("".to_string()))
             }
-            SupportedResources::Deployment(d) => {
+            SupportedResources::Deployment(_d) => {
                 return Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
             }
         };

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, DiskKind, RefreshKind, System, SystemExt};
 use std::error::Error;
@@ -10,7 +10,7 @@ use k8s_openapi::api::core::v1::{Pod, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use thiserror::__private::AsDynError;
+
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
 
 
