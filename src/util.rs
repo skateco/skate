@@ -97,6 +97,8 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
     labels.remove("skate.io/hash");
     labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    obj.metadata_mut().labels = Option::from(labels);
+
 
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 

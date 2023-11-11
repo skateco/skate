@@ -110,7 +110,6 @@ impl SupportedResources {
 
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
-        labels.insert("skate.io/name".to_string(), name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
 
         match extra_labels {

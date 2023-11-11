@@ -1,26 +1,18 @@
 use std::cmp::Ordering;
 use std::error::Error;
-use std::hash::Hasher;
 use anyhow::anyhow;
 use async_trait::async_trait;
 
-use futures::StreamExt;
-use itertools::{Itertools};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
 
 
 use crate::skate::SupportedResources;
+use crate::skatelet::PodmanPodStatus;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, hash_k8s_resource};
 
-
-#[derive(Debug)]
-pub enum Status {
-    Scheduled(String),
-    Error(String),
-}
 
 #[derive(Debug)]
 pub struct ScheduleResult {
@@ -178,7 +170,7 @@ impl DefaultScheduler {
             1 => vec!(),
             _ => (&existing_pods.as_slice()[1..]).iter().map(|(pod_info, node)| {
                 ScheduledOperation {
-                    node: Some(node.clone().clone()),
+                    node: Some((**node).clone()),
                     resource: SupportedResources::Pod(pod_info.clone().into()),
                     error: None,
                     operation: OpType::Delete,
@@ -192,9 +184,12 @@ impl DefaultScheduler {
         let actions = match existing_pod {
             Some((pod_info, node)) => {
                 let previous_hash = pod_info.labels.get("skate.io/hash").unwrap_or(&"".to_string()).clone();
-                match previous_hash.clone() == new_hash {
+                let state_running = pod_info.status == PodmanPodStatus::Running;
+
+                let hash_matches = previous_hash.clone() == new_hash;
+                match hash_matches && state_running {
                     true => vec!(ScheduledOperation {
-                        node: Some(node.clone().clone()),
+                        node: Some((**node).clone()),
                         resource: SupportedResources::Pod(pod_info.clone().into()),
                         error: None,
                         operation: OpType::Unchanged,
@@ -202,7 +197,7 @@ impl DefaultScheduler {
                     false => {
                         vec!(
                             ScheduledOperation {
-                                node: Some(node.clone().clone()),
+                                node: Some((**node).clone()),
                                 resource: SupportedResources::Pod(pod_info.clone().into()),
                                 error: None,
                                 operation: OpType::Delete,

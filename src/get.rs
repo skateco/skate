@@ -97,7 +97,7 @@ impl Lister<PodmanPodInfo> for PodLister {
             return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
                 || (!id.is_empty() && (p.id == id || p.name == id)) || (ns.is_empty() && id.is_empty());
         });
-        pods.iter().map(|(p, n)| p.clone()).collect()
+        pods.iter().map(|(p, _)| p.clone()).collect()
     }
 
     fn print(&self, pods: Vec<PodmanPodInfo>) {
