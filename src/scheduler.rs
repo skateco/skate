@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cmp::Ordering;
 use std::error::Error;
 use anyhow::anyhow;
@@ -231,7 +232,8 @@ impl DefaultScheduler {
     fn plan(state: &ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
         match object {
             SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
-            SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment)
+            SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
+            SupportedResources::DaemonSet(_) => todo!("plan daemonset")
         }
     }
 
@@ -326,7 +328,8 @@ impl Scheduler for DefaultScheduler {
                             }]].concat()
                         }
                     }
-                }
+                },
+                SupportedResources::DaemonSet(_) => todo!("schedule daemonset")
             }
         }
         Ok(results)

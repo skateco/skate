@@ -53,6 +53,9 @@ impl Executor for DefaultExecutor {
             SupportedResources::Deployment(_d) => {
                 return Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
             }
+            SupportedResources::DaemonSet(_) => {
+                todo!("remove daemonset")
+            }
         };
         let id = id.trim().to_string();
         let ns = ns.trim().to_string();

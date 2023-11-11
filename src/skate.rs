@@ -4,7 +4,7 @@ use std::error::Error;
 use async_trait::async_trait;
 use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
-use k8s_openapi::api::apps::v1::{Deployment, DeploymentSpec};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Pod;
 use serde_yaml;
 use serde::{Deserialize, Serialize};
@@ -84,6 +84,8 @@ pub enum SupportedResources {
     Pod(Pod),
     #[strum(serialize = "Deployment")]
     Deployment(Deployment),
+    #[strum(serialize = "DaemonSet")]
+    DaemonSet(DaemonSet),
 }
 
 impl SupportedResources {
@@ -91,6 +93,7 @@ impl SupportedResources {
         match self {
             SupportedResources::Pod(p) => p.metadata.name.clone().unwrap_or("".to_string()),
             SupportedResources::Deployment(d) => d.metadata.name.clone().unwrap_or("".to_string()),
+            SupportedResources::DaemonSet(d) => d.metadata.name.clone().unwrap_or("".to_string()),
         }
     }
 }
@@ -164,6 +167,9 @@ impl SupportedResources {
                 };
                 resource
             }
+            SupportedResources::DaemonSet(_) => {
+                todo!("fixup daemonset")
+            }
         };
         Ok(resource)
     }
@@ -199,7 +205,16 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                             let deployment: Deployment = serde::Deserialize::deserialize(value)?;
                             result.push(SupportedResources::Deployment(deployment))
                         }
-                    _ => {}
+                    (Some(api_version), Some(kind)) if
+                    api_version == <DaemonSet as Resource>::API_VERSION &&
+                        kind == <DaemonSet as Resource>::KIND =>
+                        {
+                            let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
+                            result.push(SupportedResources::DaemonSet(daemonset))
+                        }
+                    _ => {
+                        return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());
+                    }
                 }
             }
         }
