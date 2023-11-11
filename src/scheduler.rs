@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use itertools::Itertools;
+use itertools::{Either, Itertools};
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -35,11 +35,12 @@ pub trait Scheduler {
 pub struct DefaultScheduler {}
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OpType {
     Info,
     Create,
     Delete,
+    Unchanged,
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +106,31 @@ impl DefaultScheduler {
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
         let mut actions = vec!();
 
+        let name = d.metadata.name.clone().unwrap_or("".to_string());
+        let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
+        // check if  there are more pods than replicas running
+        // cull them if so
+        let deployment_pods = state.locate_deployment(&name, &ns);
+        if deployment_pods.len() > replicas as usize {
+            // cull the extra pods
+            let for_removal: Vec<_> = deployment_pods.into_iter().filter_map(|(pod_info, node)| {
+                let replica = pod_info.labels.clone().get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
+                let replica = replica.parse::<u32>().unwrap_or(0);
+                if replica >= replicas as u32 {
+                    return Some(ScheduledOperation {
+                        node: Some(node.clone()),
+                        resource: SupportedResources::Pod(pod_info.clone().into()),
+                        error: None,
+                        operation: OpType::Delete,
+                    });
+                }
+                None
+            }).collect();
+
+            actions.extend(for_removal);
+        }
+
+
         for i in 0..replicas {
             let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
 
@@ -123,87 +149,87 @@ impl DefaultScheduler {
                 status: None,
             };
 
+
             let result = Self::plan_pod(state, &pod)?;
             actions.extend(result.actions);
         }
 
-        let name = d.metadata.name.clone().unwrap_or("".to_string());
-        let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
-        let mut existing_pods: Vec<_> = state.locate_deployment(&name, &ns).map(|(r, n)| {
-            r.iter().map(|pod| {
-                let replica = pod.labels.clone().get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
-                let replica = replica.parse::<u32>().unwrap_or(0);
-
-                (replica, ScheduledOperation {
-                    node: Some(n.clone()),
-                    resource: SupportedResources::Pod(pod.clone().into()),
-                    error: None,
-                    operation: OpType::Delete,
-                })
-            }).collect()
-        }).unwrap_or_default();
-
-        let mut for_removal = vec!();
-
-        if existing_pods.len() > replicas as usize {
-            // cull the extra pods
-            for_removal = existing_pods.into_iter().filter_map(|(replica, op)| {
-                if replica >= replicas as u32 {
-                    return Some(op);
-                }
-                None
-            }).collect();
-        }
 
         Ok((ApplyPlan {
-            actions: [actions, for_removal].concat()
+            actions: [actions].concat()
         }))
     }
     fn plan_pod(state: &ClusterState, object: &Pod) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut pod = object.clone();
+        let mut new_pod = object.clone();
         //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
 
-        let hash = hash_k8s_resource(&mut pod);
+        let new_hash = hash_k8s_resource(&mut new_pod);
 
-        let name = pod.metadata.name.clone().unwrap_or("".to_string());
-        let ns = pod.metadata.namespace.clone().unwrap_or("".to_string());
-        let existing_pod = state.locate_pod(&name, &ns);
+        let name = new_pod.metadata.name.clone().unwrap_or("".to_string());
+        let ns = new_pod.metadata.namespace.clone().unwrap_or("".to_string());
 
-        let for_removal = match existing_pod.as_ref() {
+
+        // existing pods with same name (duplicates if more than 1)
+        let existing_pods = state.locate_pods(&name, &ns);
+
+        let cull_actions: Vec<_> = match existing_pods.len() {
+            0 => vec!(),
+            1 => vec!(),
+            _ => (&existing_pods.as_slice()[1..]).iter().map(|(pod_info, node)| {
+                ScheduledOperation {
+                    node: Some(node.clone().clone()),
+                    resource: SupportedResources::Pod(pod_info.clone().into()),
+                    error: None,
+                    operation: OpType::Delete,
+                }
+            }).collect(),
+        };
+
+        let existing_pod = &existing_pods.first();
+
+
+        let actions = match existing_pod {
             Some((pod_info, node)) => {
                 let previous_hash = pod_info.labels.get("skate.io/hash").unwrap_or(&"".to_string()).clone();
-                match previous_hash.clone() != hash {
-                    false => None,
-                    true => Some(ScheduledOperation {
+                match previous_hash.clone() == new_hash {
+                    true => vec!(ScheduledOperation {
                         node: Some(node.clone().clone()),
                         resource: SupportedResources::Pod(pod_info.clone().into()),
                         error: None,
-                        operation: OpType::Delete,
-                    })
+                        operation: OpType::Unchanged,
+                    }),
+                    false => {
+                        vec!(
+                            ScheduledOperation {
+                                node: Some(node.clone().clone()),
+                                resource: SupportedResources::Pod(pod_info.clone().into()),
+                                error: None,
+                                operation: OpType::Delete,
+                            },
+                            ScheduledOperation {
+                                node: None,
+                                resource: SupportedResources::Pod(new_pod),
+                                error: None,
+                                operation: OpType::Create,
+                            }
+                        )
+                    }
                 }
             }
-            _ => None
+            None => vec!(
+                ScheduledOperation {
+                    node: None,
+                    resource: SupportedResources::Pod(new_pod.clone()),
+                    error: None,
+                    operation: OpType::Create,
+                }
+            )
         };
-        let for_removal: Vec<_> = vec!(for_removal).into_iter().filter_map(|item| item).collect();
 
-        if existing_pod.is_some() && for_removal.len() == 0 {
-            // nothing to do
-            return Ok(ApplyPlan {
-                actions: vec!()
-            });
-        }
-
-
-        let to_create = ScheduledOperation {
-            resource: SupportedResources::Pod(pod),
-            node: None, // set later //Some(feasible_node.clone()),
-            operation: OpType::Create,
-            error: None,
-        };
 
         Ok(ApplyPlan {
-            actions: [for_removal, vec!(to_create)].concat()
+            actions: [cull_actions, actions].concat()
         })
     }
     // returns tuple of (Option(prev node), Option(new node))
@@ -239,12 +265,12 @@ impl DefaultScheduler {
 
                     match Self::remove_existing(conns, action.clone()).await {
                         Ok(_) => {
-                            println!("{} deleted {} on node {} ", CHECKBOX_EMOJI, object, node_name);
+                            println!("{} deleted {} on node {} ", CHECKBOX_EMOJI, action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {
                             action.error = Some(err.to_string());
-                            println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, object, node_name, err.to_string());
+                            println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
                             result.push(action.clone());
                         }
                     }
@@ -259,20 +285,24 @@ impl DefaultScheduler {
 
                             // todo update state
 
-                            println!("{} created {} on node {}", CHECKBOX_EMOJI, object, node_name);
+                            println!("{} created {} on node {}", CHECKBOX_EMOJI, action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {
                             action.error = Some(err.to_string());
-                            println!("{} failed to created {} on node {}: {}", CROSS_EMOJI, object, node_name, err.to_string());
+                            println!("{} failed to created {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
                             result.push(action.clone());
                         }
                     }
                 }
                 OpType::Info => {
                     let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} on {}", CHECKBOX_EMOJI, object, node_name);
+                    println!("{} {} on {}", CHECKBOX_EMOJI, action.resource.name(), node_name);
                     result.push(action.clone());
+                }
+                OpType::Unchanged => {
+                    let node_name = action.node.clone().unwrap().node_name;
+                    println!("{} {} on {} unchanged", CHECKBOX_EMOJI, action.resource.name(), node_name);
                 }
             }
         }

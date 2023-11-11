@@ -87,6 +87,15 @@ pub enum SupportedResources {
 }
 
 impl SupportedResources {
+    pub fn name(&self) -> String {
+        match self {
+            SupportedResources::Pod(p) => p.metadata.name.clone().unwrap_or("".to_string()),
+            SupportedResources::Deployment(d) => d.metadata.name.clone().unwrap_or("".to_string()),
+        }
+    }
+}
+
+impl SupportedResources {
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
 

@@ -123,46 +123,25 @@ impl ClusterState {
         })
     }
 
-    pub fn locate_pod(&self, name: &str, namespace: &str) -> Option<(PodmanPodInfo, &NodeState)> {
-        self.nodes.iter().find_map(|n| {
-            match n.host_info.clone() {
-                Some(h) => match h.system_info {
-                    Some(i) => match i.pods {
-                        Some(i) => {
-                            let pod = i.iter().find(|p| p.name == name && p.namespace() == namespace);
-                            match pod {
-                                Some(pod) => Some((pod.clone(), n)),
-                                None => None
-                            }
-                        }
-                        None => None
-                    }
-                    None => None
-                }
-                None => None
-            }
-        })
+    pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<(PodmanPodInfo, &NodeState)> {
+        let res: Vec<_> = self.nodes.iter().filter_map(|n| {
+            n.host_info.as_ref().and_then(|h| {
+                h.system_info.clone().and_then(|i| {
+                    i.pods.and_then(|p| {
+                        Some(p.clone().into_iter().filter(|p| f(p)).map(|p| vec!((p, n))).collect::<Vec<_>>())
+                    })
+                })
+            })
+        }).flatten().flatten().collect();
+        res
     }
 
-    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Option<(Vec<PodmanPodInfo>, &NodeState)> {
+    pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
+        self.filter_pods(&|p| p.name == name && p.namespace() == namespace)
+    }
+
+    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
-        self.nodes.iter().find_map(|n| {
-            match n.host_info.clone() {
-                Some(h) => match h.system_info {
-                    Some(i) => match i.pods {
-                        Some(i) => {
-                            let pods: Vec<_> = i.into_iter().filter(|p| &p.deployment() == name && &p.namespace() == namespace).collect();
-                            match pods.len() {
-                                0 => None,
-                                _ => Some((pods, n)),
-                            }
-                        }
-                        None => None
-                    }
-                    None => None
-                }
-                None => None
-            }
-        })
+        self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
     }
 }
