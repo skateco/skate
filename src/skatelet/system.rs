@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
-use k8s_openapi::api::core::v1::{Pod, PodStatus as K8sPodStatus};
+use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
@@ -141,7 +141,13 @@ impl Into<Pod> for PodmanPodInfo {
                 generation: None,
                 labels: match self.labels.len() {
                     0 => None,
-                    _ => Some(self.labels.clone())
+                    _ => Some(self.labels.iter().filter_map(|(k, v)| {
+                        if k.starts_with("nodeselector/") {
+                            None
+                        } else {
+                            Some((k.clone(), v.clone()))
+                        }
+                    }).collect())
                 },
                 managed_fields: None,
                 name: Some(self.name.clone()),
@@ -151,8 +157,55 @@ impl Into<Pod> for PodmanPodInfo {
                 self_link: None,
                 uid: Some(self.id),
             },
-            spec: None, // TODO
-            status: Some(K8sPodStatus {
+            spec: Some(PodSpec {
+                active_deadline_seconds: None,
+                affinity: None,
+                automount_service_account_token: None,
+                containers: vec![],
+                dns_config: None,
+                dns_policy: None,
+                enable_service_links: None,
+                ephemeral_containers: None,
+                host_aliases: None,
+                host_ipc: None,
+                host_network: None,
+                host_pid: None,
+                host_users: None,
+                hostname: None,
+                image_pull_secrets: None,
+                init_containers: None,
+                node_name: None,
+                node_selector: Some(self.labels.iter().filter_map(|(k, v)| {
+                    if k.starts_with("nodeselector/") {
+                        Some(((*k.clone()).strip_prefix("nodeselector/").unwrap_or(k).to_string(), (*v).clone()))
+                    } else {
+                        None
+                    }
+                }).collect::<BTreeMap<String,String>>()),
+                os: None,
+                overhead: None,
+                preemption_policy: None,
+                priority: None,
+                priority_class_name: None,
+                readiness_gates: None,
+                resource_claims: None,
+                restart_policy: None,
+                runtime_class_name: None,
+                scheduler_name: None,
+                scheduling_gates: None,
+                security_context: None,
+                service_account: None,
+                service_account_name: None,
+                set_hostname_as_fqdn: None,
+                share_process_namespace: None,
+                subdomain: None,
+                termination_grace_period_seconds: None,
+                tolerations: None,
+                topology_spread_constraints: None,
+                volumes: None,
+            }), // TODO
+            status: Some(K8sPodStatus
+            {
                 conditions: None,
                 container_statuses: None,
                 ephemeral_container_statuses: None,

@@ -164,13 +164,34 @@ impl SupportedResources {
                 resource
             }
             SupportedResources::DaemonSet(ref mut ds) => {
-                if ds.metadata.name.is_none() {
+                let original_name = ds.metadata.name.clone().unwrap_or("".to_string());
+                if original_name.is_empty() {
                     return Err(anyhow!("metadata.name is empty").into());
                 }
                 if ds.metadata.namespace.is_none() {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
+
+                let mut extra_labels = HashMap::from([
+                    ("skate.io/daemonset".to_string(), original_name)
+                ]);
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
+                ds.spec = match ds.spec.clone() {
+                    Some(mut spec) => {
+                        spec.template.metadata = match spec.template.metadata.clone() {
+                            Some(meta) => {
+                                let mut meta = meta.clone();
+                                // forward the namespace
+                                meta.namespace = ds.metadata.namespace.clone();
+                                let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                                Some(meta)
+                            }
+                            None => None
+                        };
+                        Some(spec)
+                    }
+                    None => None
+                };
                 resource
             }
         };

@@ -8,6 +8,7 @@ use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod};
+use k8s_openapi::Metadata;
 
 
 use crate::skate::SupportedResources;
@@ -56,11 +57,9 @@ impl DefaultScheduler {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
         let node_selector = match object {
-            SupportedResources::DaemonSet(ds) => {
-                ds.spec.as_ref().and_then(|s| {
-                    s.template.spec.clone().and_then(|t| {
-                        t.node_selector.clone()
-                    })
+            SupportedResources::Pod(pod) => {
+                pod.spec.as_ref().and_then(|s| {
+                    s.node_selector.clone()
                 })
             }
             _ => None
@@ -120,9 +119,9 @@ impl DefaultScheduler {
             let mut meta = ds.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
             meta.name = Some(format!("{}-{}", ds.metadata.name.as_ref().unwrap(), node_name));
             meta.namespace = ds.metadata.namespace.clone();
-            let mut labels = meta.labels.unwrap_or_default();
+
+            let mut labels = meta.labels.clone().unwrap_or_default();
             labels.insert("skate.io/daemonset".to_string(), ds.metadata.name.as_ref().unwrap().clone());
-            meta.labels = Some(labels.clone());
             meta.labels = Some(labels);
 
             // bind to specific node
@@ -221,9 +220,27 @@ impl DefaultScheduler {
         let name = new_pod.metadata.name.clone().unwrap_or("".to_string());
         let ns = new_pod.metadata.namespace.clone().unwrap_or("".to_string());
 
+        // smuggle node selectors as labels
+        match new_pod.spec.as_ref() {
+            Some(spec) => {
+                if spec.node_selector.is_some() {
+                    let ns = spec.node_selector.clone().unwrap();
+                    let selector_labels = ns.iter().map(|(k, v)| {
+                        (format!("nodeselector/{}", k), v.clone())
+                    });
+                    let mut labels = new_pod.metadata().labels.clone().unwrap_or_default();
+                    labels.extend(selector_labels);
+                    new_pod.metadata_mut().labels = Some(labels)
+                }
+            }
+            None => {}
+        }
+
+
         // existing pods with same name (duplicates if more than 1)
         // sort by replicas descending
         let existing_pods = state.locate_pods(&name, &ns);
+
 
         let cull_actions: Vec<_> = match existing_pods.len() {
             0 => vec!(),
