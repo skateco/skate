@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 
 use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Node, Pod};
 
 
 use crate::skate::SupportedResources;
@@ -50,21 +50,25 @@ pub struct ApplyPlan {
 }
 
 impl DefaultScheduler {
-    fn choose_node(nodes: Vec<NodeState>, _object: &SupportedResources) -> Option<NodeState> {
+    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> Option<NodeState> {
         // filter nodes based on resource requirements  - cpu, memory, etc
+
+        let (pod_affinity, pod_anti_affinity, node_affinity) = match object {
+            SupportedResources::Pod(pod) => {
+                pod.spec.as_ref().and_then(|s| {
+                    s.affinity.clone().and_then(|a| Some((
+                        a.pod_affinity,
+                        a.pod_anti_affinity,
+                        a.node_affinity,
+                    )))
+                }).unwrap_or((None, None, None))
+            }
+            _ => (None, None, None)
+        };
 
 
         let filtered_nodes = nodes.iter().filter(|n| {
             n.status == NodeStatus::Healthy
-                && n.host_info.as_ref().and_then(|h| {
-                h.system_info.as_ref().and_then(|si| {
-                    si.root_disk.as_ref().and_then(|rd| {
-                        Some(
-                            rd.available_space_b > 0
-                        )
-                    })
-                })
-            }).unwrap_or(false)
         }).collect::<Vec<_>>();
 
 
@@ -161,7 +165,6 @@ impl DefaultScheduler {
 
         let name = new_pod.metadata.name.clone().unwrap_or("".to_string());
         let ns = new_pod.metadata.namespace.clone().unwrap_or("".to_string());
-
 
         // existing pods with same name (duplicates if more than 1)
         let existing_pods = state.locate_pods(&name, &ns);
@@ -328,7 +331,7 @@ impl Scheduler for DefaultScheduler {
                             }]].concat()
                         }
                     }
-                },
+                }
                 SupportedResources::DaemonSet(_) => todo!("schedule daemonset")
             }
         }

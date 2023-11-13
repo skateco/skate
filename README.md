@@ -7,6 +7,7 @@ Will support only a subset of resources and only a subset of their functionality
 
 - Deployments
 - Pods
+- DaemonSets
 - Service: ExternalName only (w.i.p)
 - Ingress (w.i.p)
 

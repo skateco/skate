@@ -1,10 +1,14 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
+use k8s_openapi::api::core::v1::{NodeSpec, NodeStatus as K8sNodeStatus, Node as K8sNode, NodeAddress};
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
 use strum_macros::Display;
 use crate::config::{cache_dir, Config};
+use crate::get::GetCommands::Node;
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
 use crate::ssh::HostInfoResponse;
@@ -25,6 +29,77 @@ pub struct NodeState {
     pub host_info: Option<HostInfoResponse>,
     pub inventory_found: bool,
     pub inventory: Vec<SupportedResources>,
+}
+
+impl Into<K8sNode> for NodeState {
+    fn into(self) -> K8sNode {
+        let mut metadata = ObjectMeta::default();
+        let mut spec = NodeSpec::default();
+        let mut status = K8sNodeStatus::default();
+
+        metadata.name = Some(self.node_name.clone());
+        metadata.namespace = Some("default".to_string());
+        metadata.uid = Some(self.node_name.clone());
+
+        println!("{:?}",self.status);
+
+        status.phase = match self.status {
+            Unknown => Some("Pending".to_string()),
+            Healthy => Some("Ready".to_string()),
+            Unhealthy => Some("Pending".to_string()),
+        };
+
+        let sys_info = self.host_info.as_ref().and_then(|h| h.system_info.clone());
+
+
+        (status.capacity, status.allocatable, status.addresses) = match sys_info {
+            Some(si) => {
+                (Some(BTreeMap::<String, Quantity>::from([
+                    ("cpu".to_string(), Quantity(format!("{}", si.num_cpus))),
+                    ("memory".to_string(), Quantity(format!("{} Mib", si.total_memory_mib))),
+                ])),
+                 (Some(BTreeMap::<String, Quantity>::from([
+                     ("cpu".to_string(), Quantity(format!("{}", (si.num_cpus as f32) * (100.00 - si.cpu_usage)/100.0))),
+                     ("memory".to_string(), Quantity(format!("{} Mib", si.total_memory_mib - si.used_memory_mib))),
+                 ]))), ({
+                    let mut addresses = vec![
+                        NodeAddress {
+                            address: si.hostname.clone(),
+                            type_: "Hostname".to_string(),
+                        },
+                    ];
+                    match si.external_ip_address {
+                        Some(ip) => {
+                            addresses.push(NodeAddress {
+                                address: ip,
+                                type_: "ExternalIP".to_string(),
+                            })
+                        }
+                        None => {}
+                    }
+                    match si.internal_ip_address {
+                        Some(ip) => {
+                            addresses.push(NodeAddress {
+                                address: ip,
+                                type_: "InternalIP".to_string(),
+                            })
+                        }
+                        None => {}
+                    }
+
+                    Some(addresses)
+                }))
+            }
+            None => (None, None, None)
+        };
+
+
+        K8sNode {
+            metadata,
+            spec: Some(spec),
+            status: Some(status),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

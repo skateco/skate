@@ -32,6 +32,7 @@ use crate::config::{cache_dir, Config, Node};
 use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
+use crate::inspect::{inspect, InspectArgs};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
@@ -53,6 +54,7 @@ enum Commands {
     Apply(ApplyArgs),
     Refresh(RefreshArgs),
     Get(GetArgs),
+    Inspect(InspectArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -73,6 +75,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Apply(args) => apply(args).await,
         Commands::Refresh(args) => refresh(args).await,
         Commands::Get(args) => get(args).await,
+        Commands::Inspect(args) => inspect(args).await,
         _ => Ok(())
     }
 }
@@ -227,6 +230,16 @@ pub enum Os {
     Unknown,
     Linux,
     Darwin,
+}
+
+impl Os {
+    pub fn from_str_loose(s: &str) -> Self {
+        match s {
+            s if s.contains("Linux") => Os::Linux,
+            s if s.contains("Darwin") => Os::Darwin,
+            _ => Os::Unknown
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

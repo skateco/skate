@@ -36,8 +36,8 @@ pub async fn system(args: SystemArgs) -> Result<(), Box<dyn Error>> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiskInfo {
-    pub available_space_b: u64,
-    pub total_space_b: u64,
+    pub available_space_mib: u64,
+    pub total_space_mib: u64,
     pub disk_kind: String,
 }
 
@@ -55,6 +55,9 @@ pub struct SystemInfo {
     pub cpu_usage: f32,
     pub cpu_brand: String,
     pub cpu_vendor_id: String,
+    pub internal_ip_address: Option<String>,
+    pub external_ip_address: Option<String>,
+    pub hostname: String,
 }
 
 #[derive(Clone, Debug, EnumString, Display, Serialize, Deserialize, PartialEq)]
@@ -68,7 +71,7 @@ pub enum PodmanPodStatus {
 
 // TODO - have more generic ObjectMeta type for explaining existing resources
 
-#[derive(Debug, Clone,  Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PodmanPodInfo {
     pub id: String,
@@ -150,6 +153,45 @@ pub struct PodmanContainerInfo {
     pub restart_count: Option<usize>,
 }
 
+// returns (external, internal)
+fn get_ips(os: &Os) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
+    let iface_cmd = match os {
+        Os::Unknown => None,
+        Os::Darwin | Os::Linux => Some("ifconfig -a | awk '
+/^[a-zA-Z0-9_\\-]+:/ {
+  sub(/:/, \"\");iface=$1}
+/^[[:space:]]*inet / {
+  split($2, a, \"/\")
+  print iface\"  \"a[1]
+}'"),
+    };
+
+    let iface_ips: Vec<_> = match iface_cmd {
+        Some(cmd) => {
+            exec_cmd("bash", &["-c", cmd])
+                .map(|s| s.split("\n")
+                    .map(|l| l.split("  ").collect::<Vec<&str>>())
+                    .filter(|l| l.len() == 2)
+                    .map(|l| (l[0].to_string(), l[1].to_string())).collect())
+                .map_err(|e| anyhow!("failed to get ips: {}", e))?
+        }
+        None => {
+            vec!()
+        }
+    };
+
+    let external_ip = iface_ips.iter().find(|(iface, _)| {
+        match os {
+            Os::Darwin => iface == "en0",
+            Os::Linux => iface == "eth0",
+            _ => false
+        }
+    }).map(|(_, ip)| ip.clone()).unwrap_or("".to_string());
+
+    Ok((Some(external_ip), None))
+}
+
+const BYTES_IN_MIB: u64 = (2u64).pow(20);
 async fn info() -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::new()
         .with_cpu(CpuRefreshKind::everything())
@@ -158,7 +200,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
         .with_disks()
         .with_disks_list()
     );
-    let os = Os::from_str(&(sys.name().ok_or("")?)).unwrap_or(Os::Unknown);
+    let os = Os::from_str_loose(&(sys.name().ok_or("")?));
 
     let result = exec_cmd(
         "podman",
@@ -166,11 +208,19 @@ async fn info() -> Result<(), Box<dyn Error>> {
     )?;
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&result).map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
+    let iface_ipv4 = match get_ips(&os) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("failed to get interface ipv4 addresses: {}", e);
+            (None, None)
+        }
+    };
+
 
     let root_disk = sys.disks().iter().find(|d| d.mount_point().to_string_lossy() == "/")
         .and_then(|d| Some(DiskInfo {
-            available_space_b: d.available_space(),
-            total_space_b: d.total_space(),
+            available_space_mib: d.available_space()/BYTES_IN_MIB,
+            total_space_mib: d.total_space()/BYTES_IN_MIB,
             disk_kind: match d.kind() {
                 DiskKind::HDD => "hdd",
                 DiskKind::SSD => "sdd",
@@ -179,16 +229,17 @@ async fn info() -> Result<(), Box<dyn Error>> {
         }));
 
 
+
     let info = SystemInfo {
         platform: Platform {
             arch: ARCH.to_string(),
             os,
             distribution: Distribution::Unknown, // TODO
         },
-        total_memory_mib: sys.total_memory(),
-        used_memory_mib: sys.used_memory(),
-        total_swap_mib: sys.total_swap(),
-        used_swap_mib: sys.used_swap(),
+        total_memory_mib: sys.total_memory()/BYTES_IN_MIB,
+        used_memory_mib: sys.used_memory()/BYTES_IN_MIB,
+        total_swap_mib: sys.total_swap()/BYTES_IN_MIB,
+        used_swap_mib: sys.used_swap()/BYTES_IN_MIB,
         num_cpus: sys.cpus().len(),
         cpu_freq_mhz: sys.global_cpu_info().frequency(),
         cpu_usage: sys.global_cpu_info().cpu_usage(),
@@ -196,6 +247,9 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
+        hostname: sys.host_name().unwrap_or("".to_string()),
+        external_ip_address: iface_ipv4.0,
+        internal_ip_address: iface_ipv4.1,
     };
     let json = serde_json::to_string(&info)?;
     println!("{}", json);
