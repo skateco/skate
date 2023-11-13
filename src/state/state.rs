@@ -41,9 +41,6 @@ impl Into<K8sNode> for NodeState {
         metadata.namespace = Some("default".to_string());
         metadata.uid = Some(self.node_name.clone());
 
-
-        println!("{:?}", self.status);
-
         status.phase = match self.status {
             Unknown => Some("Pending".to_string()),
             Healthy => Some("Ready".to_string()),

@@ -1,12 +1,13 @@
 use std::any::Any;
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use itertools::Itertools;
 
-use k8s_openapi::api::apps::v1::Deployment;
-use k8s_openapi::api::core::v1::{Node, Pod};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
+use k8s_openapi::api::core::v1::{Node as K8sNode, Pod};
 
 
 use crate::skate::SupportedResources;
@@ -54,22 +55,30 @@ impl DefaultScheduler {
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> Option<NodeState> {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
-        let (pod_affinity, pod_anti_affinity, node_affinity) = match object {
-            SupportedResources::Pod(pod) => {
-                pod.spec.as_ref().and_then(|s| {
-                    s.affinity.clone().and_then(|a| Some((
-                        a.pod_affinity,
-                        a.pod_anti_affinity,
-                        a.node_affinity,
-                    )))
-                }).unwrap_or((None, None, None))
+        let node_selector = match object {
+            SupportedResources::DaemonSet(ds) => {
+                ds.spec.as_ref().and_then(|s| {
+                    s.template.spec.clone().and_then(|t| {
+                        t.node_selector.clone()
+                    })
+                })
             }
-            _ => (None, None, None)
-        };
+            _ => None
+        }.unwrap_or(BTreeMap::new());
 
 
         let filtered_nodes = nodes.iter().filter(|n| {
-            n.status == NodeStatus::Healthy
+            let k8s_node: K8sNode = (**n).clone().into();
+            let node_labels = k8s_node.metadata.labels.unwrap_or_default();
+            // only schedulable nodes
+            k8s_node.spec.and_then(|s| {
+                s.unschedulable.and_then(|u| Some(!u))
+            }).unwrap_or(false)
+                &&
+                // only nodes that match the nodeselectors
+                node_selector.iter().all(|(k, v)| {
+                    node_labels.get(k).unwrap_or(&"".to_string()) == v
+                })
         }).collect::<Vec<_>>();
 
 
@@ -96,6 +105,46 @@ impl DefaultScheduler {
         });
 
         feasible_node
+    }
+
+    fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut actions = vec!();
+
+        let name = ds.metadata.name.clone().unwrap_or("".to_string());
+        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
+
+        for node in state.nodes.iter() {
+            let node_name = node.node_name.clone();
+            let mut pod_spec = ds.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
+
+            let mut meta = ds.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
+            meta.name = Some(format!("{}-{}", ds.metadata.name.as_ref().unwrap(), node_name));
+            meta.namespace = ds.metadata.namespace.clone();
+            let mut labels = meta.labels.unwrap_or_default();
+            labels.insert("skate.io/daemonset".to_string(), ds.metadata.name.as_ref().unwrap().clone());
+            meta.labels = Some(labels.clone());
+            meta.labels = Some(labels);
+
+            // bind to specific node
+            pod_spec.node_selector.as_mut().and_then(|ns| {
+                ns.insert("skate.io/hostname".to_string(), node_name.clone());
+                Some(())
+            });
+
+            let pod = Pod {
+                metadata: meta,
+                spec: Some(pod_spec),
+                status: None,
+            };
+
+
+            let result = Self::plan_pod(state, &pod)?;
+            actions.extend(result.actions);
+        }
+
+        Ok(ApplyPlan {
+            actions: [actions].concat()
+        })
     }
 
     fn plan_deployment(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -243,7 +292,7 @@ impl DefaultScheduler {
         match object {
             SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
             SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
-            SupportedResources::DaemonSet(_) => todo!("plan daemonset")
+            SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds)
         }
     }
 
@@ -322,23 +371,18 @@ impl Scheduler for DefaultScheduler {
     async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match object {
-                SupportedResources::Pod(_) | SupportedResources::Deployment(_) => {
-                    match Self::schedule_one(&conns, state, object.clone()).await {
-                        Ok(placements) => {
-                            results.placements = [results.placements, placements].concat();
-                        }
-                        Err(err) => {
-                            results.placements = [results.placements, vec![ScheduledOperation {
-                                resource: object.clone(),
-                                node: None,
-                                operation: OpType::Info,
-                                error: Some(err.to_string()),
-                            }]].concat()
-                        }
-                    }
+            match Self::schedule_one(&conns, state, object.clone()).await {
+                Ok(placements) => {
+                    results.placements = [results.placements, placements].concat();
                 }
-                SupportedResources::DaemonSet(_) => todo!("schedule daemonset")
+                Err(err) => {
+                    results.placements = [results.placements, vec![ScheduledOperation {
+                        resource: object.clone(),
+                        node: None,
+                        operation: OpType::Info,
+                        error: Some(err.to_string()),
+                    }]].concat()
+                }
             }
         }
         Ok(results)

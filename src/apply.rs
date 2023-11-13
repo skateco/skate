@@ -50,11 +50,8 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 
     let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
-
     let scheduler = DefaultScheduler {};
     let _results = scheduler.schedule(&conns, &mut state, objects).await?;
-
-    state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
     match state.persist() {
         Err(e) =>{
@@ -63,7 +60,5 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         _ => {}
     }
 
-    // let game_plan = schedule(merged_config, hosts)?;
-    // game_plan.play()
     Ok(())
 }
