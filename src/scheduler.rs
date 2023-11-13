@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::{Node, Pod};
@@ -22,7 +23,7 @@ pub struct ScheduleResult {
 
 #[async_trait(? Send)]
 pub trait Scheduler {
-    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>>;
+    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
@@ -108,11 +109,16 @@ impl DefaultScheduler {
         // check if  there are more pods than replicas running
         // cull them if so
         let deployment_pods = state.locate_deployment(&name, &ns);
+
+        let deployment_pods: Vec<_> = deployment_pods.into_iter().map(|(dp, node)| {
+            let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
+            let replica = replica.parse::<u32>().unwrap_or(0);
+            (dp, node, replica)
+        }).sorted_by_key(|(_, _, replica)| replica.clone()).rev().collect();
+
         if deployment_pods.len() > replicas as usize {
             // cull the extra pods
-            let for_removal: Vec<_> = deployment_pods.into_iter().filter_map(|(pod_info, node)| {
-                let replica = pod_info.labels.clone().get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
-                let replica = replica.parse::<u32>().unwrap_or(0);
+            let for_removal: Vec<_> = deployment_pods.into_iter().filter_map(|(pod_info, node, replica)| {
                 if replica >= replicas as u32 {
                     return Some(ScheduledOperation {
                         node: Some(node.clone()),
@@ -167,6 +173,7 @@ impl DefaultScheduler {
         let ns = new_pod.metadata.namespace.clone().unwrap_or("".to_string());
 
         // existing pods with same name (duplicates if more than 1)
+        // sort by replicas descending
         let existing_pods = state.locate_pods(&name, &ns);
 
         let cull_actions: Vec<_> = match existing_pods.len() {
@@ -232,7 +239,7 @@ impl DefaultScheduler {
         })
     }
     // returns tuple of (Option(prev node), Option(new node))
-    fn plan(state: &ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
+    fn plan(state: &mut ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
         match object {
             SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
             SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
@@ -250,7 +257,7 @@ impl DefaultScheduler {
         }
     }
 
-    async fn schedule_one(conns: &SshClients, state: &ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
+    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.len() == 0 {
             return Err(anyhow!("failed to schedule resources").into());
@@ -282,8 +289,7 @@ impl DefaultScheduler {
 
                     match client.apply_resource(&serialized).await {
                         Ok(_) => {
-
-                            // todo update state
+                            let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
 
                             println!("{} created {} on node {}", CHECKBOX_EMOJI, action.resource.name(), node_name);
                             result.push(action.clone());
@@ -313,7 +319,7 @@ impl DefaultScheduler {
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: SshClients, state: &ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
+    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
             match object {

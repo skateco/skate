@@ -2,7 +2,9 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
+use std::ops::DerefMut;
 use std::path::Path;
+use anyhow::anyhow;
 use k8s_openapi::api::core::v1::{NodeSpec, NodeStatus as K8sNodeStatus, Node as K8sNode, NodeAddress};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
@@ -27,8 +29,6 @@ pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
     pub host_info: Option<HostInfoResponse>,
-    pub inventory_found: bool,
-    pub inventory: Vec<SupportedResources>,
 }
 
 impl Into<K8sNode> for NodeState {
@@ -123,8 +123,8 @@ pub struct ClusterState {
 }
 
 pub struct ReconciledResult {
-    pub orphaned_nodes: usize,
-    pub new_nodes: usize,
+    pub removed: usize,
+    pub added: usize,
 }
 
 impl ClusterState {
@@ -143,6 +143,30 @@ impl ClusterState {
         Ok(result)
     }
 
+    pub fn reconcile_object_creation(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
+        match object {
+            SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node_name),
+            _ => todo!("reconcile not supported")
+        }
+    }
+    pub fn reconcile_pod_creation(&mut self, pod: &PodmanPodInfo, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
+        let mut node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
+            .ok_or(anyhow!("node not found: {}", node_name))?;
+
+        node.deref_mut().host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.pods.as_mut().and_then(|pods| {
+                    pods.push(pod.clone());
+                    Some(())
+                })
+            })
+        });
+
+        Ok(ReconciledResult {
+            removed: 0,
+            added: 1,
+        })
+    }
     pub fn reconcile(&mut self, config: &Config, host_info: &Vec<HostInfoResponse>) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.current_cluster()?;
         self.hash = hash_string(cluster);
@@ -168,8 +192,6 @@ impl ClusterState {
                     node_name: n.name.clone(),
                     status: Unknown,
                     host_info: None,
-                    inventory_found: false,
-                    inventory: vec![],
                 }),
                 false => None
             }
@@ -205,8 +227,8 @@ impl ClusterState {
 
 
         Ok(ReconciledResult {
-            orphaned_nodes: orphaned_len,
-            new_nodes: new_len,
+            removed: orphaned_len,
+            added: new_len,
         })
     }
 

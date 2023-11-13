@@ -52,7 +52,9 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 
 
     let scheduler = DefaultScheduler {};
-    let _results = scheduler.schedule(conns, &mut state, objects).await?;
+    let _results = scheduler.schedule(&conns, &mut state, objects).await?;
+
+    state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
     match state.persist() {
         Err(e) =>{

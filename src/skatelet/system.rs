@@ -69,6 +69,28 @@ pub enum PodmanPodStatus {
     Dead,
 }
 
+impl PodmanPodStatus {
+    fn to_pod_phase(self) -> String {
+        match self {
+            PodmanPodStatus::Running => "Running",
+            PodmanPodStatus::Stopped => "Succeeded",
+            PodmanPodStatus::Exited => "Succeeded",
+            PodmanPodStatus::Dead => "Failed",
+            PodmanPodStatus::Created => "Pending",
+        }.to_string()
+    }
+    fn from_pod_phase(phase: &str) -> Self {
+        match phase {
+            "Running" => PodmanPodStatus::Running,
+            // lossy
+            "Succeeded" => PodmanPodStatus::Exited,
+            "Failed" => PodmanPodStatus::Dead,
+            "Pending" => PodmanPodStatus::Created,
+            _ => PodmanPodStatus::Created,
+        }
+    }
+}
+
 // TODO - have more generic ObjectMeta type for explaining existing resources
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,13 +113,27 @@ impl PodmanPodInfo {
     }
 }
 
+impl From<Pod> for PodmanPodInfo {
+    fn from(value: Pod) -> Self {
+        PodmanPodInfo {
+            id: value.metadata.uid.unwrap_or("".to_string()),
+            name: value.metadata.name.unwrap_or("".to_string()),
+            status: PodmanPodStatus::from_pod_phase(value.status.and_then(|s| s.phase.and_then(|p| {
+                Some(p)
+            })).unwrap_or("".to_string()).as_str()),
+            created: value.metadata.creation_timestamp.and_then(|ts| Some(DateTime::from(ts.0))).unwrap_or(DateTime::from(Local::now())),
+            labels: value.metadata.labels.unwrap_or(BTreeMap::new()),
+            containers: vec![], // TODO
+        }
+    }
+}
 
 impl Into<Pod> for PodmanPodInfo {
     fn into(self) -> Pod {
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
-                creation_timestamp: None,
+                creation_timestamp: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(DateTime::from(self.created))),
                 deletion_grace_period_seconds: None,
                 deletion_timestamp: None,
                 finalizers: None,
@@ -115,7 +151,7 @@ impl Into<Pod> for PodmanPodInfo {
                 self_link: None,
                 uid: Some(self.id),
             },
-            spec: None,
+            spec: None, // TODO
             status: Some(K8sPodStatus {
                 conditions: None,
                 container_statuses: None,
@@ -125,13 +161,7 @@ impl Into<Pod> for PodmanPodInfo {
                 init_container_statuses: None,
                 message: None,
                 nominated_node_name: None,
-                phase: Some(match self.status {
-                    PodmanPodStatus::Running => "Running",
-                    PodmanPodStatus::Stopped => "Succeeded",
-                    PodmanPodStatus::Exited => "Succeeded",
-                    PodmanPodStatus::Dead => "Failed",
-                    PodmanPodStatus::Created => "Pending",
-                }.to_string()),
+                phase: Some(self.status.to_pod_phase()),
                 pod_ip: None,
                 pod_ips: None,
                 qos_class: None,
@@ -192,6 +222,7 @@ fn get_ips(os: &Os) -> Result<(Option<String>, Option<String>), Box<dyn Error>> 
 }
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
+
 async fn info() -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::new()
         .with_cpu(CpuRefreshKind::everything())
@@ -219,8 +250,8 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
     let root_disk = sys.disks().iter().find(|d| d.mount_point().to_string_lossy() == "/")
         .and_then(|d| Some(DiskInfo {
-            available_space_mib: d.available_space()/BYTES_IN_MIB,
-            total_space_mib: d.total_space()/BYTES_IN_MIB,
+            available_space_mib: d.available_space() / BYTES_IN_MIB,
+            total_space_mib: d.total_space() / BYTES_IN_MIB,
             disk_kind: match d.kind() {
                 DiskKind::HDD => "hdd",
                 DiskKind::SSD => "sdd",
@@ -229,17 +260,16 @@ async fn info() -> Result<(), Box<dyn Error>> {
         }));
 
 
-
     let info = SystemInfo {
         platform: Platform {
             arch: ARCH.to_string(),
             os,
             distribution: Distribution::Unknown, // TODO
         },
-        total_memory_mib: sys.total_memory()/BYTES_IN_MIB,
-        used_memory_mib: sys.used_memory()/BYTES_IN_MIB,
-        total_swap_mib: sys.total_swap()/BYTES_IN_MIB,
-        used_swap_mib: sys.used_swap()/BYTES_IN_MIB,
+        total_memory_mib: sys.total_memory() / BYTES_IN_MIB,
+        used_memory_mib: sys.used_memory() / BYTES_IN_MIB,
+        total_swap_mib: sys.total_swap() / BYTES_IN_MIB,
+        used_swap_mib: sys.used_swap() / BYTES_IN_MIB,
         num_cpus: sys.cpus().len(),
         cpu_freq_mhz: sys.global_cpu_info().frequency(),
         cpu_usage: sys.global_cpu_info().cpu_usage(),

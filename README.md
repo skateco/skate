@@ -26,9 +26,15 @@ This will ensure all hosts are provisioned with `skatelet`, the agent
 ```shell
 skate get pods
 
+skate describe pod foo
+
 skate get nodes
 
+skate describe node bar
+
 skate get deployments
+
+skate describe deployment baz
 ```
 
 ## Refreshing state (usually done automatically)
