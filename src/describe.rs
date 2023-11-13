@@ -8,9 +8,9 @@ use crate::ssh;
 use crate::state::state::{ClusterState, NodeState};
 
 #[derive(Debug, Clone, Args)]
-pub struct InspectArgs {
+pub struct DescribeArgs {
     #[command(subcommand)]
-    commands: InspectCommands,
+    commands: DescribeCommands,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -20,7 +20,7 @@ pub enum IdCommand {
 }
 
 #[derive(Clone, Debug, Args)]
-pub struct InspectObjectArgs {
+pub struct DescribeObjectArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
     #[arg(long, short, long_help = "Filter by resource namespace")]
@@ -30,33 +30,33 @@ pub struct InspectObjectArgs {
 }
 
 #[derive(Clone, Debug, Subcommand)]
-pub enum InspectCommands {
+pub enum DescribeCommands {
     #[command(alias("pods"))]
-    Pod(InspectObjectArgs),
+    Pod(DescribeObjectArgs),
     #[command(alias("deployments"))]
-    Deployment(InspectObjectArgs),
+    Deployment(DescribeObjectArgs),
     #[command(alias("nodes"))]
-    Node(InspectObjectArgs),
+    Node(DescribeObjectArgs),
 }
 
-pub async fn inspect(args: InspectArgs) -> Result<(), Box<dyn Error>> {
+pub async fn describe(args: DescribeArgs) -> Result<(), Box<dyn Error>> {
     let global_args = args.clone();
     match args.commands {
-        InspectCommands::Pod(p_args) => Ok(()),
-        InspectCommands::Deployment(d_args) => Ok(()),
-        InspectCommands::Node(n_args) => inspect_node(global_args, n_args).await
+        DescribeCommands::Pod(p_args) => Ok(()),
+        DescribeCommands::Deployment(d_args) => Ok(()),
+        DescribeCommands::Node(n_args) => describe_node(global_args, n_args).await
     }
 }
 
-pub trait Inspector<T> {
-    fn find(&self, filters: &InspectObjectArgs, state: &ClusterState) -> Option<T>;
+pub trait Describer<T> {
+    fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<T>;
     fn print(&self, item: T);
 }
 
-struct NodeInspector {}
+struct NodeDescriber {}
 
-impl Inspector<NodeState> for NodeInspector {
-    fn find(&self, filters: &InspectObjectArgs, state: &ClusterState) -> Option<NodeState> {
+impl Describer<NodeState> for NodeDescriber {
+    fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<NodeState> {
         let id = filters.id.as_ref().and_then(|cmd| match cmd {
             IdCommand::Id(ids) => ids.first().and_then(|id| Some((*id).clone())),
             _ => None
@@ -77,12 +77,12 @@ impl Inspector<NodeState> for NodeInspector {
     }
 }
 
-async fn inspect_node(global_args: InspectArgs, args: InspectObjectArgs) -> Result<(), Box<dyn Error>> {
-    let inspector = NodeInspector {};
-    inspect_object(global_args, args, &inspector).await
+async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> Result<(), Box<dyn Error>> {
+    let inspector = NodeDescriber {};
+    describe_object(global_args, args, &inspector).await
 }
 
-async fn inspect_object<T>(global_args: InspectArgs, args: InspectObjectArgs, inspector: &dyn Inspector<T>) -> Result<(), Box<dyn Error>> {
+async fn describe_object<T>(global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let cluster = config.current_cluster()?;
     let conns = ssh::cluster_connections(&cluster).await;

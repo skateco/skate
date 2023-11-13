@@ -12,7 +12,7 @@ use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodStatus;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, hash_k8s_resource};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI};
 
 
 #[derive(Debug)]
@@ -297,12 +297,12 @@ impl DefaultScheduler {
                 }
                 OpType::Info => {
                     let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} on {}", CHECKBOX_EMOJI, action.resource.name(), node_name);
+                    println!("{} {} on {}", INFO_EMOJI, action.resource.name(), node_name);
                     result.push(action.clone());
                 }
                 OpType::Unchanged => {
                     let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} on {} unchanged", CHECKBOX_EMOJI, action.resource.name(), node_name);
+                    println!("{} {} on {} unchanged", EQUAL_EMOJI, action.resource.name(), node_name);
                 }
             }
         }

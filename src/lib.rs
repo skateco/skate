@@ -13,7 +13,7 @@ mod state;
 mod get;
 mod executor;
 
-mod inspect;
+mod describe;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

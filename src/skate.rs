@@ -32,7 +32,7 @@ use crate::config::{cache_dir, Config, Node};
 use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
-use crate::inspect::{inspect, InspectArgs};
+use crate::describe::{DescribeArgs, describe};
 use crate::skate::Distribution::{Debian, Raspbian, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
@@ -54,7 +54,7 @@ enum Commands {
     Apply(ApplyArgs),
     Refresh(RefreshArgs),
     Get(GetArgs),
-    Inspect(InspectArgs)
+    Describe(DescribeArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -75,7 +75,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Apply(args) => apply(args).await,
         Commands::Refresh(args) => refresh(args).await,
         Commands::Get(args) => get(args).await,
-        Commands::Inspect(args) => inspect(args).await,
+        Commands::Describe(args) => describe(args).await,
         _ => Ok(())
     }
 }
@@ -225,7 +225,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
     Ok(result)
 }
 
-#[derive(Debug, EnumString, Clone, Serialize, Deserialize)]
+#[derive(Debug, Display, EnumString, Clone, Serialize, Deserialize)]
 pub enum Os {
     Unknown,
     Linux,

@@ -41,7 +41,8 @@ impl Into<K8sNode> for NodeState {
         metadata.namespace = Some("default".to_string());
         metadata.uid = Some(self.node_name.clone());
 
-        println!("{:?}",self.status);
+
+        println!("{:?}", self.status);
 
         status.phase = match self.status {
             Unknown => Some("Pending".to_string()),
@@ -49,17 +50,23 @@ impl Into<K8sNode> for NodeState {
             Unhealthy => Some("Pending".to_string()),
         };
 
+        spec.unschedulable = match self.status {
+            Unknown => Some(true),
+            Healthy => Some(false),
+            Unhealthy => Some(true),
+        };
+
         let sys_info = self.host_info.as_ref().and_then(|h| h.system_info.clone());
 
 
-        (status.capacity, status.allocatable, status.addresses) = match sys_info {
+        (status.capacity, status.allocatable, status.addresses, metadata.labels) = match sys_info {
             Some(si) => {
                 (Some(BTreeMap::<String, Quantity>::from([
                     ("cpu".to_string(), Quantity(format!("{}", si.num_cpus))),
                     ("memory".to_string(), Quantity(format!("{} Mib", si.total_memory_mib))),
                 ])),
                  (Some(BTreeMap::<String, Quantity>::from([
-                     ("cpu".to_string(), Quantity(format!("{}", (si.num_cpus as f32) * (100.00 - si.cpu_usage)/100.0))),
+                     ("cpu".to_string(), Quantity(format!("{}", (si.num_cpus as f32) * (100.00 - si.cpu_usage) / 100.0))),
                      ("memory".to_string(), Quantity(format!("{} Mib", si.total_memory_mib - si.used_memory_mib))),
                  ]))), ({
                     let mut addresses = vec![
@@ -86,11 +93,16 @@ impl Into<K8sNode> for NodeState {
                         }
                         None => {}
                     }
-
                     Some(addresses)
-                }))
+                }), (
+                     Some(BTreeMap::<String, String>::from([
+                         ("skate.io/arch".to_string(), si.platform.arch.clone()),
+                         ("skate.io/os".to_string(), si.platform.os.to_string().to_lowercase()),
+                         ("skate.io/hostname".to_string(), si.hostname.clone()),
+                     ]))
+                 ))
             }
-            None => (None, None, None)
+            None => (None, None, None, None)
         };
 
 

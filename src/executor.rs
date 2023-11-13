@@ -28,7 +28,7 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
 
-        let file_path = DefaultExecutor::write_to_file(&serde_json::to_string(&object)?)?;
+        let file_path = DefaultExecutor::write_to_file(&serde_yaml::to_string(&object)?)?;
 
         let output = process::Command::new("podman")
             .args(["play", "kube", &file_path])
