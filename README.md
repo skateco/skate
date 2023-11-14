@@ -66,3 +66,11 @@ On mac I've been using cross for cross compilation:
 make armv7
 make armv6
 ```
+
+### Features
+- [x] Pods
+- [x] Deployments
+- [x] Daemonsets
+- [ ] vlan
+- [ ] vlan dns
+- [ ] ingress
