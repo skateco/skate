@@ -255,9 +255,9 @@ pub enum Os {
 
 impl Os {
     pub fn from_str_loose(s: &str) -> Self {
-        match s {
-            s if s.contains("Linux") => Os::Linux,
-            s if s.contains("Darwin") => Os::Darwin,
+        match s.to_lowercase() {
+            s if s.contains("linux") => Os::Linux,
+            s if s.contains("darwin") => Os::Darwin,
             _ => Os::Unknown
         }
     }
@@ -315,8 +315,7 @@ impl From<String> for Distribution {
 pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
     let output = process::Command::new(command)
         .args(args)
-        .output()
-        .expect("failed to run command");
+        .output().map_err(|e| anyhow!("failed to run command").context(e))?;
     if !output.status.success() {
         return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
     }

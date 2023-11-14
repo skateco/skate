@@ -5,15 +5,15 @@ metadata:
   name: nginx-daemonset
   namespace: foo
   labels:
-    app: nginxy
+    app: nginx
 spec:
   selector:
     matchLabels:
-      app: nginxy
+      app: nginx
   template:
     metadata:
       labels:
-        app: nginxy
+        app: nginx
     spec:
       containers:
       - name: nginx

@@ -1,10 +1,12 @@
 use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use itertools::Itertools;
+use itertools::{Itertools, min};
+use semver::{Version, VersionReq};
 use crate::config::{Config, Node};
-use crate::skate::ConfigFileArgs;
+use crate::skate::{ConfigFileArgs, Distribution, Os};
 use crate::ssh::node_connection;
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 #[derive(Debug, Args)]
 pub struct CreateArgs {
@@ -38,7 +40,7 @@ pub struct CreateNodeArgs {
 
 pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
-        CreateCommands::Node(args) => create_node(args).await.expect("failed to create node")
+        CreateCommands::Node(args) => create_node(args).await?
     }
     Ok(())
 }
@@ -76,17 +78,58 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let conn = node_connection(&config.clusters[cluster_index], &node).await.expect("failed to connect");
-    let info = conn.get_host_info().await.expect("failed to get host info");
+    let conn = node_connection(&config.clusters[cluster_index], &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
+    let info = conn.get_host_info().await?;
     match info.skatelet_version {
         None => {
             // install skatelet
-            let _ = conn.install_skatelet(info.platform).await.expect("failed to install skatelet");
+            let _ = conn.install_skatelet(info.platform.clone()).await?;
         }
-        _ => {
-            println!("skatelet already installed")
+        Some(v) => {
+            println!("skatelet version {} already installed {} ", v, CHECKBOX_EMOJI)
         }
     }
+
+    match info.podman_version {
+        Some(version) => {
+            let min_podman_ver = ">=3.0.0";
+            let req = VersionReq::parse(min_podman_ver).unwrap();
+            let version = Version::parse(&version).unwrap();
+
+            if !req.matches(&version) {
+                return Err(anyhow!("podman version too old, must be {}, see https://podman.io/docs/installation", min_podman_ver).into());
+            }
+            println!("podman version {} already installed {} ",version, CHECKBOX_EMOJI)
+        }
+        // instruct on installing newer podman version
+        None => {
+            let installed = match info.platform.clone().os {
+                Os::Linux => {
+                    match info.platform.distribution {
+                        Distribution::Unknown => false,
+                        Distribution::Debian | Distribution::Raspbian => {
+                            let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'";
+                            println!("installing podman with command {}", command);
+                            let result = conn.client.execute(command).await?;
+                            if result.exit_status > 0 {
+                                let mut lines = result.stderr.lines();
+                                println!("failed to install podman {} :\n{}", CROSS_EMOJI, lines.join("\n"));
+                                false
+                            } else {
+                                println!("podman installed successfully {} ", CHECKBOX_EMOJI);
+                                true
+                            }
+                        }
+                    }
+                }
+                _ => false
+            };
+            if !installed {
+                return Err(anyhow!("podman not installed, see https://podman.io/docs/installation").into());
+            }
+        }
+    }
+
 
     if new {
         config.persist(Some(args.config.skateconfig))?;

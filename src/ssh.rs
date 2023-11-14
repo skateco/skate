@@ -37,6 +37,7 @@ pub struct HostInfoResponse {
     pub platform: Platform,
     pub skatelet_version: Option<String>,
     pub system_info: Option<SystemInfo>,
+    pub podman_version: Option<String>,
 }
 
 impl HostInfoResponse {
@@ -49,50 +50,79 @@ impl HostInfoResponse {
 impl SshClient {
     pub async fn get_host_info(&self) -> Result<HostInfoResponse, Box<dyn Error>> {
         let command = "\
-hostname=`hostname`;
-arch=`arch`;
-os=`uname -s`;
-distro=`cat /etc/issue|head -1|awk '{print $1}'`;
-skatelet_version=`skatelet --version`;
-system_info=`skatelet system info`
+hostname > /tmp/hostname-$$ &
+arch > /tmp/arch-$$ &
+uname -s > /tmp/os-$$ &
+{ cat /etc/issue |head -1|awk '{print $1}'; } || echo '' > /tmp/distro-$$ &
+skatelet --version|awk '{print $NF}' > /tmp/skatelet-$$ &
+podman --version|awk '{print $NF}' > /tmp/podman-$$ &
+skatelet system info > /tmp/sys-$$ &
 
-echo $hostname;
-echo $arch;
-echo $os;
-echo $distro;
-echo $skatelet_version;
-echo $system_info;
+wait;
+
+echo hostname=$(cat /tmp/hostname-$$);
+echo arch=$(cat /tmp/arch-$$);
+echo os=$(cat /tmp/os-$$);
+echo distro=$(cat /tmp/distro-$$);
+echo skatelet=$(cat /tmp/skatelet-$$);
+echo podman=$(cat /tmp/podman-$$);
+echo sys=$(cat /tmp/sys-$$);
 ";
 
-        let result = self.client.execute(command).await.expect("ssh command failed");
+        let result = self.client.execute(command).await?;
 
-        let mut lines = result.stdout.lines();
+        if result.exit_status > 0 {
+            let mut errlines = result.stderr.lines();
+            return Err(anyhow!(errlines.join("\n")).into());
+        }
+        let lines = result.stdout.lines();
+        let mut host_info = HostInfoResponse {
+            node_name: "".to_string(),
+            hostname: "".to_string(),
+            platform: Platform {
+                arch: "".to_string(),
+                os: Os::Unknown,
+                distribution: Distribution::Unknown,
+            },
+            skatelet_version: None,
+            system_info: None,
+            podman_version: None,
+        };
 
-        let hostname = lines.next().expect("missing hostname").to_string();
-        let arch = lines.next().expect("missing arch").to_string();
-        lines.next();
-        let distro = Distribution::from(lines.next().map(String::from).unwrap_or_default());
-        let skatelet_version = lines.next().map(String::from).filter(|s| !s.is_empty());
-        let skatelet_system_info: serde_json::error::Result<SystemInfo> = serde_json::from_str(&lines.next().expect("missing system info").to_string());
-
-        if skatelet_version.is_some() &&skatelet_system_info.is_err() {
-            return Err(anyhow!("skatelet installed but failed to return system info").into())
+        let mut arch :Option<String> = None;
+        for line in lines {
+            match line.split_once('=') {
+                Some((k, v)) => {
+                    match k {
+                        "hostname" => host_info.hostname = v.to_string(),
+                        "arch" => arch = Some(v.to_string()),
+                        "os" => host_info.platform.os = Os::from_str_loose(v),
+                        "distro" => host_info.platform.distribution = Distribution::from(v.to_string()),
+                        "skatelet" => host_info.skatelet_version = Some(v.to_string()),
+                        "podman" => host_info.podman_version = Some(v.to_string()),
+                        "sys" => {
+                            match serde_json::from_str(v) {
+                                Ok(sys_info) => host_info.system_info = sys_info,
+                                Err(_) => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                None => {}
+            }
         }
 
-        return Ok(HostInfoResponse {
-            node_name: self.node_name.clone(),
-            hostname,
-            platform: Platform {
-                arch,
-                os: Os::Unknown,
-                distribution: distro,
-            },
-            skatelet_version,
-            system_info: match skatelet_system_info {
-                Ok(i) => Some(i),
-                Err(_) => None
-            },
-        });
+        match arch {
+            Some(arch) => host_info.platform.arch = arch,
+            None => {}
+        }
+
+
+        if host_info.skatelet_version.is_some() && host_info.system_info.is_none() {
+            return Err(anyhow!("skatelet installed but failed to return system info").into());
+        }
+        Ok(host_info)
     }
 
     pub async fn install_skatelet(&self, _platform: Platform) -> Result<(), Box<dyn Error>> {

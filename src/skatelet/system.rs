@@ -181,7 +181,7 @@ impl Into<Pod> for PodmanPodInfo {
                     } else {
                         None
                     }
-                }).collect::<BTreeMap<String,String>>()),
+                }).collect::<BTreeMap<String, String>>()),
                 os: None,
                 overhead: None,
                 preemption_policy: None,
@@ -286,10 +286,17 @@ async fn info() -> Result<(), Box<dyn Error>> {
     );
     let os = Os::from_str_loose(&(sys.name().ok_or("")?));
 
-    let result = exec_cmd(
+    let result = match exec_cmd(
         "podman",
         &["pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
-    )?;
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("failed to list pods: {}", err);
+            "[]".to_string()
+        }
+    };
+
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&result).map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
     let iface_ipv4 = match get_ips(&os) {
