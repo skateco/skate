@@ -58,7 +58,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
 
 
 pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, Box<dyn Error>> {
-    let host_infos = conns.get_hosts_info().await;
+    let host_infos = conns.get_nodes_system_info().await;
     let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
         Ok(r) => Some((*r).clone()),
         Err(_) => None,

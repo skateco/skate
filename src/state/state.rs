@@ -14,7 +14,7 @@ use crate::config::{cache_dir, Config};
 use crate::get::GetCommands::Node;
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
-use crate::ssh::HostInfoResponse;
+use crate::ssh::NodeSystemInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
 
@@ -29,7 +29,7 @@ pub enum NodeStatus {
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
-    pub host_info: Option<HostInfoResponse>,
+    pub host_info: Option<NodeSystemInfo>,
 }
 
 impl Into<K8sNode> for NodeState {
@@ -141,7 +141,7 @@ impl ClusterState {
         Ok(result)
     }
 
-    pub fn reconcile_node(&mut self, node: &HostInfoResponse) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_node(&mut self, node: &NodeSystemInfo) -> Result<ReconciledResult, Box<dyn Error>> {
         let mut pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
 
         let result = match pos {
@@ -191,7 +191,7 @@ impl ClusterState {
             updated: 0,
         })
     }
-    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<HostInfoResponse>) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<NodeSystemInfo>) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.current_cluster()?;
         self.hash = hash_string(cluster);
 

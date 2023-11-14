@@ -32,7 +32,7 @@ pub struct SshClients {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HostInfoResponse {
+pub struct NodeSystemInfo {
     pub node_name: String,
     pub hostname: String,
     pub platform: Platform,
@@ -41,7 +41,7 @@ pub struct HostInfoResponse {
     pub podman_version: Option<String>,
 }
 
-impl Into<NodeState> for HostInfoResponse {
+impl Into<NodeState> for NodeSystemInfo {
     fn into(self) -> NodeState {
         NodeState{
             node_name: self.node_name.to_string(),
@@ -55,7 +55,7 @@ impl Into<NodeState> for HostInfoResponse {
     }
 }
 
-impl HostInfoResponse {
+impl NodeSystemInfo {
     pub fn healthy(&self) -> bool {
         // TODO - actual checks for things that matter
         self.skatelet_version.is_some()
@@ -63,7 +63,7 @@ impl HostInfoResponse {
 }
 
 impl SshClient {
-    pub async fn get_host_info(&self) -> Result<HostInfoResponse, Box<dyn Error>> {
+    pub async fn get_node_system_info(&self) -> Result<NodeSystemInfo, Box<dyn Error>> {
         let command = "\
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
@@ -91,7 +91,7 @@ echo sys=$(cat /tmp/sys-$$);
             return Err(anyhow!(errlines.join("\n")).into());
         }
         let lines = result.stdout.lines();
-        let mut host_info = HostInfoResponse {
+        let mut host_info = NodeSystemInfo {
             node_name: self.node_name.clone(),
             hostname: "".to_string(),
             platform: Platform {
@@ -290,9 +290,9 @@ impl SshClients {
     pub fn execute(&self, _command: &str, _args: &[&str]) -> Vec<(Node, Result<CommandExecutedResult, SshError>)> {
         todo!();
     }
-    pub async fn get_hosts_info(&self) -> Vec<Result<HostInfoResponse, Box<dyn Error>>> {
+    pub async fn get_nodes_system_info(&self) -> Vec<Result<NodeSystemInfo, Box<dyn Error>>> {
         let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
-            c.get_host_info()
+            c.get_node_system_info()
         }).collect();
 
         fut.collect().await

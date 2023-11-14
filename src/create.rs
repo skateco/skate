@@ -84,7 +84,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     };
 
     let conn = node_connection(&config.clusters[cluster_index], &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
-    let info = conn.get_host_info().await?;
+    let info = conn.get_node_system_info().await?;
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
