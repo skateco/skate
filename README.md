@@ -2,7 +2,9 @@
 
 Sort of Kubernetes...
 
-Kubernetes manifest compatible.
+An extremely low footprint mini paas for scheduling resources on a small number of hosts.
+
+**Kubernetes manifest compatible.**
 Will support only a subset of resources and only a subset of their functionality:
 
 - Deployments
@@ -13,6 +15,12 @@ Will support only a subset of resources and only a subset of their functionality
 
 Currently uses vendored ssh, plan is to move to openssh and use the native binary on the host.
 
+## Architecture
+
+- `skate` cli that is basically the scheduler, run from developers machine.
+- talks to `skatelet` binaries on each host (not long lived agents, also a cli) over ssh
+
+Could be described as one-shot scheduling.
 
 ## Registering nodes
 
@@ -23,6 +31,7 @@ skate create node --name foo --host bar
 This will ensure all hosts are provisioned with `skatelet`, the agent
 
 ## Playing with objects
+
 ```shell
 skate get pods
 
@@ -38,6 +47,7 @@ skate describe deployment baz
 ```
 
 ## Refreshing state (usually done automatically)
+
 ```shell
 skate refresh
 ```
