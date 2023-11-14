@@ -31,6 +31,5 @@ pub fn up(_up_args: UpArgs) -> Result<(), UpError> {
 
     let podman_version = exec_cmd("podman", &["--version"]);
 
-    println!("{:?}", platform);
     Ok(())
 }

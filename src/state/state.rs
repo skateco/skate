@@ -5,6 +5,7 @@ use std::fs::File;
 use std::ops::DerefMut;
 use std::path::Path;
 use anyhow::anyhow;
+use itertools::Itertools;
 use k8s_openapi::api::core::v1::{NodeSpec, NodeStatus as K8sNodeStatus, Node as K8sNode, NodeAddress};
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
@@ -116,12 +117,12 @@ pub struct ClusterState {
     pub cluster_name: String,
     pub hash: String,
     pub nodes: Vec<NodeState>,
-    pub orphaned_nodes: Option<Vec<NodeState>>,
 }
 
 pub struct ReconciledResult {
     pub removed: usize,
     pub added: usize,
+    pub updated: usize,
 }
 
 impl ClusterState {
@@ -137,6 +138,31 @@ impl ClusterState {
         let file = File::open(ClusterState::path(cluster_name))?;
 
         let result: ClusterState = serde_json::from_reader(file)?;
+        Ok(result)
+    }
+
+    pub fn reconcile_node(&mut self, node: &HostInfoResponse) -> Result<ReconciledResult, Box<dyn Error>> {
+        let mut pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
+
+        let result = match pos {
+            Some((p, obj)) => {
+                self.nodes[p] = (*node).clone().into();
+                ReconciledResult {
+                    removed: 0,
+                    added: 0,
+                    updated: 1,
+                }
+            }
+            None => {
+                self.nodes.push((*node).clone().into());
+                ReconciledResult {
+                    removed: 0,
+                    added: 1,
+                    updated: 0,
+                }
+            }
+        };
+
         Ok(result)
     }
 
@@ -162,13 +188,15 @@ impl ClusterState {
         Ok(ReconciledResult {
             removed: 0,
             added: 1,
+            updated: 0,
         })
     }
-    pub fn reconcile(&mut self, config: &Config, host_info: &Vec<HostInfoResponse>) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<HostInfoResponse>) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.current_cluster()?;
         self.hash = hash_string(cluster);
 
         let state_hosts: HashSet<String> = self.nodes.iter().map(|n| n.node_name.clone()).collect();
+
         let config_hosts: HashSet<String> = cluster.nodes.iter().map(|n| n.name.clone()).collect();
 
 
@@ -196,19 +224,14 @@ impl ClusterState {
 
         self.nodes.append(&mut new_nodes);
 
-        let orphaned_nodes: Vec<_> = self.nodes.iter().filter_map(|n| match orphaned.contains(&n.node_name) {
-            true => Some((*n).clone()),
-            false => None
-        }).collect();
-        let orphaned_len = orphaned_nodes.len();
-        let new_len = new.len();
-        self.orphaned_nodes = Some(orphaned_nodes);
 
+        let mut updated = 0;
         // now that we have our list, go through and mark them healthy or unhealthy
         self.nodes = self.nodes.iter().map(|node| {
             let mut node = node.clone();
             match host_info.iter().find(|h| h.node_name == node.node_name) {
                 Some(info) => {
+                    updated = updated + 1;
                     node.status = match info.healthy() {
                         true => Healthy,
                         false => Unhealthy
@@ -224,8 +247,9 @@ impl ClusterState {
 
 
         Ok(ReconciledResult {
-            removed: orphaned_len,
-            added: new_len,
+            removed: orphaned.len(),
+            added: new.len(),
+            updated,
         })
     }
 

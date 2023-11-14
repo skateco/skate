@@ -6,6 +6,7 @@ use semver::{Version, VersionReq};
 use crate::config::{Config, Node};
 use crate::skate::{ConfigFileArgs, Distribution, Os};
 use crate::ssh::node_connection;
+use crate::state::state::{ClusterState, NodeState, NodeStatus};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 #[derive(Debug, Args)]
@@ -48,6 +49,7 @@ pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
 async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
+
     let context = match args.config.context {
         None => match config.current_context {
             None => {
@@ -59,6 +61,9 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     }.map_err(Into::<Box<dyn Error>>::into)?;
 
     let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+
+    let mut state = ClusterState::load(cluster.name.as_str())?;
+
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
     let existing_node = nodes_iter.find(|n| n.name == args.name || n.host == args.host);
@@ -67,7 +72,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         Some(node) => (false, node.clone()),
         None => {
             let node = Node {
-                name: args.name,
+                name: args.name.clone(),
                 host: args.host,
                 port: args.port,
                 user: args.user,
@@ -80,7 +85,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     let conn = node_connection(&config.clusters[cluster_index], &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
     let info = conn.get_host_info().await?;
-    match info.skatelet_version {
+    match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
             let _ = conn.install_skatelet(info.platform.clone()).await?;
@@ -90,7 +95,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    match info.podman_version {
+    match info.podman_version.as_ref() {
         Some(version) => {
             let min_podman_ver = ">=3.0.0";
             let req = VersionReq::parse(min_podman_ver).unwrap();
@@ -99,7 +104,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
             if !req.matches(&version) {
                 return Err(anyhow!("podman version too old, must be {}, see https://podman.io/docs/installation", min_podman_ver).into());
             }
-            println!("podman version {} already installed {} ",version, CHECKBOX_EMOJI)
+            println!("podman version {} already installed {} ", version, CHECKBOX_EMOJI)
         }
         // instruct on installing newer podman version
         None => {
@@ -130,6 +135,9 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    state.reconcile_node(&info)?;
+
+    state.persist()?;
 
     if new {
         config.persist(Some(args.config.skateconfig))?;

@@ -12,6 +12,7 @@ use crate::skate::{Distribution, Os, Platform};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
+use crate::state::state::{NodeState, NodeStatus};
 use crate::util::hash_string;
 
 
@@ -38,6 +39,20 @@ pub struct HostInfoResponse {
     pub skatelet_version: Option<String>,
     pub system_info: Option<SystemInfo>,
     pub podman_version: Option<String>,
+}
+
+impl Into<NodeState> for HostInfoResponse {
+    fn into(self) -> NodeState {
+        NodeState{
+            node_name: self.node_name.to_string(),
+            status: match self.healthy() {
+                true => NodeStatus::Healthy,
+                false => NodeStatus::Unhealthy
+            },
+            host_info: Some(self),
+        }
+
+    }
 }
 
 impl HostInfoResponse {
@@ -77,7 +92,7 @@ echo sys=$(cat /tmp/sys-$$);
         }
         let lines = result.stdout.lines();
         let mut host_info = HostInfoResponse {
-            node_name: "".to_string(),
+            node_name: self.node_name.clone(),
             hostname: "".to_string(),
             platform: Platform {
                 arch: "".to_string(),
@@ -89,7 +104,7 @@ echo sys=$(cat /tmp/sys-$$);
             podman_version: None,
         };
 
-        let mut arch :Option<String> = None;
+        let mut arch: Option<String> = None;
         for line in lines {
             match line.split_once('=') {
                 Some((k, v)) => {
@@ -122,6 +137,7 @@ echo sys=$(cat /tmp/sys-$$);
         if host_info.skatelet_version.is_some() && host_info.system_info.is_none() {
             return Err(anyhow!("skatelet installed but failed to return system info").into());
         }
+
         Ok(host_info)
     }
 

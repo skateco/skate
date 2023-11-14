@@ -71,10 +71,9 @@ pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Co
             cluster_name: cluster_name.to_string(),
             hash: "".to_string(),
             nodes: vec![],
-            orphaned_nodes: None,
         }
     };
 
-    let _ = state.reconcile(&config, &healthy_host_infos)?;
+    let _ = state.reconcile_all_nodes(&config, &healthy_host_infos)?;
     Ok(state)
 }
