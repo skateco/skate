@@ -68,9 +68,15 @@ make armv6
 ```
 
 ### Features
-- [x] Pods
-- [x] Deployments
-- [x] Daemonsets
-- [ ] vlan
-- [ ] vlan dns
-- [ ] ingress
+
+- [x] Scheduling
+    - Strategies
+        - [x] Recreate
+        - [ ] Rolling Deployments
+    - [x] Pods
+    - [x] Deployments
+    - [x] Daemonsets
+- Networking
+    - [ ] vlan
+    - [ ] vlan dns
+    - [ ] ingress
