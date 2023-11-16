@@ -1,11 +1,14 @@
 use std::error::Error;
+use std::net::ToSocketAddrs;
 use anyhow::anyhow;
+use base64::Engine;
+use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
 use itertools::{Itertools, min};
 use semver::{Version, VersionReq};
-use crate::config::{Config, Node};
+use crate::config::{Cluster, Config, Node};
 use crate::skate::{ConfigFileArgs, Distribution, Os};
-use crate::ssh::node_connection;
+use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -34,6 +37,8 @@ pub struct CreateNodeArgs {
     key: Option<String>,
     #[arg(long, long_help = "Ssh port for connecting")]
     port: Option<u16>,
+    #[arg(long, long_help = "Subnet cidr for podman network (must be unique range per host)")]
+    subnet_cidr: String,
 
     #[command(flatten)]
     config: ConfigFileArgs,
@@ -61,6 +66,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     }.map_err(Into::<Box<dyn Error>>::into)?;
 
     let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+    let mut cluster = (*cluster).clone();
 
     let mut state = ClusterState::load(cluster.name.as_str())?;
 
@@ -77,14 +83,25 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
                 port: args.port,
                 user: args.user,
                 key: args.key,
+                subnet_cidr: args.subnet_cidr,
             };
-            config.clusters[cluster_index].nodes.push(node.clone());
+            cluster.nodes.push(node.clone());
             (true, node)
         }
     };
 
-    let conn = node_connection(&config.clusters[cluster_index], &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
+    let conn = node_connection(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
     let info = conn.get_node_system_info().await?;
+
+    println!("{:}", &info.platform);
+
+    match &(info.platform).os {
+        Os::Linux => {}
+        _ => {
+            return Err(anyhow!("detected os {}: only linux is supported", &(info.platform).os).into());
+        }
+    }
+
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
@@ -135,13 +152,134 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
+    setup_networking(&conn, &cluster, &node, &info).await?;
+
     state.reconcile_node(&info)?;
+
+
+    config.clusters[cluster_index] = cluster;
+
+    config.persist(Some(args.config.skateconfig))?;
 
     state.persist()?;
 
-    if new {
-        config.persist(Some(args.config.skateconfig))?;
+    Ok(())
+}
+
+async fn execute(conn: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+    println!(">>> {}", cmd);
+    let result = conn.client.execute(cmd).await.
+        map_err(|e| anyhow!("{} failed", cmd).context(e))?;
+    if result.exit_status > 0 {
+        return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
+    }
+    println!("{}", result.stdout);
+    Ok(result.stdout)
+}
+
+async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, info: &NodeSystemInfo) -> Result<(), Box<dyn Error>> {
+    let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
+    execute(conn, cmd).await?;
+
+    let cmd = format!("sudo sed -i 's&#default_subnet.*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+    execute(conn, &cmd).await?;
+
+    let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
+    let cni = "
+{
+  \"cniVersion\": \"0.4.0\",
+  \"name\": \"podman\",
+  \"plugins\": [
+    {
+      \"type\": \"bridge\",
+      \"bridge\": \"cni-podman0\",
+      \"isGateway\": true,
+      \"ipMasq\": true,
+      \"hairpinMode\": true,
+      \"ipam\": {
+        \"type\": \"host-local\",
+        \"routes\": [
+                { \"dst\": \"0.0.0.0/0\" }
+        ],
+        \"ranges\": [
+          [
+            {
+              \"subnet\": \"%%subnet%%\",
+              \"gateway\": \"%%gateway%%\"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      \"type\": \"portmap\",
+      \"capabilities\": {
+        \"portMappings\": true
+      }
+    },
+    {
+      \"type\": \"firewall\"
+    },
+    {
+      \"type\": \"tuning\"
+    }
+  ]
+}\n".replace("%%subnet%%", &node.subnet_cidr).replace("%%gateway%%", &gateway);
+
+    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
+
+    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conf\"", cni);
+    execute(conn, &cmd).await?;
+
+
+    // check it's ok
+
+    let cmd = "sudo podman run --rm -it busybox echo 1";
+    execute(conn, cmd).await?;
+
+
+    let cmd = "sudo mkdir -p /etc/skate";
+    execute(conn, cmd).await?;
+
+    let cmd = "sudo bash -c \"[ -f /etc/rc.local ] || touch /etc/rc.local && sudo chmod +x /etc/rc.local\"";
+    execute(conn, cmd).await?;
+
+    let cmd = "sudo bash -c \"grep -q '^/etc/skate/routes.sh' /etc/rc.local ||  echo '/etc/skate/routes.sh' >> /etc/rc.local\"";
+    execute(conn, cmd).await?;
+
+    let (conns, errs) = cluster_connections(cluster_conf).await;
+    match conns {
+        Some(conns) => {
+            for conn in conns.clients {
+                create_replace_routes_file(&conn, cluster_conf).await?;
+            }
+        }
+        _ => {}
     }
 
     Ok(())
+}
+
+async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
+    let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name).collect();
+
+    let mut route_file = "#!/bin/bash
+".to_string();
+
+
+    for other_node in &other_nodes {
+        let ip = format!("{}:22", other_node.host).to_socket_addrs()
+            .unwrap().next().unwrap().ip().to_string();
+        route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
+    }
+
+    route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
+    route_file = route_file + "sysctl -p\n";
+
+    let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
+    let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
+    match execute(conn, &cmd).await {
+        Ok(msg) => Ok(()),
+        Err(e) => Err(e)
+    }
 }

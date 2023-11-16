@@ -51,9 +51,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
         };
     }
 
-    let _ = state.persist().expect("failed to save state");
-
-    Ok(())
+    state.persist()
 }
 
 

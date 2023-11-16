@@ -53,12 +53,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let scheduler = DefaultScheduler {};
     let _results = scheduler.schedule(&conns, &mut state, objects).await?;
 
-    match state.persist() {
-        Err(e) =>{
-            eprintln!("Warning!: failed to persist state: {}", e)
-        }
-        _ => {}
-    }
+    state.persist()?;
 
     Ok(())
 }

@@ -1,0 +1,61 @@
+#!/bin/bash
+
+oPOSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+#    -e|--extension)
+#     EXTENSION="$2"
+#      shift # past argument
+#      shift # past value
+#      ;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+nodes=2
+case "$POSITIONAL_ARGS" in 
+    create)
+
+        cat <<EOF > /tmp/cluster-plz.yaml
+users:
+  - default
+  - name: $(echo $USER)
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+    - $(cat ~/.ssh/id_rsa.pub)
+EOF
+        for f in $(seq $nodes); do
+            multipass launch -c 1 -m 1G -d 4G -n node-$f --cloud-init /tmp/cluster-plz.yaml
+        done
+
+        for f in $(seq $nodes); do
+            multipass info node-$f
+        done
+        ;;
+    remove)
+        for f in $(seq $nodes); do
+            multipass delete --purge node-$f
+        done
+        ;;
+    shell)
+        SESSION="clusterplz"
+        tmux kill-session -t $SESSION
+        tmux new-session -d -s $SESSION
+        # todo, split $nodes-1 times
+        for f in $(seq $nodes); do
+            tmux send-keys -t $SESSION "multipass shell node-$f" Enter
+            if [ $f -ne $nodes ]; then
+                tmux split-window -h -t $SESSION
+            fi
+        done
+        tmux attach-session -t $SESSION
+        ;;
+esac

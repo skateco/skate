@@ -270,6 +270,13 @@ pub struct Platform {
     pub distribution: Distribution,
 }
 
+impl Display for Platform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+
+        f.write_str(&format!("arch: {}, os: {}, distribution: {}", self.arch, self.os, self.distribution))
+    }
+}
+
 impl Platform {
     pub fn target() -> Self {
         let parts: Vec<&str> = TARGET.split('-').collect();
@@ -294,7 +301,7 @@ impl Platform {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display)]
 pub enum Distribution {
     Unknown,
     Debian,

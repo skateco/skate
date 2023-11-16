@@ -130,8 +130,11 @@ impl ClusterState {
         format!("{}/{}.state", cache_dir(), slugify(cluster_name))
     }
     pub fn persist(&self) -> Result<(), Box<dyn Error>> {
-        let state_file = File::create(Path::new(ClusterState::path(&self.cluster_name.clone()).as_str())).expect("unable to open state file");
-        Ok(serde_json::to_writer(state_file, self).expect("failed to write json state"))
+        let state_file = File::create(Path::new(ClusterState::path(&self.cluster_name.clone()).as_str()))
+            .map_err(|e| anyhow!("failed to open or create state file").context(e))?;
+        serde_json::to_writer(state_file, self)
+            .map_err(|e| anyhow!("failed to serialize state").context(e))?;
+        Ok(())
     }
 
     pub fn load(cluster_name: &str) -> Result<Self, Box<dyn Error>> {

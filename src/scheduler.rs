@@ -125,9 +125,10 @@ impl DefaultScheduler {
             meta.labels = Some(labels);
 
             // bind to specific node
-            pod_spec.node_selector.as_mut().and_then(|ns| {
-                ns.insert("skate.io/hostname".to_string(), node_name.clone());
-                Some(())
+            pod_spec.node_selector = Some({
+                let mut selector = pod_spec.node_selector.unwrap_or_default();
+                selector.insert("skate.io/hostname".to_string(), node_name.clone());
+                selector
             });
 
             let pod = Pod {

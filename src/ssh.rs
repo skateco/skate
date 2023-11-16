@@ -39,11 +39,12 @@ pub struct NodeSystemInfo {
     pub skatelet_version: Option<String>,
     pub system_info: Option<SystemInfo>,
     pub podman_version: Option<String>,
+    pub ovs_version: Option<String>,
 }
 
 impl Into<NodeState> for NodeSystemInfo {
     fn into(self) -> NodeState {
-        NodeState{
+        NodeState {
             node_name: self.node_name.to_string(),
             status: match self.healthy() {
                 true => NodeStatus::Healthy,
@@ -51,7 +52,6 @@ impl Into<NodeState> for NodeSystemInfo {
             },
             host_info: Some(self),
         }
-
     }
 }
 
@@ -68,10 +68,11 @@ impl SshClient {
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
-{ cat /etc/issue |head -1|awk '{print $1}'; } || echo '' > /tmp/distro-$$ &
+{ { cat /etc/issue |head -1|awk '{print $1}'; }  || echo '' ; } > /tmp/distro-$$ &
 skatelet --version|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 skatelet system info > /tmp/sys-$$ &
+ovs-vsctl --version|head -1| awk '{print $NF}' > /tmp/ovs-$$ &
 
 wait;
 
@@ -82,6 +83,7 @@ echo distro=$(cat /tmp/distro-$$);
 echo skatelet=$(cat /tmp/skatelet-$$);
 echo podman=$(cat /tmp/podman-$$);
 echo sys=$(cat /tmp/sys-$$);
+echo ovs=$(cat /tmp/ovs-$$);
 ";
 
         let result = self.client.execute(command).await?;
@@ -102,8 +104,8 @@ echo sys=$(cat /tmp/sys-$$);
             skatelet_version: None,
             system_info: None,
             podman_version: None,
+            ovs_version: None,
         };
-
         let mut arch: Option<String> = None;
         for line in lines {
             match line.split_once('=') {
@@ -113,14 +115,24 @@ echo sys=$(cat /tmp/sys-$$);
                         "arch" => arch = Some(v.to_string()),
                         "os" => host_info.platform.os = Os::from_str_loose(v),
                         "distro" => host_info.platform.distribution = Distribution::from(v.to_string()),
-                        "skatelet" => host_info.skatelet_version = Some(v.to_string()),
-                        "podman" => host_info.podman_version = Some(v.to_string()),
+                        "skatelet" => host_info.skatelet_version = match v {
+                            "" => None,
+                            _ => Some(v.to_string())
+                        },
+                        "podman" => host_info.podman_version = match v {
+                            "" => None,
+                            _ => Some(v.to_string())
+                        },
                         "sys" => {
                             match serde_json::from_str(v) {
                                 Ok(sys_info) => host_info.system_info = sys_info,
                                 Err(_) => {}
                             }
                         }
+                        "ovs" => host_info.ovs_version = match v {
+                            "" => None,
+                            _ => Some(v.to_string())
+                        },
                         _ => {}
                     }
                 }
@@ -128,14 +140,21 @@ echo sys=$(cat /tmp/sys-$$);
             }
         }
 
-        match arch {
-            Some(arch) => host_info.platform.arch = arch,
+        match &arch {
+            Some(arch) => {
+                host_info.platform.arch = arch.clone();
+                host_info.system_info = host_info.system_info.map(|mut sys_info| {
+                    sys_info.platform.arch = arch.clone();
+                    sys_info
+                })
+            },
             None => {}
         }
 
 
+
         if host_info.skatelet_version.is_some() && host_info.system_info.is_none() {
-            return Err(anyhow!("skatelet installed but failed to return system info").into());
+            return Err(anyhow!("skatelet installed ({}) but failed to return system info", host_info.skatelet_version.unwrap()).into());
         }
 
         Ok(host_info)
@@ -220,6 +239,7 @@ impl Node {
         Node {
             name: self.name.clone(),
             host: self.host.clone(),
+            subnet_cidr: self.subnet_cidr.clone(),
             port: self.port.or(Some(22)),
             user: self.user.clone().or(cluster.default_user.clone()),
             key: self.key.clone().or(cluster.default_key.clone()),

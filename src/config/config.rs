@@ -1,4 +1,3 @@
-
 use std::error::Error;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,7 @@ pub struct Config {
     pub clusters: Vec<Cluster>,
 }
 
-#[derive(Serialize, Deserialize, Hash)]
+#[derive(Serialize, Deserialize, Hash, Clone)]
 pub struct Cluster {
     pub name: String,
     pub default_user: Option<String>,
@@ -28,6 +27,7 @@ pub struct Cluster {
 pub struct Node {
     pub name: String,
     pub host: String,
+    pub subnet_cidr: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
