@@ -66,6 +66,7 @@ impl DefaultScheduler {
         }.unwrap_or(BTreeMap::new());
 
 
+
         let filtered_nodes = nodes.iter().filter(|n| {
             let k8s_node: K8sNode = (**n).clone().into();
             let node_labels = k8s_node.metadata.labels.unwrap_or_default();
@@ -394,6 +395,7 @@ impl Scheduler for DefaultScheduler {
                     results.placements = [results.placements, placements].concat();
                 }
                 Err(err) => {
+                    println!("{} failed to schedule {} : {}", CROSS_EMOJI, object.name(), err.to_string());
                     results.placements = [results.placements, vec![ScheduledOperation {
                         resource: object.clone(),
                         node: None,

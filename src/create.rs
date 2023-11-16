@@ -228,7 +228,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
 
     let cni = general_purpose::STANDARD.encode(cni.as_bytes());
 
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conf\"", cni);
+    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
     execute(conn, &cmd).await?;
 
 

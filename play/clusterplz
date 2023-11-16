@@ -40,6 +40,11 @@ EOF
             multipass info node-$f
         done
         ;;
+    info)
+        for f in $(seq $nodes); do
+            multipass info node-$f
+        done
+        ;;
     remove)
         for f in $(seq $nodes); do
             multipass delete --purge node-$f

@@ -5,6 +5,8 @@ use std::time::Duration;
 use anyhow::anyhow;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
 use async_ssh2_tokio::client::{Client, CommandExecutedResult};
+use base64::Engine;
+use base64::engine::general_purpose;
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
@@ -170,10 +172,8 @@ echo ovs=$(cat /tmp/ovs-$$);
         Ok(())
     }
     pub async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
-        let hash = hash_string(manifest);
-        let file_name = format!("/tmp/skate-{}.yaml", hash);
-        let result = self.client.execute(&format!("echo \"{}\" > {} && \
-        cat {} | skatelet apply -", manifest, file_name, file_name)).await?;
+        let base64_manifest= general_purpose::STANDARD.encode(manifest);
+        let result = self.client.execute(&format!("echo \"{}\"| base64 --decode|skatelet apply -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
                 Ok((result.stdout, result.stderr))
@@ -189,10 +189,8 @@ echo ovs=$(cat /tmp/ovs-$$);
     }
 
     pub async fn remove_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
-        let hash = hash_string(manifest);
-        let file_name = format!("/tmp/skate-{}.yaml", hash);
-        let result = self.client.execute(&format!("echo \"{}\" > {} && \
-        cat {} | skatelet remove -", manifest, file_name, file_name)).await?;
+        let base64_manifest= general_purpose::STANDARD.encode(manifest);
+    let result = self.client.execute(&format!("echo \"{}\" |base64  --decode|sudo skatelet remove -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
                 Ok((result.stdout, result.stderr))

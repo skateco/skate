@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, remove, RemoveArgs};
 use crate::skatelet::system::{system, SystemArgs};
-use crate::skatelet::up::{up, UpArgs};
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
@@ -15,7 +14,6 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    Up(UpArgs),
     Apply(ApplyArgs),
     System(SystemArgs),
     Remove(RemoveArgs)
@@ -24,7 +22,6 @@ enum Commands {
 pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     let args = Cli::parse();
     match args.command {
-        Commands::Up(args) => up(args).map_err(|e| e.into()),
         Commands::Apply(args) => apply::apply(args),
         Commands::System(args) => system(args).await,
         Commands::Remove(args) => remove(args),

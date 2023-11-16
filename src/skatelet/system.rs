@@ -101,7 +101,7 @@ pub struct PodmanPodInfo {
     pub status: PodmanPodStatus,
     pub created: DateTime<Local>,
     pub labels: BTreeMap<String, String>,
-    pub containers: Vec<PodmanContainerInfo>,
+    pub containers: Option<Vec<PodmanContainerInfo>>,
 }
 
 impl PodmanPodInfo {
@@ -123,7 +123,7 @@ impl From<Pod> for PodmanPodInfo {
             })).unwrap_or("".to_string()).as_str()),
             created: value.metadata.creation_timestamp.and_then(|ts| Some(DateTime::from(ts.0))).unwrap_or(DateTime::from(Local::now())),
             labels: value.metadata.labels.unwrap_or(BTreeMap::new()),
-            containers: vec![], // TODO
+            containers: None, // TODO
         }
     }
 }
@@ -287,10 +287,14 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let os = Os::from_str_loose(&(sys.name().ok_or("")?));
 
     let result = match exec_cmd(
-        "podman",
-        &["pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
+        "sudo",
+        &["podman", "pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
     ) {
-        Ok(result) => result,
+        Ok(result) => match result.as_str() {
+            "" => "[]".to_string(),
+            "null" => "[]".to_string(),
+            _ => result
+        },
         Err(err) => {
             eprintln!("failed to list pods: {}", err);
             "[]".to_string()

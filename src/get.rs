@@ -106,14 +106,14 @@ impl Lister<PodmanPodInfo> for PodLister {
             "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
         );
         for pod in pods {
-            let num_containers = pod.containers.len();
-            let healthy_containers = pod.containers.iter().filter(|c| {
+            let num_containers = pod.containers.clone().unwrap_or_default().len();
+            let healthy_containers = pod.containers.clone().unwrap_or_default().iter().filter(|c| {
                 match c.status.as_str() {
                     "running" => true,
                     _ => false
                 }
             }).collect::<Vec<_>>().len();
-            let restarts = pod.containers.iter().map(|c| c.restart_count.unwrap_or_default())
+            let restarts = pod.containers.clone().unwrap_or_default().iter().map(|c| c.restart_count.unwrap_or_default())
                 .reduce(|a, c| a + c).unwrap_or_default();
             println!(
                 "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",

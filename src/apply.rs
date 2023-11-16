@@ -10,8 +10,6 @@ use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
 
-
-
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
 pub struct ApplyArgs {
@@ -43,15 +41,21 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         _ => {}
     };
 
-    let objects:Vec<Result<_,_>> = objects.into_iter().map(|sr| sr.fixup()).collect();
-    let objects:Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
+    let objects: Vec<Result<_, _>> = objects.into_iter().map(|sr| sr.fixup()).collect();
+    let objects: Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
 
     let conns = conns.ok_or("no clients")?;
 
     let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
     let scheduler = DefaultScheduler {};
-    let _results = scheduler.schedule(&conns, &mut state, objects).await?;
+    match scheduler.schedule(&conns, &mut state, objects).await {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("{}", e);
+            return Err(anyhow!("failed to schedule resources").into());
+        }
+    }
 
     state.persist()?;
 
