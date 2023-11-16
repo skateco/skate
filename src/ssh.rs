@@ -173,7 +173,7 @@ echo ovs=$(cat /tmp/ovs-$$);
     }
     pub async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
         let base64_manifest= general_purpose::STANDARD.encode(manifest);
-        let result = self.client.execute(&format!("echo \"{}\"| base64 --decode|skatelet apply -", base64_manifest)).await?;
+        let result = self.client.execute(&format!("echo \"{}\"| base64 --decode|sudo skatelet apply -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
                 Ok((result.stdout, result.stderr))

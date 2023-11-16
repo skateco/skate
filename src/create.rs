@@ -247,6 +247,9 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     let cmd = "sudo bash -c \"grep -q '^/etc/skate/routes.sh' /etc/rc.local ||  echo '/etc/skate/routes.sh' >> /etc/rc.local\"";
     execute(conn, cmd).await?;
 
+    let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
+    execute(conn, cmd).await?;
+
     let (conns, errs) = cluster_connections(cluster_conf).await;
     match conns {
         Some(conns) => {
