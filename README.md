@@ -77,6 +77,6 @@ make armv6
     - [x] Deployments
     - [x] Daemonsets
 - Networking
-    - [ ] vlan
-    - [ ] vlan dns
+    - [x] multi-host container network
+    - [ ] container dns
     - [ ] ingress
