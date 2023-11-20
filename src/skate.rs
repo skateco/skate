@@ -33,7 +33,7 @@ use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
 use crate::describe::{DescribeArgs, describe};
-use crate::skate::Distribution::{Debian, Raspbian, Unknown};
+use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
 use crate::util::{slugify, TARGET};
@@ -306,6 +306,7 @@ pub enum Distribution {
     Unknown,
     Debian,
     Raspbian,
+    Ubuntu
 }
 
 impl From<String> for Distribution {
@@ -313,6 +314,7 @@ impl From<String> for Distribution {
         match s.to_lowercase() {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,
+            s if s.starts_with("ubuntu") => Ubuntu,
             _ => Unknown
         }
     }

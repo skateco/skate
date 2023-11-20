@@ -45,6 +45,11 @@ EOF
             multipass info node-$f
         done
         ;;
+    ips)
+        for f in $(seq $nodes); do
+            multipass info node-$f|grep IPv4 | awk '{print $2}'
+        done
+        ;;
     remove)
         for f in $(seq $nodes); do
             multipass delete --purge node-$f
@@ -62,5 +67,13 @@ EOF
             fi
         done
         tmux attach-session -t $SESSION
+        ;;
+    skate)
+        for f in $(seq $nodes); do
+            info=$(multipass info node-$f)
+            ip=$(echo "$info" | grep -e '^IPv4:' | awk '{print $2}')
+            name=$(echo "$info" | grep -e '^Name:' | awk '{print $2}')
+            echo skate create node --name $name --host $ip --subnet-cidr "20.${f}.0.0/16"
+        done
         ;;
 esac
