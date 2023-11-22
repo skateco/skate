@@ -1,0 +1,21 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coredns
+  namespace: skate
+  labels:
+    app: coredns
+spec:
+  selector:
+    matchLabels:
+      app: coredns
+  template:
+    metadata:
+      labels:
+        app: coredns
+    spec:
+      hostNetwork: true
+      containers:
+      - name: coredns
+        image: ghcr.io/skateco/coredns

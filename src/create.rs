@@ -1,4 +1,6 @@
 use std::error::Error;
+use std::fs::File;
+use std::io::Write;
 use std::net::ToSocketAddrs;
 use anyhow::anyhow;
 use base64::Engine;
@@ -6,11 +8,14 @@ use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
 use itertools::{Itertools, min};
 use semver::{Version, VersionReq};
+use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::skate::{ConfigFileArgs, Distribution, Os};
 use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient};
 use crate::state::state::{ClusterState, NodeState, NodeStatus};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
+
+const coredns_manifest_bytes: &[u8] = include_bytes!("../manifests/coredns.yaml");
 
 #[derive(Debug, Args)]
 pub struct CreateArgs {
@@ -79,11 +84,11 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     let node = Node {
         name: args.name.clone(),
-        host: args.host,
-        port: args.port,
-        user: args.user,
-        key: args.key,
-        subnet_cidr: args.subnet_cidr,
+        host: args.host.clone(),
+        port: args.port.clone(),
+        user: args.user.clone(),
+        key: args.key.clone(),
+        subnet_cidr: args.subnet_cidr.clone(),
     };
 
     match existing_index {
@@ -157,7 +162,11 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    setup_networking(&conn, &cluster, &node, &info).await?;
+    // seems to be missing when using kube play
+    let cmd = "sudo podman pull  k8s.gcr.io/pause:3.5";
+    execute(&conn, cmd).await?;
+
+    setup_networking(&conn, &cluster, &node, &info, &args).await?;
 
     state.reconcile_node(&info)?;
 
@@ -182,7 +191,7 @@ async fn execute(conn: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> 
     Ok(result.stdout)
 }
 
-async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, info: &NodeSystemInfo) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, info: &NodeSystemInfo, args: &CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
     execute(conn, cmd).await?;
 
@@ -258,6 +267,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
     execute(conn, cmd).await?;
 
+
     let (conns, errs) = cluster_connections(cluster_conf).await;
     match conns {
         Some(conns) => {
@@ -267,6 +277,17 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         }
         _ => {}
     }
+
+
+    let coredns_yaml_path = "/tmp/skate-coredns.yaml";
+    let mut file = File::create(coredns_yaml_path)?;
+    file.write_all(coredns_manifest_bytes)?;
+
+    apply(ApplyArgs {
+        filename: vec![coredns_yaml_path.to_string()],
+        grace_period: 0,
+        config: args.config.clone(),
+    }).await?;
 
     // // install dnsmasq
     // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";

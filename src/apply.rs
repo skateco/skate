@@ -14,12 +14,12 @@ use crate::ssh;
 #[command(arg_required_else_help(true))]
 pub struct ApplyArgs {
     #[arg(short, long, long_help = "The files that contain the configurations to apply.")]
-    filename: Vec<String>,
+    pub filename: Vec<String>,
     #[arg(long, default_value_t = - 1, long_help = "Period of time in seconds given to the resource to terminate gracefully. Ignored if negative. Set to 1 for \
 immediate shutdown.")]
-    grace_period: i32,
+    pub grace_period: i32,
     #[command(flatten)]
-    config: ConfigFileArgs,
+    pub config: ConfigFileArgs,
 }
 
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
