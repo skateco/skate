@@ -72,7 +72,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
-    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p,n) |p);
+    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p, n)| p);
 
     // will clobber
     // TODO - ask
@@ -230,13 +230,6 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     },
     {
       \"type\": \"tuning\"
-    },
-    {
-      \"type\": \"dnsname\",
-      \"domainName\": \"svc.cluster.local\",
-      \"capabilities\": {
-         \"aliases\": true
-      }
     }
   ]
 }\n".replace("%%subnet%%", &node.subnet_cidr).replace("%%gateway%%", &gateway);
@@ -275,34 +268,34 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         _ => {}
     }
 
-    // install dnsmasq
-    let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
-    execute(conn, cmd).await?;
-    // disable systemd-resolved if exists
-    let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    execute(conn, cmd).await?;
-    // changed /etc/resolv.conf to be 127.0.0.1
-    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
-    execute(conn, cmd).await?;
-
-
-    let dnsmasq_conf = general_purpose::STANDARD.encode("
-domain=svc.cluster.local
-local=/svc.cluster.local/
-bind-interfaces
-no-resolv
-server=8.8.8.8
-server=4.4.4.4
-addn-hosts=/run/containers/cni/dnsname/podman/addnhosts
-".as_bytes());
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /etc/dnsmasq.d/skate'", dnsmasq_conf);
-    execute(conn, &cmd).await?;
-
-    // let cmd = "sudo systemctl restart dnsmasq";
+    // // install dnsmasq
+    // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
     // execute(conn, cmd).await?;
-    //
-    // // change /etc/containers/containers.conf to have
-    // // dns_servers = ["<gateway>"]
+    // // disable systemd-resolved if exists
+    // let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
+    // execute(conn, cmd).await?;
+    // // changed /etc/resolv.conf to be 127.0.0.1
+    // let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
+    // execute(conn, cmd).await?;
+
+
+//     let dnsmasq_conf = general_purpose::STANDARD.encode("
+// domain=svc.cluster.local
+// local=/svc.cluster.local/
+// bind-interfaces
+// no-resolv
+// server=8.8.8.8
+// server=4.4.4.4
+// addn-hosts=/etc/skate/addnhosts
+// ".as_bytes());
+//     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /etc/dnsmasq.d/skate'", dnsmasq_conf);
+//     execute(conn, &cmd).await?;
+//
+//     let cmd = "sudo systemctl restart dnsmasq";
+//     execute(conn, cmd).await?;
+
+    // change /etc/containers/containers.conf to have
+    // dns_servers = ["<gateway>"]
     // let cmd = format!("sudo sed -i 's&#dns_servers.*&dns_servers = [\"{}\"]&' /etc/containers/containers.conf", gateway);
     // execute(conn, &cmd).await?;
     // wooop
