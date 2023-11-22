@@ -15,6 +15,9 @@ Will support only a subset of resources and only a subset of their functionality
 
 Currently uses vendored ssh, plan is to move to openssh and use the native binary on the host.
 
+Supported Distro: Debian like (Ubuntu, Debian, Raspbian)
+Supported architectures: amd64, armv6, armv7, arm64
+
 ## Architecture
 
 - `skate` cli that is basically the scheduler, run from developers machine.
