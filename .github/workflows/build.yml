@@ -17,7 +17,7 @@ jobs:
       matrix:
         platforms: [ linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64 ]
         include:
-        - dockerfile: ./images/coredns/Dockerfile
+        - context: ./images/coredns
           image: ghcr.io/skateco/coredns
     steps:
       - name: Check out the repo
@@ -39,8 +39,8 @@ jobs:
       - name: Build and push Docker images
         uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
-          context: .
-          file: ${{ matrix.dockerfile }}
+          context: ${{ matrix.context }}
+          file: Dockerfile
           platforms: ${{ matrix.platforms }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
