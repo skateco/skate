@@ -4,6 +4,7 @@
 # documentation.
 
 name: Skate
+permissions: write-all
 on:
   push:
     branches: [ "main" ]
