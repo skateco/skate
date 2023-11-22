@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        platforms: [ linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64 ]
         include:
         - context: ./images/coredns
           image: ghcr.io/skateco/coredns
@@ -42,7 +41,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/Dockerfile
-          platforms: ${{ matrix.platforms }}
+          platforms: linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
