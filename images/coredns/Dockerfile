@@ -15,4 +15,4 @@ USER nonroot:nonroot
 
 
 EXPOSE 53 53/udp
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/coredns"]
