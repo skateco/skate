@@ -16,6 +16,27 @@ spec:
         app: coredns
     spec:
       hostNetwork: true
+      volumes:
+      - name: dbus
+        hostPath:
+          path: /var/run/dbus
+          type: Directory
       containers:
       - name: coredns
         image: ghcr.io/skateco/coredns
+        volumeMounts:
+        - mountPath: /var/run/dbus
+          name: dbus
+        env:
+        - name: CORE_FILE
+          value: |
+            cluster:53 {
+              mdns cluster
+            }
+            .:53 {
+                forward . 8.8.8.8
+                log
+                errors
+                cache
+            }
+

@@ -283,6 +283,9 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     let mut file = File::create(coredns_yaml_path)?;
     file.write_all(coredns_manifest_bytes)?;
 
+    let cmd = "sudo podman pull ghcr.io/skateco/coredns";
+    execute(conn, cmd).await?;
+
     apply(ApplyArgs {
         filename: vec![coredns_yaml_path.to_string()],
         grace_period: 0,
