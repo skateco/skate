@@ -15,6 +15,7 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
+use colored::Colorize;
 
 pub struct SshClient {
     pub node_name: String,
@@ -227,7 +228,7 @@ echo ovs=$(cat /tmp/ovs-$$);
     }
 
     pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
-        cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l));
+        cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
         let result = self.client.execute(cmd).await.
             map_err(|e| anyhow!("{} failed", cmd).context(e))?;
         if result.exit_status > 0 {

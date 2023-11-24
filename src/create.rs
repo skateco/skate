@@ -231,6 +231,10 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         _ => {}
     }
 
+    let cmd = "sudo bash -c \"sed -i 's/#DNSStubListener=yes$/DNSStubListener=no/' /etc/systemd/resolved.conf && sudo systemctl restart systemd-resolved\"";
+    // don't care about result
+    let _ = conn.execute(cmd).await;
+
     let cmd = "sudo podman pull ghcr.io/skateco/coredns";
     conn.execute(cmd).await?;
 
