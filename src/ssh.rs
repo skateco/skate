@@ -174,6 +174,7 @@ echo ovs=$(cat /tmp/ovs-$$);
         let filename = format!("skatelet-{}-unknown-linux-{}.tar.gz", dl_arch, dl_gnu);
 
 
+        // get latest release binaries
         let cmd = "curl -s https://api.github.com/repos/skateco/skate/releases/latest \
 | grep \"browser_download_url.*tar.gz\" \
 | cut -d : -f 2,3 \
@@ -181,11 +182,12 @@ echo ovs=$(cat /tmp/ovs-$$);
 ";
 
 
-        let result = execute(self, cmd).await?;
+        let result = self.execute(cmd).await?;
         // find filename withing result.stdout
         let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
 
-        let result = execute(self, format!("cd /tmp && wget {} && tar -xvf {} && sudo chown root:root skatelet && sudo mv skatelet /usr/local/bin", url, filename).as_str()).await?;
+        let cmd = format!("cd /tmp && wget {} && tar -xvf {} && sudo chown root:root skatelet && sudo mv skatelet /usr/local/bin", url, filename);
+        let _ = self.execute(&cmd).await?;
 
 
         Ok(())
@@ -222,6 +224,19 @@ echo ovs=$(cat /tmp/ovs-$$);
                 Err(anyhow!("failed to remove resource: exit code {}, {}", result.exit_status, message).into())
             }
         }
+    }
+
+    pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+        cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l));
+        let result = self.client.execute(cmd).await.
+            map_err(|e| anyhow!("{} failed", cmd).context(e))?;
+        if result.exit_status > 0 {
+            return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
+        }
+        if result.stdout.len() > 0 {
+            result.stdout.lines().for_each(|l| println!("{} |   {}", self.node_name, l));
+        }
+        Ok(result.stdout)
     }
 }
 
@@ -336,15 +351,3 @@ impl SshClients {
     }
 }
 
-pub async fn execute(conn: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
-    println!("{} >>> {}", conn.node_name, cmd);
-    let result = conn.client.execute(cmd).await.
-        map_err(|e| anyhow!("{} failed", cmd).context(e))?;
-    if result.exit_status > 0 {
-        return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
-    }
-    if result.stdout.len() > 0 {
-        println!("{}", result.stdout);
-    }
-    Ok(result.stdout)
-}

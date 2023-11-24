@@ -169,7 +169,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     // seems to be missing when using kube play
     let cmd = "sudo podman pull  k8s.gcr.io/pause:3.5";
-    ssh::execute(&conn, cmd).await?;
+    conn.execute(cmd).await?;
 
     setup_networking(&conn, &cluster, &node, &info, &args).await?;
 
@@ -183,13 +183,13 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
 async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, info: &NodeSystemInfo, args: &CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
     let cmd = format!("sudo sed -i 's&#default_subnet.*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-    ssh::execute(conn, &cmd).await?;
+    conn.execute(&cmd).await?;
 
     let cmd = "sudo ip link del cni-podman0|| exit 0";
-    ssh::execute(conn, &cmd).await?;
+    conn.execute(&cmd).await?;
 
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
     // only allocate from ip 10 onwards, reserves 1-9 for other stuff
@@ -199,26 +199,26 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     let cni = general_purpose::STANDARD.encode(cni.as_bytes());
 
     let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    ssh::execute(conn, &cmd).await?;
+    conn.execute(&cmd).await?;
 
 
     // check it's ok
 
     let cmd = "sudo podman run --rm -it busybox echo 1";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
 
     let cmd = "sudo mkdir -p /etc/skate";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
     let cmd = "sudo bash -c \"[ -f /etc/rc.local ] || touch /etc/rc.local && sudo chmod +x /etc/rc.local\"";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
     let cmd = "sudo bash -c \"grep -q '^/etc/skate/routes.sh' /etc/rc.local ||  echo '/etc/skate/routes.sh' >> /etc/rc.local\"";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
 
     let (conns, errs) = cluster_connections(cluster_conf).await;
@@ -232,7 +232,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     }
 
     let cmd = "sudo podman pull ghcr.io/skateco/coredns";
-    ssh::execute(conn, cmd).await?;
+    conn.execute(cmd).await?;
 
 
     let coredns_yaml_path = "/tmp/skate-coredns.yaml";
@@ -248,13 +248,13 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
 
     // // install dnsmasq
     // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
-    // execute(conn, cmd).await?;
+    // conn.execute( cmd).await?;
     // // disable systemd-resolved if exists
     // let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    // execute(conn, cmd).await?;
+    // conn.execute( cmd).await?;
     // // changed /etc/resolv.conf to be 127.0.0.1
     // let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
-    // execute(conn, cmd).await?;
+    // conn.execute( cmd).await?;
 
 
 //     let dnsmasq_conf = general_purpose::STANDARD.encode("
@@ -267,15 +267,15 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
 // addn-hosts=/etc/skate/addnhosts
 // ".as_bytes());
 //     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /etc/dnsmasq.d/skate'", dnsmasq_conf);
-//     execute(conn, &cmd).await?;
+//     conn.execute( &cmd).await?;
 //
 //     let cmd = "sudo systemctl restart dnsmasq";
-//     execute(conn, cmd).await?;
+//     conn.execute( cmd).await?;
 
     // change /etc/containers/containers.conf to have
     // dns_servers = ["<gateway>"]
     // let cmd = format!("sudo sed -i 's&#dns_servers.*&dns_servers = [\"{}\"]&' /etc/containers/containers.conf", gateway);
-    // execute(conn, &cmd).await?;
+    // conn.execute( &cmd).await?;
     // wooop
 
     Ok(())
@@ -302,7 +302,7 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
     let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
-    match ssh::execute(conn, &cmd).await {
+    match conn.execute(&cmd).await {
         Ok(msg) => Ok(()),
         Err(e) => Err(e)
     }
