@@ -10,13 +10,11 @@ use base64::engine::general_purpose;
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Os, Platform};
+use crate::skate::{Distribution, exec_cmd, Os, Platform};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
-use crate::util::hash_string;
-
 
 pub struct SshClient {
     pub node_name: String,
@@ -149,10 +147,9 @@ echo ovs=$(cat /tmp/ovs-$$);
                     sys_info.platform.arch = arch.clone();
                     sys_info
                 })
-            },
+            }
             None => {}
         }
-
 
 
         if host_info.skatelet_version.is_some() && host_info.system_info.is_none() {
@@ -162,17 +159,39 @@ echo ovs=$(cat /tmp/ovs-$$);
         Ok(host_info)
     }
 
-    pub async fn install_skatelet(&self, _platform: Platform) -> Result<(), Box<dyn Error>> {
+    pub async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
 
         // TODO - download from bucket etc
 
-        let _ = self.client.execute(format!("sudo mv /tmp/skatelet /usr/local/bin/skatelet && sudo chmod +x /usr/local/bin/skatelet")
-            .as_str()).await.expect("failed to fetch binary");
+        let (dl_arch, dl_gnu) = match platform.arch.as_str() {
+            "amd64" => ("x86_64", "gnu"),
+            "armv6l" => ("arm", "gnueabi"),
+            "armv7l" => ("arm7", "gnueabi"),
+            "arm64" => ("aarch64", "gnu"),
+            _ => (platform.arch.as_str(), "gnu")
+        };
+
+        let filename = format!("skatelet-{}-unknown-linux-{}.tar.gz", dl_arch, dl_gnu);
+
+
+        let cmd = "curl -s https://api.github.com/repos/skateco/skate/releases/latest \
+| grep \"browser_download_url.*tar.gz\" \
+| cut -d : -f 2,3 \
+| tr -d \\\" | tr -d \"[:blank:]\"
+";
+
+
+        let result = execute(self, cmd).await?;
+        // find filename withing result.stdout
+        let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
+
+        let result = execute(self, format!("cd /tmp && wget {} && tar -xvf {} && sudo chown root:root skatelet && sudo mv skatelet /usr/local/bin", url, filename).as_str()).await?;
+
 
         Ok(())
     }
     pub async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
-        let base64_manifest= general_purpose::STANDARD.encode(manifest);
+        let base64_manifest = general_purpose::STANDARD.encode(manifest);
         let result = self.client.execute(&format!("echo \"{}\"| base64 --decode|sudo skatelet apply -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
@@ -189,8 +208,8 @@ echo ovs=$(cat /tmp/ovs-$$);
     }
 
     pub async fn remove_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
-        let base64_manifest= general_purpose::STANDARD.encode(manifest);
-    let result = self.client.execute(&format!("echo \"{}\" |base64  --decode|sudo skatelet remove -", base64_manifest)).await?;
+        let base64_manifest = general_purpose::STANDARD.encode(manifest);
+        let result = self.client.execute(&format!("echo \"{}\" |base64  --decode|sudo skatelet remove -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
                 Ok((result.stdout, result.stderr))
@@ -315,4 +334,17 @@ impl SshClients {
 
         fut.collect().await
     }
+}
+
+pub async fn execute(conn: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+    println!("{} >>> {}", conn.node_name, cmd);
+    let result = conn.client.execute(cmd).await.
+        map_err(|e| anyhow!("{} failed", cmd).context(e))?;
+    if result.exit_status > 0 {
+        return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
+    }
+    if result.stdout.len() > 0 {
+        println!("{}", result.stdout);
+    }
+    Ok(result.stdout)
 }

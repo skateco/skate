@@ -67,6 +67,7 @@ pub enum PodmanPodStatus {
     Stopped,
     Exited,
     Dead,
+    Degraded,
 }
 
 impl PodmanPodStatus {
@@ -76,6 +77,7 @@ impl PodmanPodStatus {
             PodmanPodStatus::Stopped => "Succeeded",
             PodmanPodStatus::Exited => "Succeeded",
             PodmanPodStatus::Dead => "Failed",
+            PodmanPodStatus::Degraded => "Running",
             PodmanPodStatus::Created => "Pending",
         }.to_string()
     }
