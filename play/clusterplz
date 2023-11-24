@@ -33,7 +33,7 @@ users:
     - $(cat ~/.ssh/id_rsa.pub)
 EOF
         for f in $(seq $nodes); do
-            multipass launch -c 1 -m 1G -d 4G -n node-$f --cloud-init /tmp/cluster-plz.yaml
+            multipass launch -c 1 -m 1G -d 4G -n node-$f --cloud-init /tmp/cluster-plz.yaml --mount ../:/home/ubuntu/skate
         done
 
         for f in $(seq $nodes); do

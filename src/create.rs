@@ -100,6 +100,10 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
+
+    config.clusters[cluster_index] = cluster.clone();
+    config.persist(Some(args.config.skateconfig.clone()))?;
+
     let conn = node_connection(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
     let info = conn.get_node_system_info().await?;
 
@@ -168,10 +172,6 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     setup_networking(&conn, &cluster, &node, &info, &args).await?;
 
-    state.reconcile_node(&info)?;
-
-
-    config.clusters[cluster_index] = cluster;
 
     config.persist(Some(args.config.skateconfig))?;
 
@@ -181,13 +181,15 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 }
 
 async fn execute(conn: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
-    println!(">>> {}", cmd);
+    println!("{} >>> {}", conn.node_name, cmd);
     let result = conn.client.execute(cmd).await.
         map_err(|e| anyhow!("{} failed", cmd).context(e))?;
     if result.exit_status > 0 {
         return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
     }
-    println!("{}", result.stdout);
+    if result.stdout.len() > 0 {
+        println!("{}", result.stdout);
+    }
     Ok(result.stdout)
 }
 
@@ -202,46 +204,9 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     execute(conn, &cmd).await?;
 
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
-    let cni = "
-{
-  \"cniVersion\": \"0.4.0\",
-  \"name\": \"podman\",
-  \"plugins\": [
-    {
-      \"type\": \"bridge\",
-      \"bridge\": \"cni-podman0\",
-      \"isGateway\": true,
-      \"ipMasq\": true,
-      \"hairpinMode\": true,
-      \"ipam\": {
-        \"type\": \"host-local\",
-        \"routes\": [
-                { \"dst\": \"0.0.0.0/0\" }
-        ],
-        \"ranges\": [
-          [
-            {
-              \"subnet\": \"%%subnet%%\",
-              \"gateway\": \"%%gateway%%\"
-            }
-          ]
-        ]
-      }
-    },
-    {
-      \"type\": \"portmap\",
-      \"capabilities\": {
-        \"portMappings\": true
-      }
-    },
-    {
-      \"type\": \"firewall\"
-    },
-    {
-      \"type\": \"tuning\"
-    }
-  ]
-}\n".replace("%%subnet%%", &node.subnet_cidr).replace("%%gateway%%", &gateway);
+    // only allocate from ip 10 onwards, reserves 1-9 for other stuff
+    let cni = include_str!("./resources/podman-network.json").replace("%%subnet%%", &node.subnet_cidr)
+        .replace("%%gateway%%", &gateway);
 
     let cni = general_purpose::STANDARD.encode(cni.as_bytes());
 
@@ -278,13 +243,14 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         _ => {}
     }
 
+    let cmd = "sudo podman pull ghcr.io/skateco/coredns";
+    execute(conn, cmd).await?;
+
 
     let coredns_yaml_path = "/tmp/skate-coredns.yaml";
     let mut file = File::create(coredns_yaml_path)?;
     file.write_all(coredns_manifest_bytes)?;
 
-    let cmd = "sudo podman pull ghcr.io/skateco/coredns";
-    execute(conn, cmd).await?;
 
     apply(ApplyArgs {
         filename: vec![coredns_yaml_path.to_string()],
@@ -341,7 +307,10 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
     }
 
     route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
+    route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
+    route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
     route_file = route_file + "sysctl -p\n";
+
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
     let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);

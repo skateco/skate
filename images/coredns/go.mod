@@ -4,6 +4,7 @@ go 1.21.1
 
 require (
 	github.com/coredns/coredns v1.11.1
+	github.com/networkservicemesh/fanout v1.9.1
 	github.com/openshift/coredns-mdns v0.0.0-20210625150643-8c0b6474833f
 )
 

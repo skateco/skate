@@ -17,21 +17,26 @@ spec:
     spec:
       hostNetwork: true
       volumes:
-      - name: dbus
+      - name: skate
         hostPath:
-          path: /var/run/dbus
-          type: Directory
+          path: /etc/skate
       containers:
       - name: coredns
         image: ghcr.io/skateco/coredns
         volumeMounts:
-        - mountPath: /var/run/dbus
-          name: dbus
+        - mountPath: /etc/skate
+          name: skate
         env:
         - name: CORE_FILE
           value: |
-            cluster:53 {
-              mdns cluster
+            cluster.skate:53 {
+                hosts /run/containers/cni/dnsname/podman/addnhosts {
+                    fallthrough
+                }
+            
+                errors {
+                  consolidate 5m ".*" warning
+                }
             }
             .:53 {
                 forward . 8.8.8.8
