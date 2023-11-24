@@ -15,7 +15,6 @@ spec:
       labels:
         app: coredns
     spec:
-      hostNetwork: true
       volumes:
       - name: skate
         hostPath:

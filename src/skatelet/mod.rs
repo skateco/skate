@@ -2,6 +2,7 @@ mod skatelet;
 mod apply;
 
 mod system;
+mod cni;
 
 pub use skatelet::skatelet;
 pub use system::SystemInfo;

@@ -1,7 +1,9 @@
+use std::env::var;
 use std::error::Error;
 use clap::{Parser, Subcommand};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, remove, RemoveArgs};
+use crate::skatelet::cni::cni;
 use crate::skatelet::system::{system, SystemArgs};
 
 #[derive(Debug, Parser)]
@@ -16,10 +18,16 @@ struct Cli {
 enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
-    Remove(RemoveArgs)
+    Remove(RemoveArgs),
 }
 
 pub async fn skatelet() -> Result<(), Box<dyn Error>> {
+    // we're being called as a CNI plugin
+    match var("CNI_COMMAND") {
+        Ok(_) => cni(),
+        _ => {}
+    }
+
     let args = Cli::parse();
     match args.command {
         Commands::Apply(args) => apply::apply(args),
