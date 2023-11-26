@@ -19,20 +19,19 @@ enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
     Remove(RemoveArgs),
+    Cni,
 }
 
 pub async fn skatelet() -> Result<(), Box<dyn Error>> {
-    // we're being called as a CNI plugin
-    match var("CNI_COMMAND") {
-        Ok(_) => cni(),
-        _ => {}
-    }
-
     let args = Cli::parse();
     match args.command {
         Commands::Apply(args) => apply::apply(args),
         Commands::System(args) => system(args).await,
         Commands::Remove(args) => remove(args),
+        Commands::Cni => {
+            cni();
+            Ok(())
+        },
         // _ => Ok(())
     }
 }

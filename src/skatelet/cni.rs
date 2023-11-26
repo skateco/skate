@@ -30,7 +30,7 @@ fn lock<T>(ifname: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T
 pub fn cni() {
     match Cni::load() {
         Cni::Add { container_id, ifname, netns, path, config } => {
-            // touch lock file at DEFAULT_CONF_PATH/<interface>/lock
+            // lock file at DEFAULT_CONF_PATH/<interface>/lock
 
             match lock(&ifname, &|| {
                 // read file at DEFAULT_CONF_PATH/<interface>/addnhosts
