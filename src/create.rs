@@ -246,6 +246,9 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         config: args.config.clone(),
     }).await?;
 
+    let cmd = "echo \"#!/bin/sh\nexec skatelet cni\n\" | sudo base64 --decode > /usr/lib/cni/skatelet";
+    conn.execute(cmd).await?;
+
     // // install dnsmasq
     // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
     // conn.execute( cmd).await?;

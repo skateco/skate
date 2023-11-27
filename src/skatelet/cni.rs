@@ -14,6 +14,7 @@ use serde_json::Value::String;
 const DEFAULT_CONF_PATH: &str = "/run/containers/cni/skatelet/";
 
 fn lock<T>(ifname: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+    info!("getting lock");
     let lock_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("lock");
     let lock_file = File::open(lock_path.clone())?;
     debug!("waiting for lock on {}", lock_path.display());
@@ -32,6 +33,7 @@ pub fn cni() {
         Cni::Add { container_id, ifname, netns, path, config } => {
             // lock file at DEFAULT_CONF_PATH/<interface>/lock
 
+            info!("add");
             match lock(&ifname, &|| {
                 // read file at DEFAULT_CONF_PATH/<interface>/addnhosts
                 let addnhosts_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("addnhosts");

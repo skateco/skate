@@ -70,6 +70,13 @@ make armv7
 make armv6
 ```
 
+### Ubuntu
+
+```shell
+# multipass image doesn't have much
+sudo apt-get install -y gcc make libssl-dev pkg-config
+```
+
 ### Features
 
 - [x] Scheduling

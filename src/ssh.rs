@@ -187,7 +187,7 @@ echo ovs=$(cat /tmp/ovs-$$);
         // find filename withing result.stdout
         let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
 
-        let cmd = format!("cd /tmp && wget {} && tar -xvf {} && sudo chown root:root skatelet && sudo mv skatelet /usr/local/bin", url, filename);
+        let cmd = format!("cd /tmp && wget {} -O - | sudo tar -xzvf - -C /usr/local/bin", url);
         let _ = self.execute(&cmd).await?;
 
 

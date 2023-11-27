@@ -33,9 +33,14 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
     - $(cat ~/.ssh/id_rsa.pub)
+packages:
+- make
+- gcc
+- libssl-dev
+- pkg-config
 EOF
         for f in $(seq $nodes); do
-            multipass launch -c 1 -m 1G -d 4G -n node-$f --cloud-init /tmp/cluster-plz.yaml --mount "${SCRIPT_DIR}/../:/home/ubuntu/skate"
+            multipass launch -c 1 -m 1G -d 7G -n node-$f --cloud-init /tmp/cluster-plz.yaml --mount "${SCRIPT_DIR}/../:/home/ubuntu/skate"
         done
 
         for f in $(seq $nodes); do

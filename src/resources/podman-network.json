@@ -36,6 +36,12 @@
     },
     {
       "type": "tuning"
+    },
+    {
+      "type": "skatelet",
+      "capabilities": {
+        "alias": true
+      }
     }
   ]
 }
