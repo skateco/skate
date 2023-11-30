@@ -201,7 +201,12 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
     conn.execute(&cmd).await?;
 
+    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
+    exec /usr/local/bin/skatelet cni
+    ");
 
+    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
+    conn.execute(&cmd).await?;
     // check it's ok
 
     let cmd = "sudo podman run --rm -it busybox echo 1";
@@ -246,8 +251,6 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         config: args.config.clone(),
     }).await?;
 
-    let cmd = "echo \"#!/bin/sh\nexec skatelet cni\n\" | sudo base64 --decode > /usr/lib/cni/skatelet";
-    conn.execute(cmd).await?;
 
     // // install dnsmasq
     // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";

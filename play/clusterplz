@@ -2,7 +2,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-oPOSITIONAL_ARGS=()
+POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -23,7 +23,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 nodes=2
-case "$POSITIONAL_ARGS" in 
+# shellcheck disable=SC2128
+case "$POSITIONAL_ARGS" in
     create)
 
         cat <<EOF > /tmp/cluster-plz.yaml

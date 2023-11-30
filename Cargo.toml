@@ -29,6 +29,6 @@ sysinfo = "0.29.10"
 chrono = "0.4.31"
 base64 = "0.21.5"
 colored = "2.0.4"
-cni-plugin = "0.2.1"
+cni-plugin = { version = "0.3.0", git = "https://github.com/skateco/cni-plugins", features = ["release-logs"] }
 fs2 = "0.4.3"
 log = "0.4.20"

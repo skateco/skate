@@ -1,22 +1,28 @@
+use std::collections::HashMap;
+use std::env::var;
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::Path;
-use cni_plugin::Cni;
+use cni_plugin::{Cni, logger};
 use cni_plugin::reply::{ErrorReply, reply, SuccessReply};
 use fs2::FileExt;
 use log::{debug, info, warn, error};
 use std::io::prelude::*;
+use anyhow::anyhow;
+use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
-use serde_json::Value::String;
+use serde_json::Value::String as JsonString;
 
-const DEFAULT_CONF_PATH: &str = "/run/containers/cni/skatelet/";
+fn conf_path() -> String {
+    var("XDG_RUNTIME_PATH").unwrap_or("/run".to_string()) + "/containers/cni/skatelet"
+}
 
-fn lock<T>(ifname: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
     info!("getting lock");
-    let lock_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("lock");
-    let lock_file = File::open(lock_path.clone())?;
+    let lock_path = Path::new(&conf_path()).join(network_name.clone()).join("lock");
+    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
     debug!("waiting for lock on {}", lock_path.display());
     lock_file.lock_exclusive()?;
     debug!("locked {}", lock_path.display());
@@ -28,51 +34,98 @@ fn lock<T>(ifname: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T
     result
 }
 
+fn ensure_paths(ifname: &str) {
+    let conf_path_str = conf_path();
+    let conf_path = Path::new(&conf_path_str);
+    let if_path = conf_path.join(ifname.clone());
+
+    fs::create_dir_all(conf_path).unwrap();
+    fs::create_dir_all(if_path).unwrap();
+}
+
+fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
+    let env_args = var("CNI_ARGS").and_then(|e| {
+        let mut hm = HashMap::new();
+        for kv in e.split(";") {
+            let mut kv = kv.split("=");
+            let k = kv.next().unwrap_or_default();
+            let v = kv.next().unwrap_or_default();
+            hm.insert(k.to_string(), JsonString(v.to_string()));
+        }
+        Ok(hm)
+    }).unwrap_or_default();
+
+    let mut new_args = config.args.clone();
+    new_args.extend(env_args);
+    new_args
+}
+
+fn prev_result_or_default(config: &NetworkConfig) -> SuccessReply {
+    info!("{:?}", var("CNI_ARGS"));
+    let prev = extract_prev_result(config.prev_result.clone());
+    prev.or(Some(SuccessReply {
+        cni_version: config.cni_version.clone(),
+        interfaces: Default::default(),
+        ips: Default::default(),
+        routes: Default::default(),
+        dns: Default::default(),
+        specific: Default::default(),
+    })).unwrap()
+}
+
+fn extract_prev_result(prev_value: Option<Value>) -> Option<SuccessReply> {
+    prev_value.and_then(|prev_value| {
+        let prev_result: Result<SuccessReply, _> = serde_json::from_value(prev_value);
+        match prev_result {
+            Ok(prev_result) => {
+                Some(prev_result)
+            }
+            Err(e) => {
+                error!("unable to parse prev_result: {}", e);
+                None
+            }
+        }
+    })
+}
+
 pub fn cni() {
+    logger::install("skatelet.log");
+
     match Cni::load() {
         Cni::Add { container_id, ifname, netns, path, config } => {
-            // lock file at DEFAULT_CONF_PATH/<interface>/lock
+            ensure_paths(&config.name);
+            info!("{:?}", config);
 
-            info!("add");
-            match lock(&ifname, &|| {
-                // read file at DEFAULT_CONF_PATH/<interface>/addnhosts
-                let addnhosts_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("addnhosts");
+            let mut result = prev_result_or_default(&config);
+            let args = extract_args(&config);
+
+            match lock(&config.name, &|| {
+
+                // read file at conf_path()/<interface>/addnhosts
+                let addnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts");
                 // create or open
                 let mut addhosts_file = OpenOptions::new()
                     .create(true)
                     .write(true)
                     .append(true)
-                    .open(addnhosts_path)
-                    .unwrap();
+                    .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
 
                 let mut names = config.runtime.as_ref().and_then(|r| Some(r.aliases.clone())).unwrap_or_default();
-                let pod_name = config.args.get("podname").unwrap_or(&String("".to_string())).to_string();
-                names.push(pod_name);
 
-                let prev_result: SuccessReply = serde_json::from_value((*config.prev_result.as_ref().unwrap_or(&Value::Null)).clone())?;
+                match args.get("K8S_POD_NAME") {
+                    Some(JsonString(pod_name)) => names.push(pod_name.clone()),
+                    _ => {}
+                }
 
-                if prev_result.ips.len() == 0 {
+                if result.ips.len() == 0 {
                     return Err("no ips in prev_result".into());
                 }
 
-                debug!("{:?}", config.args);
-                // TODO read namespace
-
                 for name in names {
-                    writeln!(addhosts_file, "{} {}", prev_result.ips[0].address.to_string(), name).unwrap();
+                    writeln!(addhosts_file, "{} {}", result.ips[0].address.ip().to_string(), name).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
                 }
                 Ok(())
             }) {
-                Ok(_) => {
-                    reply(SuccessReply {
-                        cni_version: config.cni_version,
-                        interfaces: Default::default(),
-                        ips: Default::default(),
-                        routes: Default::default(),
-                        dns: Default::default(),
-                        specific: Default::default(),
-                    });
-                }
                 Err(e) => {
                     reply(ErrorReply {
                         cni_version: config.cni_version,
@@ -81,13 +134,19 @@ pub fn cni() {
                         details: "".to_string(),
                     })
                 }
+                Ok(()) => {}
             }
+            reply(result);
         }
         Cni::Del { container_id, ifname, netns, path, config } => {
-            match lock(&ifname, &|| {
-                // read file at DEFAULT_CONF_PATH/<interface>/addnhosts
-                let addnhosts_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("addnhosts");
-                let newaddnhosts_path = Path::new(DEFAULT_CONF_PATH).join(ifname.clone()).join("addnhosts-new");
+            ensure_paths(&config.name);
+            match lock(&config.name, &|| {
+                let mut result = prev_result_or_default(&config);
+                let args = extract_args(&config);
+
+                let addnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts");
+                let newaddnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts-new");
+
                 // scope to make sure files closed after
                 {
                     // create or open
@@ -107,13 +166,12 @@ pub fn cni() {
                     let reader = BufReader::new(&addhosts_file);
                     let mut writer = BufWriter::new(&newaddhosts_file);
 
-                    let prev_result: SuccessReply = serde_json::from_value((*config.prev_result.as_ref().unwrap_or(&Value::Null)).clone())?;
 
-                    if prev_result.ips.len() == 0 {
+                    if result.ips.len() == 0 {
                         return Err("no ips in prev_result".into());
                     }
 
-                    let ip = prev_result.ips[0].address.to_string();
+                    let ip = result.ips[0].address.ip().to_string();
 
                     for (index, line) in reader.lines().enumerate() {
                         let line = line.as_ref().unwrap();
@@ -122,19 +180,9 @@ pub fn cni() {
                         }
                     }
                 }
-                fs::rename(&newaddnhosts_path, &addnhosts_path).unwrap();
+                fs::rename(&newaddnhosts_path, &addnhosts_path)?;
                 Ok(())
             }) {
-                Ok(_) => {
-                    reply(SuccessReply {
-                        cni_version: config.cni_version,
-                        interfaces: Default::default(),
-                        ips: Default::default(),
-                        routes: Default::default(),
-                        dns: Default::default(),
-                        specific: Default::default(),
-                    });
-                }
                 Err(e) => {
                     reply(ErrorReply {
                         cni_version: config.cni_version,
@@ -143,10 +191,14 @@ pub fn cni() {
                         details: "".to_string(),
                     })
                 }
+                Ok(()) => {}
             }
+            reply(prev_result_or_default(&config))
         }
         Cni::Check { container_id, ifname, netns, path, config } => {
-            // check addnhosts file exists
+            // eprintln!("check");
+            // ensure_paths(&ifname);
+            // // check addnhosts file exists
             reply(SuccessReply {
                 cni_version: config.cni_version,
                 interfaces: Default::default(),
@@ -156,6 +208,8 @@ pub fn cni() {
                 specific: Default::default(),
             });
         }
-        Cni::Version(_) => unreachable!()
+        Cni::Version(_) => {
+            eprintln!("version");
+        }
     }
 }
