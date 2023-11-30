@@ -202,7 +202,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     conn.execute(&cmd).await?;
 
     let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet cni
+    exec /usr/local/bin/skatelet cni < /dev/stdin
     ");
 
     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);

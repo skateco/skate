@@ -363,9 +363,8 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 
 [[package]]
 name = "cni-plugin"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c6fba2d1478ddc5ecc7f258ad010cf19b37c12f143d9497bd02ce4b6bb6b57"
+version = "0.3.0"
+source = "git+https://github.com/skateco/cni-plugins#853464742c21c20402ae75003a35248fe86a15cf"
 dependencies = [
  "ipnetwork",
  "log",
