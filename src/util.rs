@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use deunicode::deunicode_char;
 use itertools::Itertools;
@@ -112,6 +113,29 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, 
     let mut hasher = DefaultHasher::new();
     serialized.hash(&mut hasher);
     format!("{:x}", hasher.finish())
+}
+
+pub struct NamespacedName {
+    pub name: String,
+    pub namespace: String,
+}
+
+impl Display for NamespacedName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(format!("{}.{}", self.name, self.namespace).as_str())
+    }
+}
+
+impl NamespacedName {
+    pub fn new(name: String, namespace: String) -> Self {
+        NamespacedName { name, namespace }
+    }
+}
+
+// returns name, namespace
+pub fn metadata_name(obj: &impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta>) -> NamespacedName
+{
+    NamespacedName::new(obj.metadata().name.clone().unwrap_or_default(), obj.metadata().namespace.clone().unwrap_or_default())
 }
 
 pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String

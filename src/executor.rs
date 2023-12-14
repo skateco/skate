@@ -5,7 +5,7 @@ use std::process;
 use std::process::Stdio;
 use anyhow::anyhow;
 use crate::skate::SupportedResources;
-use crate::util::hash_string;
+use crate::util::{hash_string, metadata_name};
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;
@@ -28,10 +28,21 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
 
+
+        let extra_args = match &object {
+            SupportedResources::Pod(p) => {
+                let alias = format!("bridge:alias={}", &metadata_name(p));
+                vec!["--network".to_string(), alias]
+            }
+            SupportedResources::Deployment(_) => vec![],
+            SupportedResources::DaemonSet(_) => vec![],
+        };
+
+
         let file_path = DefaultExecutor::write_to_file(&serde_yaml::to_string(&object)?)?;
 
         let output = process::Command::new("podman")
-            .args(["play", "kube", &file_path])
+            .args([vec!["play", "kube", &file_path], extra_args.iter().map(|s| s as &str).collect()].concat())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
@@ -40,6 +51,8 @@ impl Executor for DefaultExecutor {
         if !output.status.success() {
             return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
+
+        println!("{}", String::from_utf8_lossy(&output.stdout).to_string());
         Ok(())
     }
 
@@ -51,7 +64,7 @@ impl Executor for DefaultExecutor {
                  p.metadata.namespace.unwrap_or("".to_string()))
             }
             SupportedResources::Deployment(_d) => {
-                return Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
+                return Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into());
             }
             SupportedResources::DaemonSet(_) => {
                 todo!("remove daemonset")

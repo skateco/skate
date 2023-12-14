@@ -19,7 +19,7 @@ use std::any::Any;
 use std::collections::{BTreeMap, HashMap};
 use std::env::var;
 use std::fmt::{Display, Formatter};
-use std::fs::{create_dir, File};
+use std::fs::{create_dir, File, metadata};
 use std::io::Read;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -36,7 +36,7 @@ use crate::describe::{DescribeArgs, describe};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
-use crate::util::{slugify, TARGET};
+use crate::util::{metadata_name, NamespacedName, slugify, TARGET};
 
 
 #[derive(Debug, Parser)]
@@ -91,17 +91,15 @@ pub enum SupportedResources {
     DaemonSet(DaemonSet),
 }
 
-impl SupportedResources {
-    pub fn name(&self) -> String {
-        match self {
-            SupportedResources::Pod(p) => p.metadata.name.clone().unwrap_or("".to_string()),
-            SupportedResources::Deployment(d) => d.metadata.name.clone().unwrap_or("".to_string()),
-            SupportedResources::DaemonSet(d) => d.metadata.name.clone().unwrap_or("".to_string()),
-        }
-    }
-}
 
 impl SupportedResources {
+    pub fn name(&self) -> NamespacedName {
+        match self {
+            SupportedResources::Pod(p) => metadata_name(p),
+            SupportedResources::Deployment(d) => metadata_name(d),
+            SupportedResources::DaemonSet(d) => metadata_name(d),
+        }
+    }
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
@@ -272,7 +270,6 @@ pub struct Platform {
 
 impl Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-
         f.write_str(&format!("arch: {}, os: {}, distribution: {}", self.arch, self.os, self.distribution))
     }
 }
@@ -306,7 +303,7 @@ pub enum Distribution {
     Unknown,
     Debian,
     Raspbian,
-    Ubuntu
+    Ubuntu,
 }
 
 impl From<String> for Distribution {

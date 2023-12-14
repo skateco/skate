@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env::var;
 use std::error::Error;
 use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, read_to_string};
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::Path;
 use cni_plugin::{Cni, logger};
@@ -14,13 +14,14 @@ use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
+use crate::skate::exec_cmd;
+use crate::skatelet::skatelet::VAR_PATH;
 
 fn conf_path() -> String {
-    var("XDG_RUNTIME_PATH").unwrap_or("/run".to_string()) + "/containers/cni/skatelet"
+    "/var/lib/skatelet/cni".to_string()
 }
 
 fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
-    info!("getting lock");
     let lock_path = Path::new(&conf_path()).join(network_name.clone()).join("lock");
     let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
     debug!("waiting for lock on {}", lock_path.display());
@@ -34,13 +35,13 @@ fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Re
     result
 }
 
-fn ensure_paths(ifname: &str) {
+fn ensure_paths(net_name: &str) {
     let conf_path_str = conf_path();
     let conf_path = Path::new(&conf_path_str);
-    let if_path = conf_path.join(ifname.clone());
+    let net_path = conf_path.join(net_name.clone());
 
     fs::create_dir_all(conf_path).unwrap();
-    fs::create_dir_all(if_path).unwrap();
+    fs::create_dir_all(net_path).unwrap();
 }
 
 fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
@@ -117,12 +118,15 @@ pub fn cni() {
                     _ => {}
                 }
 
+
                 if result.ips.len() == 0 {
                     return Err("no ips in prev_result".into());
                 }
 
+                let ip_str = result.ips[0].address.ip().to_string();
+
                 for name in names {
-                    writeln!(addhosts_file, "{} {}", result.ips[0].address.ip().to_string(), name).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
+                    writeln!(addhosts_file, "{} {}", ip_str, name).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
                 }
                 Ok(())
             }) {
@@ -156,7 +160,7 @@ pub fn cni() {
                         .open(addnhosts_path.clone())
                         .unwrap();
 
-                    let mut newaddhosts_file = OpenOptions::new()
+                    let newaddhosts_file = OpenOptions::new()
                         .create(true)
                         .write(true)
                         .truncate(true)
@@ -196,17 +200,10 @@ pub fn cni() {
             reply(prev_result_or_default(&config))
         }
         Cni::Check { container_id, ifname, netns, path, config } => {
-            // eprintln!("check");
-            // ensure_paths(&ifname);
-            // // check addnhosts file exists
-            reply(SuccessReply {
-                cni_version: config.cni_version,
-                interfaces: Default::default(),
-                ips: Default::default(),
-                routes: Default::default(),
-                dns: Default::default(),
-                specific: Default::default(),
-            });
+            ensure_paths(&config.name);
+
+            let prev_result = prev_result_or_default(&config);
+            reply(prev_result);
         }
         Cni::Version(_) => {
             eprintln!("version");
