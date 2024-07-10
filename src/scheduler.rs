@@ -1,4 +1,4 @@
-use std::any::Any;
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -14,7 +14,7 @@ use k8s_openapi::Metadata;
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodStatus;
 use crate::ssh::{SshClients};
-use crate::state::state::{ClusterState, NodeState, NodeStatus};
+use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI};
 
 
@@ -110,8 +110,8 @@ impl DefaultScheduler {
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut actions = vec!();
 
-        let name = ds.metadata.name.clone().unwrap_or("".to_string());
-        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
+        let _name = ds.metadata.name.clone().unwrap_or("".to_string());
+        let _ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
 
         for node in state.nodes.iter() {
             let node_name = node.node_name.clone();
@@ -364,7 +364,7 @@ impl DefaultScheduler {
                         }
                         Err(err) => {
                             action.error = Some(err.to_string());
-                            println!("{} failed to created {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
+                            println!("{} failed to create {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
                             result.push(action.clone());
                         }
                     }

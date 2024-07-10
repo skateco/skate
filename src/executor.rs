@@ -5,7 +5,7 @@ use std::process;
 use std::process::Stdio;
 use anyhow::anyhow;
 use crate::skate::SupportedResources;
-use crate::util::{hash_string, metadata_name};
+use crate::util::{hash_string};
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;
@@ -29,30 +29,22 @@ impl Executor for DefaultExecutor {
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
 
 
-        let extra_args = match &object {
-            SupportedResources::Pod(p) => {
-                let alias = format!("bridge:alias={}", &metadata_name(p));
-                vec!["--network".to_string(), alias]
-            }
-            SupportedResources::Deployment(_) => vec![],
-            SupportedResources::DaemonSet(_) => vec![],
-        };
-
-
         let file_path = DefaultExecutor::write_to_file(&serde_yaml::to_string(&object)?)?;
 
+        let args = ["play", "kube", &file_path, "--start"];
         let output = process::Command::new("podman")
-            .args([vec!["play", "kube", &file_path], extra_args.iter().map(|s| s as &str).collect()].concat())
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
+            .expect(&format!("failed to apply resource via `podman {}`", args.join(" ")));
 
-            .expect("failed to apply resource");
         if !output.status.success() {
-            return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+            return Err(anyhow!("`podman {}` exited with code {}, stderr: {}", args.join(" "), output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
 
         println!("{}", String::from_utf8_lossy(&output.stdout).to_string());
+
         Ok(())
     }
 

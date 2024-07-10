@@ -1,8 +1,13 @@
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
+use std::fs::{File, OpenOptions};
+use std::path::{Path, PathBuf};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use crate::skatelet::skatelet::VAR_PATH;
 
 #[derive(Debug, Args)]
 pub struct HookArgs {
@@ -31,20 +36,55 @@ struct config {
     annotations: HashMap<String, String>,
 }
 
+fn lock<T>(lock_path: &PathBuf, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file {}: {}",lock_path.to_string_lossy(), e))?;
+    lock_file.lock_exclusive()?;
+    let result = cb();
+    lock_file.unlock()?;
+    result
+}
+
 fn pre_start() -> Result<(), Box<dyn Error>> {
-    // let config_file = File::open("./config.json").map_err(|e| anyhow!("failed to open config.json: {}", e))?;
-    // let conf: config = serde_json::from_reader(config_file).map_err(|e| anyhow!("failed to read config.json: {}", e))?;
-    // let ns = conf.annotations.get("skate.io/namespace");
-    //
-    // if ns.is_none() {
-    //     return Ok(());
-    // }
-    //
-    // let ns = ns.unwrap();
-    //
-    // let cwd = env::current_dir().map_err(|e| anyhow!("failed to get cwd: {}", e))?;
-    // let container_id = cwd.parent().unwrap().file_name().unwrap().to_str().unwrap();
-    //
+    let config_file = File::open("./config.json").map_err(|e| anyhow!("failed to open config.json: {}", e))?;
+    let conf: config = serde_json::from_reader(config_file).map_err(|e| anyhow!("failed to read config.json: {}", e))?;
+    let ns = conf.annotations.get("skate.io/namespace");
+
+    if ns.is_none() {
+        return Ok(());
+    }
+
+    let _ns = ns.unwrap();
+
+
+    let cwd = env::current_dir().map_err(|e| anyhow!("failed to get cwd: {}", e))?;
+    let _container_id = cwd.parent().unwrap().file_name().unwrap().to_str().unwrap();
+
+    let dns_path = format!("{}/dns", VAR_PATH);
+
+    lock(&Path::new(&dns_path).join("lock"), &|| {
+        let addnhosts_path = Path::new(&dns_path).join("addnhosts");
+        // create or open
+        let _addhosts_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
+
+        let _names: Vec<String> = vec![];
+
+
+        // if result.ips.len() == 0 {
+        //     return Err("no ips in prev_result".into());
+        // }
+        //
+        // let ip_str = result.ips[0].address.ip().to_string();
+        //
+        // for name in names {
+        //     writeln!(addhosts_file, "{} {}", ip_str, name).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
+        // }
+        Ok(())
+    })?;
+
     // // write to /var/lib/skatelet/pods/<id>/ns/<ns>
     // let dir = format!("{}/containers/{}", VAR_PATH, container_id);
     // create_dir_all(dir.clone()).map_err(|e| anyhow!("failed to create container dir: {}", e))?;

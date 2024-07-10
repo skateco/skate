@@ -11,7 +11,7 @@ use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
 use strum_macros::Display;
 use crate::config::{cache_dir, Config};
-use crate::get::GetCommands::Node;
+
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
 use crate::ssh::NodeSystemInfo;
@@ -145,10 +145,10 @@ impl ClusterState {
     }
 
     pub fn reconcile_node(&mut self, node: &NodeSystemInfo) -> Result<ReconciledResult, Box<dyn Error>> {
-        let mut pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
+        let pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
 
         let result = match pos {
-            Some((p, obj)) => {
+            Some((p, _obj)) => {
                 self.nodes[p] = (*node).clone().into();
                 ReconciledResult {
                     removed: 0,

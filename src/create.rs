@@ -8,15 +8,16 @@ use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use semver::{Version, VersionReq};
+use serde_json::to_string;
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::skate::{ConfigFileArgs, Distribution, Os};
-use crate::ssh;
+
 use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
-const coredns_manifest_bytes: &[u8] = include_bytes!("../manifests/coredns.yaml");
+const COREDNS_MANIFEST: &str = include_str!("../manifests/coredns.yaml");
 
 #[derive(Debug, Args)]
 pub struct CreateArgs {
@@ -74,11 +75,11 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
     let mut cluster = (*cluster).clone();
 
-    let mut state = ClusterState::load(cluster.name.as_str())?;
+    let state = ClusterState::load(cluster.name.as_str())?;
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
-    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p, n)| p);
+    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p, _n)| p);
 
     // will clobber
     // TODO - ask
@@ -168,7 +169,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     }
 
     // seems to be missing when using kube play
-    let cmd = "sudo podman pull  k8s.gcr.io/pause:3.5";
+    let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
     conn.execute(cmd).await?;
 
     setup_networking(&conn, &cluster, &node, &info, &args).await?;
@@ -181,11 +182,11 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, info: &NodeSystemInfo, args: &CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, _info: &NodeSystemInfo, args: &CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
     conn.execute(cmd).await?;
 
-    let cmd = format!("sudo sed -i 's&#default_subnet.*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
     conn.execute(&cmd).await?;
 
     let cmd = "sudo ip link del cni-podman0|| exit 0";
@@ -226,7 +227,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     conn.execute(cmd).await?;
 
 
-    let (conns, errs) = cluster_connections(cluster_conf).await;
+    let (conns, _errs) = cluster_connections(cluster_conf).await;
     match conns {
         Some(conns) => {
             for conn in conns.clients {
@@ -236,13 +237,40 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         _ => {}
     }
 
-    let cmd = "sudo podman pull ghcr.io/skateco/coredns";
+    let cmd = "sudo podman image exists ghcr.io/skateco/coredns || sudo podman pull ghcr.io/skateco/coredns";
     conn.execute(cmd).await?;
 
 
+    // In ubuntu 24.04 there's an issue with apparmor and podman
+    // https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2040483
+    let cmd = "sudo systemctl disable apparmor.service --now";
+    conn.execute(cmd).await?;
+    let cmd = "sudo aa-teardown";
+    _ = conn.execute(cmd).await;
+
+
+    // // install dnsmasq
+    // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
+    // conn.execute( cmd).await?;
+    // // disable systemd-resolved if exists
+    let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
+    conn.execute(cmd).await?;
+    // changed /etc/resolv.conf to be 127.0.0.1
+    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
+    conn.execute(cmd).await?;
+
+    /// COREDNS
+    /// coredns listens on port 53 and 5533
+    /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
+    /// uses fanout plugin
     let coredns_yaml_path = "/tmp/skate-coredns.yaml";
     let mut file = File::create(coredns_yaml_path)?;
-    file.write_all(coredns_manifest_bytes)?;
+    // replace forward list in coredns config with that of other hosts
+    let fanout_list = cluster_conf.nodes.iter().filter(|n| n.name != node.name).map(|n| n.host.clone() + ":5553").join(" ");
+
+    let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
+
+    file.write_all(coredns_yaml.as_bytes())?;
 
 
     apply(ApplyArgs {
@@ -250,17 +278,6 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
         grace_period: 0,
         config: args.config.clone(),
     }).await?;
-
-
-    // // install dnsmasq
-    // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
-    // conn.execute( cmd).await?;
-    // // disable systemd-resolved if exists
-    // let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    // conn.execute( cmd).await?;
-    // // changed /etc/resolv.conf to be 127.0.0.1
-    // let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
-    // conn.execute( cmd).await?;
 
 
 //     let dnsmasq_conf = general_purpose::STANDARD.encode("
@@ -288,6 +305,9 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
 }
 
 async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
+    let cmd = "sudo mkdir -p /etc/skate";
+    conn.execute(cmd).await?;
+
     let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name).collect();
 
     let mut route_file = "#!/bin/bash
@@ -309,7 +329,7 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
     let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
     match conn.execute(&cmd).await {
-        Ok(msg) => Ok(()),
+        Ok(_msg) => Ok(()),
         Err(e) => Err(e)
     }
 }

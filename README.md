@@ -90,3 +90,13 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] multi-host container network
     - [ ] container dns
     - [ ] ingress
+
+### Networking
+
+Dns is coredns with forwarding between all nodes.
+Hosts are maintained via the OCI prestart hook and the CNI del command.
+OCI prestart adds the ip to an addnhosts file, del removes it.
+Coredns on each node forwards dns queries to all other nodes.
+Good enough.
+- [ ] Fix addnhosts creation
+- [ ] Test coredns forwarding

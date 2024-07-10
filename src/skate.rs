@@ -127,6 +127,8 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
                 p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
+                // set name to be name.namespace
+                p.metadata.name = Some(format!("{}", metadata_name(p)));
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {

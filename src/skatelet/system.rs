@@ -2,7 +2,7 @@ use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, DiskKind, RefreshKind, System, SystemExt};
 use std::error::Error;
-use std::str::FromStr;
+
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
@@ -68,6 +68,7 @@ pub enum PodmanPodStatus {
     Exited,
     Dead,
     Degraded,
+    Error,
 }
 
 impl PodmanPodStatus {
@@ -79,6 +80,7 @@ impl PodmanPodStatus {
             PodmanPodStatus::Dead => "Failed",
             PodmanPodStatus::Degraded => "Running",
             PodmanPodStatus::Created => "Pending",
+            PodmanPodStatus::Error => "Failed",
         }.to_string()
     }
     fn from_pod_phase(phase: &str) -> Self {

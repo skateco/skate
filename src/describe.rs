@@ -42,8 +42,8 @@ pub enum DescribeCommands {
 pub async fn describe(args: DescribeArgs) -> Result<(), Box<dyn Error>> {
     let global_args = args.clone();
     match args.commands {
-        DescribeCommands::Pod(p_args) => Ok(()),
-        DescribeCommands::Deployment(d_args) => Ok(()),
+        DescribeCommands::Pod(_p_args) => Ok(()),
+        DescribeCommands::Deployment(_d_args) => Ok(()),
         DescribeCommands::Node(n_args) => describe_node(global_args, n_args).await
     }
 }
@@ -82,7 +82,7 @@ async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> R
     describe_object(global_args, args, &inspector).await
 }
 
-async fn describe_object<T>(global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
+async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let cluster = config.current_cluster()?;
     let conns = ssh::cluster_connections(&cluster).await;

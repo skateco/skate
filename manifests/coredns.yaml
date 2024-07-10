@@ -15,6 +15,7 @@ spec:
       labels:
         app: coredns
     spec:
+      hostNetwork: true
       volumes:
       - name: skate
         hostPath:
@@ -28,19 +29,25 @@ spec:
         env:
         - name: CORE_FILE
           value: |
-            cluster.skate:53 {
-                hosts /run/containers/cni/dnsname/podman/addnhosts {
-                    fallthrough
-                }
+            cluster.skate:5553 {
             
-                errors {
-                  consolidate 5m ".*" warning
-                }
+                bind lo 0.0.0.0
+            
+                hosts /run/containers/cni/dnsname/podman/addnhosts
             }
-            .:53 {
+            
+            cluster.skate:53 {
+            
+                bind lo 0.0.0.0
+            
+                fanout . 127.0.0.1:5553 %%fanout_list%%
+            
+                loadbalance round_robin
+            
+            }
+            . {
+                bind lo 0.0.0.0
                 forward . 8.8.8.8
-                log
-                errors
                 cache
             }
 
