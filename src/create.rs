@@ -298,6 +298,9 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
     _ = conn.execute(cmd).await;
 
+    let cmd = "sudo systemctl daemon-reload";
+    conn.execute(cmd).await?;
+
 
 //     let dnsmasq_conf = general_purpose::STANDARD.encode("
 // domain=svc.cluster.local

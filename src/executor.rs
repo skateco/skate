@@ -91,9 +91,9 @@ impl Executor for DefaultExecutor {
             .output()
             .expect("failed to stop pod");
 
-        if !output.status.success() {
-            return Err(anyhow!("{:?} - exit code {}, stderr: {}", stop_cmd, output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
-        }
+        // if !output.status.success() {
+        //     return Err(anyhow!("{:?} - exit code {}, stderr: {}", stop_cmd, output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+        // }
 
         let rm_cmd = [
             vec!("pod", "rm", "--force"),

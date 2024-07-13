@@ -30,7 +30,6 @@ spec:
         - name: CORE_FILE
           value: |
             cluster.skate:5553 {
-                debug
             
                 bind lo 0.0.0.0
             
@@ -38,9 +37,10 @@ spec:
             }
             
             cluster.skate:53 {
-                debug
             
                 bind lo 0.0.0.0
+            
+                cache 3
             
                 fanout . 127.0.0.1:5553 %%fanout_list%%
             
@@ -50,6 +50,6 @@ spec:
             .:53 {
                 bind lo 0.0.0.0
                 forward . 8.8.8.8
-                cache
+                cache 30
             }
 
