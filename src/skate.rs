@@ -100,6 +100,15 @@ impl SupportedResources {
             SupportedResources::DaemonSet(d) => metadata_name(d),
         }
     }
+
+    // whether there's host network set
+    pub fn host_network(&self) -> bool {
+        match self {
+            SupportedResources::Pod(p) => p.clone().spec.unwrap().host_network.unwrap(),
+            SupportedResources::Deployment(d) => d.clone().spec.unwrap().template.spec.unwrap().host_network.unwrap(),
+            SupportedResources::DaemonSet(d) => d.clone().spec.unwrap().template.spec.unwrap().host_network.unwrap(),
+        }
+    }
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());

@@ -3,7 +3,6 @@ mod apply;
 
 mod system;
 mod cni;
-mod ocihooks;
 
 pub use skatelet::skatelet;
 pub use system::SystemInfo;

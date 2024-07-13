@@ -39,7 +39,7 @@ async fn delete_node(args: DeleteNodeArgs) -> Result<(), Box<dyn Error>> {
     let context = match args.config.context {
         None => match config.current_context {
             None => {
-                Err(anyhow!("--cluster is required unless there is already a current context"))
+                Err(anyhow!("--context is required unless there is already a current context"))
             }
             Some(ref context) => Ok(context)
         }
@@ -51,7 +51,7 @@ async fn delete_node(args: DeleteNodeArgs) -> Result<(), Box<dyn Error>> {
     let find_result = cluster.nodes.iter().find_position(|n| n.name == args.name);
 
     match find_result {
-        Some((p,_)) => {
+        Some((p, _)) => {
             config.clusters[cluster_index].nodes.remove(p);
             config.persist(Some(args.config.skateconfig))
         }

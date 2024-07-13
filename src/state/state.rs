@@ -96,6 +96,7 @@ impl Into<K8sNode> for NodeState {
                      Some(BTreeMap::<String, String>::from([
                          ("skate.io/arch".to_string(), si.platform.arch.clone()),
                          ("skate.io/os".to_string(), si.platform.os.to_string().to_lowercase()),
+                         ("skate.io/nodename".to_string(), self.node_name.clone()),
                          ("skate.io/hostname".to_string(), si.hostname.clone()),
                      ]))
                  ))
@@ -138,10 +139,22 @@ impl ClusterState {
     }
 
     pub fn load(cluster_name: &str) -> Result<Self, Box<dyn Error>> {
-        let file = File::open(ClusterState::path(cluster_name))?;
+        let file = File::create(ClusterState::path(cluster_name)).map_err(|e| anyhow!("failed to open or create state file").context(e))?;
 
-        let result: ClusterState = serde_json::from_reader(file)?;
-        Ok(result)
+        let result = serde_json::from_reader::<_, ClusterState>(file).map_err(|e| anyhow!("failed to parse cluster state").context(e));
+
+        match result {
+            Ok(state) => Ok(state),
+            Err(e) => {
+                let state = ClusterState {
+                    cluster_name: cluster_name.to_string(),
+                    hash: "".to_string(),
+                    nodes: vec![],
+                };
+                state.persist()?;
+                Ok(state)
+            }
+        }
     }
 
     pub fn reconcile_node(&mut self, node: &NodeSystemInfo) -> Result<ReconciledResult, Box<dyn Error>> {

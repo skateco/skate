@@ -11,10 +11,11 @@ use semver::{Version, VersionReq};
 use serde_json::to_string;
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
+use crate::refresh::refreshed_state;
 use crate::skate::{ConfigFileArgs, Distribution, Os};
 
-use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient};
-use crate::state::state::ClusterState;
+use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient, SshClients};
+use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 const COREDNS_MANIFEST: &str = include_str!("../manifests/coredns.yaml");
@@ -65,7 +66,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let context = match args.config.context {
         None => match config.current_context {
             None => {
-                Err(anyhow!("--cluster is required unless there is already a current context"))
+                Err(anyhow!("--context is required unless there is already a current context"))
             }
             Some(ref context) => Ok(context)
         }
@@ -74,8 +75,6 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
     let mut cluster = (*cluster).clone();
-
-    let state = ClusterState::load(cluster.name.as_str())?;
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
@@ -91,6 +90,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         user: args.user.clone(),
         key: args.key.clone(),
         subnet_cidr: args.subnet_cidr.clone(),
+
     };
 
     match existing_index {
@@ -172,21 +172,58 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
     conn.execute(cmd).await?;
 
-    setup_networking(&conn, &cluster, &node, &info, &args).await?;
+    let (all_conns, _) = cluster_connections(&cluster).await;
+    let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
 
-    config.persist(Some(args.config.skateconfig))?;
+    setup_networking(&conn, &all_conns, &cluster, &node).await?;
 
+    config.persist(Some(args.config.skateconfig.clone()))?;
+
+    /// Refresh state so that we can apply coredns later
+    let state = refreshed_state(&cluster.name, &all_conns, &config).await?;
     state.persist()?;
+
+    install_manifests(&args, &cluster, &node).await?;
 
     Ok(())
 }
 
-async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node, _info: &NodeSystemInfo, args: &CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+    /// COREDNS
+    /// coredns listens on port 53 and 5533
+    /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
+    /// uses fanout plugin
+
+    let coredns_yaml_path = "/tmp/skate-coredns.yaml";
+    let mut file = File::create(coredns_yaml_path)?;
+    // replace forward list in coredns config with that of other hosts
+    let fanout_list = config.nodes.iter().filter(|n| n.name != node.name).map(|n| n.host.clone() + ":5553").join(" ");
+
+    let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
+
+    file.write_all(coredns_yaml.as_bytes())?;
+
+
+    apply(ApplyArgs {
+        filename: vec![coredns_yaml_path.to_string()],
+        grace_period: 0,
+        config: args.config.clone(),
+    }).await?;
+
+    Ok(())
+}
+
+async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+    let cmd = "sqlite3 -version || sudo apt-get install -y sqlite3";
+    conn.execute(cmd).await?;
+
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
     conn.execute(cmd).await?;
 
     let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+    conn.execute(&cmd).await?;
+    let cmd = "sudo sed -i 's&#network_backend[ =].*&network_backend = \"cni\"&' /etc/containers/containers.conf";
     conn.execute(&cmd).await?;
 
     let cmd = "sudo ip link del cni-podman0|| exit 0";
@@ -227,14 +264,8 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     conn.execute(cmd).await?;
 
 
-    let (conns, _errs) = cluster_connections(cluster_conf).await;
-    match conns {
-        Some(conns) => {
-            for conn in conns.clients {
-                create_replace_routes_file(&conn, cluster_conf).await?;
-            }
-        }
-        _ => {}
+    for conn in &all_conns.clients {
+        create_replace_routes_file(conn, cluster_conf).await?;
     }
 
     let cmd = "sudo podman image exists ghcr.io/skateco/coredns || sudo podman pull ghcr.io/skateco/coredns";
@@ -243,9 +274,17 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
 
     // In ubuntu 24.04 there's an issue with apparmor and podman
     // https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2040483
-    let cmd = "sudo systemctl disable apparmor.service --now";
-    conn.execute(cmd).await?;
+
+    let cmd = "sudo systemctl list-unit-files apparmor.service";
+    let apparmor_unit_exists = conn.execute(cmd).await;
+
+    if apparmor_unit_exists.is_ok() {
+        let cmd = "sudo systemctl disable apparmor.service --now";
+        conn.execute(cmd).await?;
+    }
     let cmd = "sudo aa-teardown";
+    _ = conn.execute(cmd).await;
+    let cmd = "sudo apt purge -y apparmor";
     _ = conn.execute(cmd).await;
 
 
@@ -257,27 +296,7 @@ async fn setup_networking(conn: &SshClient, cluster_conf: &Cluster, node: &Node,
     conn.execute(cmd).await?;
     // changed /etc/resolv.conf to be 127.0.0.1
     let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
-    conn.execute(cmd).await?;
-
-    /// COREDNS
-    /// coredns listens on port 53 and 5533
-    /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
-    /// uses fanout plugin
-    let coredns_yaml_path = "/tmp/skate-coredns.yaml";
-    let mut file = File::create(coredns_yaml_path)?;
-    // replace forward list in coredns config with that of other hosts
-    let fanout_list = cluster_conf.nodes.iter().filter(|n| n.name != node.name).map(|n| n.host.clone() + ":5553").join(" ");
-
-    let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
-
-    file.write_all(coredns_yaml.as_bytes())?;
-
-
-    apply(ApplyArgs {
-        filename: vec![coredns_yaml_path.to_string()],
-        grace_period: 0,
-        config: args.config.clone(),
-    }).await?;
+    _ = conn.execute(cmd).await;
 
 
 //     let dnsmasq_conf = general_purpose::STANDARD.encode("

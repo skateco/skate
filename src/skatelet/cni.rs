@@ -14,15 +14,15 @@ use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
+use crate::skate::exec_cmd;
 
 
-
-fn conf_path() -> String {
+fn conf_path_str() -> String {
     "/var/lib/skatelet/cni".to_string()
 }
 
 fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
-    let lock_path = Path::new(&conf_path()).join(network_name).join("lock");
+    let lock_path = Path::new(&conf_path_str()).join(network_name).join("lock");
     let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
     debug!("waiting for lock on {}", lock_path.display());
     lock_file.lock_exclusive()?;
@@ -35,10 +35,10 @@ fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Re
     result
 }
 
-fn ensure_paths(net_name: &str) {
-    let conf_path_str = conf_path();
-    let conf_path = Path::new(&conf_path_str);
-    let net_path = conf_path.join(net_name);
+fn ensure_skatelet_cni_conf_dir(dir_name: &str) {
+    let conf_str = conf_path_str();
+    let conf_path = Path::new(&conf_str);
+    let net_path = conf_path.join(dir_name);
 
     fs::create_dir_all(conf_path).unwrap();
     fs::create_dir_all(net_path).unwrap();
@@ -89,45 +89,121 @@ fn extract_prev_result(prev_value: Option<Value>) -> Option<SuccessReply> {
     })
 }
 
+fn write_last_run_file(msg: &str) {
+    let last_err_path = Path::new(&conf_path_str()).join(".last_run.log");
+    let mut last_err_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(last_err_path).unwrap();
+    writeln!(last_err_file, "{}", msg).unwrap();
+}
+
 pub fn cni() {
     match run() {
-        Ok(_) => {}
-        Err(_e) => {
-            // handle error formatting
+        Ok(warning) => {
+            write_last_run_file(&format!("WARNING: {}", warning))
+        }
+        Err(e) => {
+            write_last_run_file(&format!("ERROR: {}", e));
+            panic!("{}", e)
         }
     }
 }
 
-fn run() -> Result<(), Box<dyn Error>> {
+fn run() -> Result<String, Box<dyn Error>> {
+    let conf_str = conf_path_str();
+    let conf_path = Path::new(&conf_str);
+
+    fs::create_dir_all(conf_path).unwrap();
+
     let cmd = var("CNI_COMMAND").unwrap_or_default();
     match cmd.as_str() {
         "ADD" => {
             let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!("failed to parse stdin: {}", e))?;
-            if !json["prevResult"].is_object() {
-                return Err(anyhow!("failed to parse prevResult").into());
+
+            let config: NetworkConfig = serde_json::from_value(json.clone()).map_err(|e| anyhow!("failed to parse config: {}", e))?;
+
+            let result = prev_result_or_default(&config);
+
+            if result.ips.len() == 0 {
+                return Err("no ips in prev_result".into());
             }
-            let prev_result = json["prevResult"].clone();
-            let output = serde_json::to_string(&prev_result).map_err(|e| anyhow!("failed to serialize prev result: {}", e))?;
-            print!("{}", output);
+
+
+            let container_id = var("CNI_CONTAINERID")?;
+
+            // get podman info from sqlitedb in /var/lib/containers/storage/db.sql
+            let pod_json = exec_cmd(
+                "sqlite3",
+                &[
+                    "/var/lib/containers/storage/db.sql",
+                    &format!("select p.json from ContainerConfig c join PodConfig p on c.PodID = p.id where c.id = '{}'", container_id)
+                ],
+            )?;
+
+            if pod_json.is_empty() {
+                serde_json::to_writer(io::stdout(), &json)?;
+                return Ok("ADD: not a pod".to_string());
+            }
+
+            let pod_value: Value = serde_json::from_str(&pod_json).map_err(|e| anyhow!("failed to parse pod json for {} from {}: {}", container_id, pod_json, e))?;
+
+            let labels = pod_value["labels"].as_object().unwrap_or(&serde_json::Map::new()).clone();
+
+            if !labels.contains_key("app") || !labels.contains_key("skate.io/namespace") {
+                serde_json::to_writer(io::stdout(), &json)?;
+                return Ok("ADD: missing labels".to_string());
+            }
+
+            // domain is <app>.<skate.io/namespace>.cluster.skate
+            let app = labels.get("app").ok_or(anyhow!("missing label"))?.as_str().unwrap_or_default().to_string();
+            let ns = labels.get("skate.io/namespace").ok_or(anyhow!("missing label"))?.as_str().unwrap_or_default().to_string();
+            if ns == "" {
+                serde_json::to_writer(io::stdout(), &json)?;
+                return Ok("ADD: namespace empty".to_string());
+            }
+            let domain = format!("{}.{}.cluster.skate", app.clone(), ns.clone());
+            let ip = result.ips[0].address.ip().to_string();
+
+            ensure_skatelet_cni_conf_dir(&config.name);
+
+            // Do stuff
+            lock(&config.name, &|| {
+                let addnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts");
+
+                // scope to make sure files closed after
+                {
+
+                    // create or open
+                    let mut addhosts_file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .append(true)
+                        .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
+
+                    writeln!(addhosts_file, "{} {} # {}", ip, domain, container_id).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
+                }
+
+                Ok(())
+            })?;
+
+            serde_json::to_writer(io::stdout(), &json)?;
         }
         "DEL" => {
             let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!("failed to parse stdin: {}", e))?;
-            if !json["prevResult"].is_object() {
-                return Err(anyhow!("failed to parse prevResult").into());
-            }
-
-            let prev_result = json["prevResult"].clone();
-            let output = serde_json::to_string(&prev_result).map_err(|e| anyhow!("failed to serialize prev result: {}", e))?;
 
             let config: NetworkConfig = serde_json::from_value(json.clone()).map_err(|e| anyhow!("failed to parse config: {}", e))?;
+
+            let container_id = var("CNI_CONTAINERID")?;
+
             // Do stuff
-            ensure_paths(&config.name);
+            ensure_skatelet_cni_conf_dir(&config.name);
             lock(&config.name, &|| {
-                let result = prev_result_or_default(&config);
                 let _args = extract_args(&config);
 
-                let addnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts");
-                let newaddnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts-new");
+                let addnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts");
+                let newaddnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts-new");
 
                 // scope to make sure files closed after
                 {
@@ -135,36 +211,32 @@ fn run() -> Result<(), Box<dyn Error>> {
 
                     let addhosts_file = OpenOptions::new()
                         .read(true)
-                        .open(addnhosts_path.clone())
-                        .unwrap();
+                        .open(addnhosts_path.clone());
+
+                    if addhosts_file.is_err() {
+                        return Ok(());
+                    }
+                    let addhosts_file = addhosts_file?;
 
                     let newaddhosts_file = OpenOptions::new()
                         .create(true)
                         .write(true)
                         .truncate(true)
-                        .open(newaddnhosts_path.clone())
-                        .unwrap();
+                        .open(newaddnhosts_path.clone())?;
 
                     let reader = BufReader::new(&addhosts_file);
                     let mut writer = BufWriter::new(&newaddhosts_file);
 
-
-                    if result.ips.len() == 0 {
-                        return Err("no ips in prev_result".into());
-                    }
-
-                    let ip = result.ips[0].address.ip().to_string();
-
                     for (_index, line) in reader.lines().enumerate() {
-                        let line = line.as_ref().unwrap();
-                        if !line.starts_with(&ip) {
+                        let line = line?;
+                        if !line.ends_with(&container_id) {
                             writeln!(writer, "{}", line)?;
                         }
                     }
                 }
                 fs::rename(&newaddnhosts_path, &addnhosts_path)?;
 
-                println!("{}", output);
+                serde_json::to_writer(io::stdout(), &json)?;
                 Ok(())
             })?;
         }
@@ -174,8 +246,8 @@ fn run() -> Result<(), Box<dyn Error>> {
                 return Err(anyhow!("failed to parse prevResult").into());
             }
             let prev_result = json["prevResult"].clone();
-            let output = serde_json::to_string(&prev_result).map_err(|e| anyhow!("failed to serialize prev result: {}", e))?;
-            print!("{}", output);
+            let response = serde_json::to_string(&prev_result).map_err(|e| anyhow!("failed to serialize prev result: {}", e))?;
+            serde_json::to_writer(io::stdout(), &response).map_err(|e| anyhow!("failed to serialize version response: {}", e))?;
         }
         "VERSION" => {
             let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!("failed to parse stdin: {}", e))?;
@@ -186,84 +258,14 @@ fn run() -> Result<(), Box<dyn Error>> {
 
             let response = VersionReply {
                 cni_version: cni_version.parse()?,
-                supported_versions: vec!["0.4.0".parse().unwrap()],
+                supported_versions: vec!["0.4.0".parse()?],
             };
 
             serde_json::to_writer(io::stdout(), &response).map_err(|e| anyhow!("failed to serialize version response: {}", e))?;
         }
         _ => {
-            eprintln!("unknown command: {}", cmd);
+            return Err("unknown command".into());
         }
-
-
-        // match Cni::load() {
-        //     Cni::Del { container_id, ifname, netns, path, config } => {
-        //         ensure_paths(&config.name);
-        //         match lock(&config.name, &|| {
-        //             let mut result = prev_result_or_default(&config);
-        //             let args = extract_args(&config);
-        //
-        //             let addnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts");
-        //             let newaddnhosts_path = Path::new(&conf_path()).join(config.name.clone()).join("addnhosts-new");
-        //
-        //             // scope to make sure files closed after
-        //             {
-        //                 // create or open
-        //
-        //                 let addhosts_file = OpenOptions::new()
-        //                     .read(true)
-        //                     .open(addnhosts_path.clone())
-        //                     .unwrap();
-        //
-        //                 let newaddhosts_file = OpenOptions::new()
-        //                     .create(true)
-        //                     .write(true)
-        //                     .truncate(true)
-        //                     .open(newaddnhosts_path.clone())
-        //                     .unwrap();
-        //
-        //                 let reader = BufReader::new(&addhosts_file);
-        //                 let mut writer = BufWriter::new(&newaddhosts_file);
-        //
-        //
-        //                 if result.ips.len() == 0 {
-        //                     return Err("no ips in prev_result".into());
-        //                 }
-        //
-        //                 let ip = result.ips[0].address.ip().to_string();
-        //
-        //                 for (index, line) in reader.lines().enumerate() {
-        //                     let line = line.as_ref().unwrap();
-        //                     if !line.starts_with(&ip) {
-        //                         writeln!(writer, "{}", line)?;
-        //                     }
-        //                 }
-        //             }
-        //             fs::rename(&newaddnhosts_path, &addnhosts_path)?;
-        //             Ok(())
-        //         }) {
-        //             Err(e) => {
-        //                 reply(ErrorReply {
-        //                     cni_version: config.cni_version,
-        //                     code: 1, // TODO
-        //                     msg: &e.to_string(),
-        //                     details: "".to_string(),
-        //                 })
-        //             }
-        //             Ok(()) => {}
-        //         }
-        //         reply(prev_result_or_default(&config))
-        //     }
-        //     Cni::Check { container_id, ifname, netns, path, config } => {
-        //         ensure_paths(&config.name);
-        //
-        //         let prev_result = prev_result_or_default(&config);
-        //         reply(prev_result);
-        //     }
-        //     Cni::Version(_) => {
-        //         eprintln!("version");
-        //     }
-        // }
     };
-    Ok(())
+    Ok(cmd)
 }

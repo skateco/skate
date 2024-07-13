@@ -17,26 +17,28 @@ spec:
     spec:
       hostNetwork: true
       volumes:
-      - name: skate
+      - name: cni
         hostPath:
-          path: /etc/skate
+          path: /var/lib/skatelet/cni/podman
       containers:
       - name: coredns
         image: ghcr.io/skateco/coredns
         volumeMounts:
-        - mountPath: /etc/skate
-          name: skate
+        - mountPath: /var/lib/skatelet/cni/podman
+          name: cni
         env:
         - name: CORE_FILE
           value: |
             cluster.skate:5553 {
+                debug
             
                 bind lo 0.0.0.0
             
-                hosts /run/containers/cni/dnsname/podman/addnhosts
+                hosts /var/lib/skatelet/cni/podman/addnhosts
             }
             
             cluster.skate:53 {
+                debug
             
                 bind lo 0.0.0.0
             
@@ -45,7 +47,7 @@ spec:
                 loadbalance round_robin
             
             }
-            . {
+            .:53 {
                 bind lo 0.0.0.0
                 forward . 8.8.8.8
                 cache

@@ -1,4 +1,3 @@
-
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -52,8 +51,13 @@ pub struct ApplyPlan {
     pub actions: Vec<ScheduledOperation<SupportedResources>>,
 }
 
+pub struct RejectedNode {
+    pub node_name: String,
+    pub reason: String,
+}
+
 impl DefaultScheduler {
-    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> Option<NodeState> {
+    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> (Option<NodeState>, Vec<RejectedNode>) {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
         let node_selector = match object {
@@ -65,20 +69,36 @@ impl DefaultScheduler {
             _ => None
         }.unwrap_or(BTreeMap::new());
 
+        let mut rejected_nodes: Vec<RejectedNode> = vec!();
 
 
         let filtered_nodes = nodes.iter().filter(|n| {
             let k8s_node: K8sNode = (**n).clone().into();
             let node_labels = k8s_node.metadata.labels.unwrap_or_default();
             // only schedulable nodes
-            k8s_node.spec.and_then(|s| {
+            let is_schedulable = k8s_node.spec.and_then(|s| {
                 s.unschedulable.and_then(|u| Some(!u))
-            }).unwrap_or(false)
-                &&
-                // only nodes that match the nodeselectors
-                node_selector.iter().all(|(k, v)| {
-                    node_labels.get(k).unwrap_or(&"".to_string()) == v
-                })
+            }).unwrap_or(false);
+
+            if !is_schedulable {
+                rejected_nodes.push(RejectedNode {
+                    node_name: n.node_name.clone(),
+                    reason: "node is unschedulable".to_string(),
+                });
+                return false;
+            }
+
+            // only nodes that match the nodeselectors
+            node_selector.iter().all(|(k, v)| {
+                let matches = node_labels.get(k).unwrap_or(&"".to_string()) == v;
+                if (!matches) {
+                    rejected_nodes.push(RejectedNode {
+                        node_name: n.node_name.clone(),
+                        reason: format!("node selector {}:{} did not match", k, v),
+                    });
+                }
+                return matches;
+            })
         }).collect::<Vec<_>>();
 
 
@@ -104,7 +124,7 @@ impl DefaultScheduler {
             }).or_else(|| Some(node.clone()))
         });
 
-        feasible_node
+        (feasible_node, rejected_nodes)
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -128,7 +148,7 @@ impl DefaultScheduler {
             // bind to specific node
             pod_spec.node_selector = Some({
                 let mut selector = pod_spec.node_selector.unwrap_or_default();
-                selector.insert("skate.io/hostname".to_string(), node_name.clone());
+                selector.insert("skate.io/nodename".to_string(), node_name.clone());
                 selector
             });
 
@@ -351,7 +371,14 @@ impl DefaultScheduler {
                     }
                 }
                 OpType::Create => {
-                    let node_name = Self::choose_node(state.nodes.clone(), &action.resource).ok_or("failed to find feasible node")?.node_name.clone();
+                    let (node, rejected_nodes) = Self::choose_node(state.nodes.clone(), &action.resource);
+                    if !node.is_some() {
+                        let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
+                        return Err(anyhow!("failed to find feasible node: {}", reasons).into());
+                    }
+
+                    let node_name = node.unwrap().node_name.clone();
+
                     let client = conns.find(&node_name).unwrap();
                     let serialized = serde_yaml::to_string(&action.resource).expect("failed to serialize object");
 

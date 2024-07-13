@@ -28,16 +28,21 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
 
+        // check if object's hostNetwork: true then don't use network=podman
 
         let file_path = DefaultExecutor::write_to_file(&serde_yaml::to_string(&object)?)?;
 
-        let args = ["play", "kube", &file_path, "--start"];
+        let mut args = vec!["play", "kube", &file_path, "--start"];
+        if !object.host_network() {
+            args.push("--network=podman")
+        }
+
         let output = process::Command::new("podman")
-            .args(args)
+            .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .output()
-            .expect(&format!("failed to apply resource via `podman {}`", args.join(" ")));
+            .expect(&format!("failed to apply resource via `podman {}`", &args.join(" ")));
 
         if !output.status.success() {
             return Err(anyhow!("`podman {}` exited with code {}, stderr: {}", args.join(" "), output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
