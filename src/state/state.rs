@@ -145,7 +145,7 @@ impl ClusterState {
 
         match result {
             Ok(state) => Ok(state),
-            Err(e) => {
+            Err(_e) => {
                 let state = ClusterState {
                     cluster_name: cluster_name.to_string(),
                     hash: "".to_string(),

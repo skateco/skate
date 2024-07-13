@@ -91,7 +91,7 @@ impl DefaultScheduler {
             // only nodes that match the nodeselectors
             node_selector.iter().all(|(k, v)| {
                 let matches = node_labels.get(k).unwrap_or(&"".to_string()) == v;
-                if (!matches) {
+                if !matches {
                     rejected_nodes.push(RejectedNode {
                         node_name: n.node_name.clone(),
                         reason: format!("node selector {}:{} did not match", k, v),

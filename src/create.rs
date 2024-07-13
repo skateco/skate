@@ -8,14 +8,14 @@ use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use semver::{Version, VersionReq};
-use serde_json::to_string;
+
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::refresh::refreshed_state;
 use crate::skate::{ConfigFileArgs, Distribution, Os};
 
-use crate::ssh::{cluster_connections, node_connection, NodeSystemInfo, SshClient, SshClients};
-use crate::state::state::{ClusterState, NodeState};
+use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
+
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 const COREDNS_MANIFEST: &str = include_str!("../manifests/coredns.yaml");

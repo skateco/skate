@@ -84,7 +84,7 @@ impl Executor for DefaultExecutor {
             vec!("pod", "stop", "-t", &grace_str),
             vec!(&id),
         ].concat();
-        let output = process::Command::new("podman")
+        let _output = process::Command::new("podman")
             .args(stop_cmd.clone())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
