@@ -15,8 +15,8 @@ Will support only a subset of resources and only a subset of their functionality
 
 Currently uses vendored ssh, plan is to move to openssh and use the native binary on the host.
 
-Supported Distro: Debian like (Ubuntu, Debian, Raspbian)
-Supported architectures: amd64, armv6, armv7, arm64
+Supported Distro: Ubuntu 24.04
+Supported architectures: amd64, arm64
 
 ## Architecture
 
@@ -88,15 +88,14 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] Daemonsets
 - Networking
     - [x] multi-host container network
-    - [ ] container dns
+    - [x] container dns
     - [ ] ingress
+    - [ ] modded fanout to wait for all and round robin all
 
 ### Networking
 
-Dns is coredns with forwarding between all nodes.
-Hosts are maintained via the OCI prestart hook and the CNI del command.
-OCI prestart adds the ip to an addnhosts file, del removes it.
-Coredns on each node forwards dns queries to all other nodes.
+Dns is coredns with fanout between all nodes along with serving from file.
+
+Hosts are maintained via a CNI plugin that adds/removes the ip to the hosts file.
+
 Good enough.
-- [ ] Fix addnhosts creation
-- [ ] Test coredns forwarding
