@@ -176,6 +176,8 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
 
+    _ = conn.execute("sudo podman rm -fa").await;
+
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
 
     config.persist(Some(args.config.skateconfig.clone()))?;
@@ -190,15 +192,16 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 }
 
 async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+
     /// COREDNS
     /// coredns listens on port 53 and 5533
     /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
     /// uses fanout plugin
 
-    let coredns_yaml_path = "/tmp/skate-coredns.yaml";
-    let mut file = File::create(coredns_yaml_path)?;
+    let coredns_yaml_path = format!("/tmp/skate-coredns-{}.yaml", node.name);
+    let mut file = File::create(&coredns_yaml_path)?;
     // replace forward list in coredns config with that of other hosts
-    let fanout_list = config.nodes.iter().filter(|n| n.name != node.name).map(|n| n.host.clone() + ":5553").join(" ");
+    let fanout_list = config.nodes.iter().map(|n| n.host.clone() + ":5553").join(" ");
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
@@ -206,7 +209,7 @@ async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node)
 
 
     apply(ApplyArgs {
-        filename: vec![coredns_yaml_path.to_string()],
+        filename: vec![coredns_yaml_path],
         grace_period: 0,
         config: args.config.clone(),
     }).await?;
@@ -254,11 +257,6 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let cmd = "sudo mkdir -p /etc/skate";
     conn.execute(cmd).await?;
 
-    let cmd = "sudo bash -c \"[ -f /etc/rc.local ] || touch /etc/rc.local && sudo chmod +x /etc/rc.local\"";
-    conn.execute(cmd).await?;
-
-    let cmd = "sudo bash -c \"grep -q '^/etc/skate/routes.sh' /etc/rc.local ||  echo '/etc/skate/routes.sh' >> /etc/rc.local\"";
-    conn.execute(cmd).await?;
 
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
     conn.execute(cmd).await?;
@@ -288,40 +286,16 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     _ = conn.execute(cmd).await;
 
 
-    // // install dnsmasq
-    // let cmd = "sudo bash -c 'dpkg -l dnsmasq || { apt-get update -y && apt-get install -y dnsmasq; }'";
-    // conn.execute( cmd).await?;
-    // // disable systemd-resolved if exists
+    // disable systemd-resolved if exists
     let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
     conn.execute(cmd).await?;
+
     // changed /etc/resolv.conf to be 127.0.0.1
-    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv.conf'";
-    _ = conn.execute(cmd).await;
-
-    let cmd = "sudo systemctl daemon-reload";
+    // neeed to use a symlink so that it's respected and not overridden by systemd
+    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
     conn.execute(cmd).await?;
-
-
-//     let dnsmasq_conf = general_purpose::STANDARD.encode("
-// domain=svc.cluster.local
-// local=/svc.cluster.local/
-// bind-interfaces
-// no-resolv
-// server=8.8.8.8
-// server=4.4.4.4
-// addn-hosts=/etc/skate/addnhosts
-// ".as_bytes());
-//     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /etc/dnsmasq.d/skate'", dnsmasq_conf);
-//     conn.execute( &cmd).await?;
-//
-//     let cmd = "sudo systemctl restart dnsmasq";
-//     conn.execute( cmd).await?;
-
-    // change /etc/containers/containers.conf to have
-    // dns_servers = ["<gateway>"]
-    // let cmd = format!("sudo sed -i 's&#dns_servers.*&dns_servers = [\"{}\"]&' /etc/containers/containers.conf", gateway);
-    // conn.execute( &cmd).await?;
-    // wooop
+    let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
+    conn.execute(cmd).await?;
 
     Ok(())
 }
@@ -334,7 +308,6 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     let mut route_file = "#!/bin/bash
 ".to_string();
-
 
     for other_node in &other_nodes {
         let ip = format!("{}:22", other_node.host).to_socket_addrs()
@@ -350,8 +323,20 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
     let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
-    match conn.execute(&cmd).await {
-        Ok(_msg) => Ok(()),
-        Err(e) => Err(e)
-    }
+    conn.execute(&cmd).await?;
+
+
+    // Create systemd unit file to call the skate routes file on startup after internet
+    let path = "/etc/systemd/system/skate-routes.service";
+    let unit_file = include_str!("./resources/skate-routes.service");
+    let unit_file = general_purpose::STANDARD.encode(unit_file.as_bytes());
+
+    let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > {}\"", unit_file, path);
+    conn.execute(&cmd).await?;
+
+    conn.execute("sudo systemctl daemon-reload").await?;
+    conn.execute("sudo systemctl enable skate-routes.service").await?;
+    _ = conn.execute("sudo systemctl start skate-routes.service").await?;
+
+    Ok(())
 }

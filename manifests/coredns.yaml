@@ -38,11 +38,9 @@ spec:
             
             cluster.skate:53 {
             
-                bind lo 0.0.0.0
+                bind lo
             
-                cache 3
-            
-                fanout . 127.0.0.1:5553 %%fanout_list%%
+                fanout . %%fanout_list%%
             
                 loadbalance round_robin
             
@@ -50,6 +48,5 @@ spec:
             .:53 {
                 bind lo 0.0.0.0
                 forward . 8.8.8.8
-                cache 30
             }
 
