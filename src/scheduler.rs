@@ -410,7 +410,7 @@ impl DefaultScheduler {
                         Ok(_) => {
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
 
-                            println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name(), node_name);
+                            println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name().name, node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {
