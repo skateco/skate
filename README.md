@@ -137,5 +137,5 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Networking
     - [x] multi-host container network
     - [x] container dns
-    - [ ] ingress
+    - [x] ingress
     - [ ] modded fanout to wait for all and round robin all
