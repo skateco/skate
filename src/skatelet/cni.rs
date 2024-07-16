@@ -18,7 +18,7 @@ use crate::skate::exec_cmd;
 
 
 fn conf_path_str() -> String {
-    "/var/lib/skatelet/cni".to_string()
+    "/var/lib/skate/cni".to_string()
 }
 
 fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {

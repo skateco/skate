@@ -25,6 +25,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 use path_absolutize::*;
 use anyhow::anyhow;
+use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::config;
@@ -89,6 +90,8 @@ pub enum SupportedResources {
     Deployment(Deployment),
     #[strum(serialize = "DaemonSet")]
     DaemonSet(DaemonSet),
+    #[strum(serialize = "Ingress")]
+    Ingress(Ingress),
 }
 
 
@@ -98,15 +101,17 @@ impl SupportedResources {
             SupportedResources::Pod(p) => metadata_name(p),
             SupportedResources::Deployment(d) => metadata_name(d),
             SupportedResources::DaemonSet(d) => metadata_name(d),
+            SupportedResources::Ingress(i) => metadata_name(i),
         }
     }
 
     // whether there's host network set
     pub fn host_network(&self) -> bool {
         match self {
-            SupportedResources::Pod(p) => p.clone().spec.unwrap().host_network.unwrap(),
-            SupportedResources::Deployment(d) => d.clone().spec.unwrap().template.spec.unwrap().host_network.unwrap(),
-            SupportedResources::DaemonSet(d) => d.clone().spec.unwrap().template.spec.unwrap().host_network.unwrap(),
+            SupportedResources::Pod(p) => p.clone().spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::Deployment(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::DaemonSet(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::Ingress(_) => false,
         }
     }
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
@@ -128,6 +133,19 @@ impl SupportedResources {
     pub fn fixup(self) -> Result<Self, Box<dyn Error>> {
         let mut resource = self.clone();
         let resource = match resource {
+            SupportedResources::Ingress(ref mut i) => {
+                if i.metadata.name.is_none() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if i.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
+
+                i.metadata = Self::fixup_metadata(i.metadata.clone(), None)?;
+                // set name to be name.namespace
+                i.metadata.name = Some(format!("{}", metadata_name(i)));
+                resource
+            }
             SupportedResources::Pod(ref mut p) => {
                 if p.metadata.name.is_none() {
                     return Err(anyhow!("metadata.name is empty").into());
@@ -245,6 +263,13 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                             let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
                             result.push(SupportedResources::DaemonSet(daemonset))
                         }
+                    (Some(api_version), Some(kind)) if
+                    api_version == <Ingress as Resource>::API_VERSION &&
+                        kind == <Ingress as Resource>::KIND =>
+                        {
+                            let ingress: Ingress = serde::Deserialize::deserialize(value)?;
+                            result.push(SupportedResources::Ingress(ingress))
+                        }
                     _ => {
                         return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());
                     }
@@ -334,7 +359,7 @@ pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn E
         .args(args)
         .output().map_err(|e| anyhow!("failed to run command").context(e))?;
     if !output.status.success() {
-        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).context(format!("{} {} failed", command, args.join(" "))).into());
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())

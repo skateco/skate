@@ -1,0 +1,152 @@
+{{!--
+{
+    "letsEncrypt": {
+        "endpoint": ""
+    }
+}
+--}}
+{{#*inline "errorPages"}}
+    error_page 502 503 504 404 @error;
+    location @error {
+    default_type "text/html";
+    content_by_lua_block { require("error_page").go(ngx.status) }
+    }
+{{/inline}}
+
+events {
+    worker_connections 1024;
+}
+
+
+http {
+    # The "auto_ssl" shared dict should be defined with enough storage space to
+    # hold your certificate data. 1MB of storage holds certificates for
+    # approximately 100 separate domains.
+    lua_shared_dict auto_ssl 1m;
+    # The "auto_ssl" shared dict is used to temporarily store various settings
+    # like the secret used by the hook server on port 8999. Do not change or
+    # omit it.
+    lua_shared_dict auto_ssl_settings 1m;
+
+    lua_package_path "$prefix/lua/?.lua;;";
+
+    # If we receive X-Forwarded-Proto, pass it through; otherwise, pass along the
+    # scheme used to connect to this server
+    map $http_x_forwarded_proto $proxy_x_forwarded_proto {
+        default $http_x_forwarded_proto;
+        ''      $scheme;
+    }
+
+    # If we receive Upgrade, set Connection to "upgrade"; otherwise, delete any
+    # Connection header that may have been passed to this server
+    map $http_upgrade $proxy_connection {
+        default upgrade;
+        '' close;
+    }
+
+    gzip_types text/plain text/css application/javascript application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
+
+       #Log in JSON Format
+    log_format vhost escape=json '{ "timestamp": "$time_iso8601", '
+    '"remote_addr": "$remote_addr", '
+     '"body_bytes_sent": $body_bytes_sent, '
+     '"request_time": $request_time, '
+     '"response_status": $status, '
+     '"request": "$request", '
+     '"request_method": "$request_method", '
+     '"host": "$host",'
+     '"upstream_addr": "$upstream_addr",'
+     '"http_x_forwarded_for": "$http_x_forwarded_for",'
+     '"http_referrer": "$http_referer", '
+     '"http_user_agent": "$http_user_agent", '
+     '"http_version": "$server_protocol", '
+     '"nginx_access": true }';
+    access_log /dev/stdout vhost;
+
+
+    resolver 127.0.0.1 ipv6=off;
+
+
+    # HTTP 1.1 support
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_set_header Host $http_host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $proxy_connection;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
+    proxy_set_header X-Request-ID $request_id; # Pass to app server
+
+    proxy_connect_timeout       120;
+    proxy_send_timeout          120;
+    proxy_read_timeout          120;
+    send_timeout                120;
+
+    init_by_lua_block {
+        auto_ssl = (require "resty.auto-ssl").new()
+    {{#if letsEncrypt.endpoint }}
+        auto_ssl:set("ca", "{{letsEncrypt.endpoint}}")
+    {{/if}}
+
+        -- Define a function to determine which SNI domains to automatically handle
+        -- and register new certificates for. Defaults to not allowing any domains,
+        -- so this must be configured.
+        auto_ssl:set("allow_domain", function(domain)
+            -- TODO - somehow maintain domains list for this
+            return true
+
+        end)
+
+        auto_ssl:init()
+    }
+
+
+    init_worker_by_lua_block {
+        auto_ssl:init_worker()
+    }
+
+    server {
+        set $template_root /usr/local/openresty/nginx/lua/templates;
+        server_name _; # This is just an invalid value which will never trigger on a real hostname.
+        listen 80;
+        access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
+
+        # Endpoint used for performing domain verification with Let's Encrypt.
+
+        location /assets {
+            root "/usr/local/openresty/nginx/html";
+            try_files $uri $uri/;
+        }
+
+
+        location / {
+            return 404;
+        }
+
+        {{> errorPages}}
+
+    }
+
+
+    # Internal server running on port 8999 for handling certificate tasks.
+    server {
+        listen 127.0.0.1:8999;
+
+        # Increase the body buffer size, to ensure the internal POSTs can always
+        # parse the full POST contents into memory.
+        client_body_buffer_size 128k;
+        client_max_body_size 128k;
+
+        access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
+
+        location / {
+            content_by_lua_block {
+                auto_ssl:hook_server()
+            }
+        }
+    }
+
+    include services/*.conf;
+
+}

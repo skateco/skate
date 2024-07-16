@@ -1,0 +1,28 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nginx-ingress
+  namespace: skate
+  labels:
+    app: nginx-ingress
+spec:
+  selector:
+    matchLabels:
+      app: nginx-ingress
+  template:
+    metadata:
+      labels:
+        app: nginx-ingress
+    spec:
+      hostNetwork: true
+      volumes:
+      - name: ingress
+        hostPath:
+          path: /var/lib/skate/ingress
+      containers:
+      - name: nginx
+        image: ghcr.io/skateco/nginx-ingress
+        volumeMounts:
+        - mountPath: /var/lib/skate/ingress
+          name: ingress

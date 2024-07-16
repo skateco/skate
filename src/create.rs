@@ -19,6 +19,7 @@ use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
 const COREDNS_MANIFEST: &str = include_str!("../manifests/coredns.yaml");
+const INGRESS_MANIFEST: &str = include_str!("../manifests/ingress.yaml");
 
 #[derive(Debug, Args)]
 pub struct CreateArgs {
@@ -176,6 +177,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
 
+    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress").await?;
     _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
@@ -192,24 +194,36 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 }
 
 async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
-
     /// COREDNS
     /// coredns listens on port 53 and 5533
     /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
     /// uses fanout plugin
 
-    let coredns_yaml_path = format!("/tmp/skate-coredns-{}.yaml", node.name);
-    let mut file = File::create(&coredns_yaml_path)?;
     // replace forward list in coredns config with that of other hosts
     let fanout_list = config.nodes.iter().map(|n| n.host.clone() + ":5553").join(" ");
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
+    let coredns_yaml_path = format!("/tmp/skate-coredns-{}.yaml", node.name);
+    let mut file = File::create(&coredns_yaml_path)?;
     file.write_all(coredns_yaml.as_bytes())?;
 
 
     apply(ApplyArgs {
         filename: vec![coredns_yaml_path],
+        grace_period: 0,
+        config: args.config.clone(),
+    }).await?;
+
+    // nginx ingress
+
+    let nginx_yaml_path = format!("/tmp/skate-nginx-ingress-{}.yaml", node.name);
+    let mut file = File::create(&nginx_yaml_path)?;
+    file.write_all(INGRESS_MANIFEST.as_bytes())?;
+
+
+    apply(ApplyArgs {
+        filename: vec![nginx_yaml_path],
         grace_period: 0,
         config: args.config.clone(),
     }).await?;

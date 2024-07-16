@@ -19,12 +19,12 @@ spec:
       volumes:
       - name: cni
         hostPath:
-          path: /var/lib/skatelet/cni/podman
+          path: /var/lib/skate/cni/podman
       containers:
       - name: coredns
         image: ghcr.io/skateco/coredns
         volumeMounts:
-        - mountPath: /var/lib/skatelet/cni/podman
+        - mountPath: /var/lib/skate/cni/podman
           name: cni
         env:
         - name: CORE_FILE
@@ -33,7 +33,7 @@ spec:
             
                 bind lo 0.0.0.0
             
-                hosts /var/lib/skatelet/cni/podman/addnhosts
+                hosts /var/lib/skate/cni/podman/addnhosts
             }
             
             cluster.skate:53 {

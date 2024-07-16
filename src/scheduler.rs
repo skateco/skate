@@ -7,6 +7,7 @@ use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod};
+use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
 
@@ -326,12 +327,30 @@ impl DefaultScheduler {
             actions: [cull_actions, actions].concat()
         })
     }
+
+    fn plan_ingress(state: &ClusterState, ingress: &Ingress) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut actions = vec!();
+
+        for node in state.nodes.iter() {
+            actions.push(ScheduledOperation {
+                node: Some(node.clone()),
+                resource: SupportedResources::Ingress(ingress.clone()),
+                error: None,
+                operation: OpType::Create,
+            });
+        }
+
+        Ok(ApplyPlan {
+            actions,
+        })
+    }
     // returns tuple of (Option(prev node), Option(new node))
     fn plan(state: &mut ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
         match object {
             SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
             SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
-            SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds)
+            SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds),
+            SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress)
         }
     }
 
@@ -371,7 +390,12 @@ impl DefaultScheduler {
                     }
                 }
                 OpType::Create => {
-                    let (node, rejected_nodes) = Self::choose_node(state.nodes.clone(), &action.resource);
+                    let (node, rejected_nodes) = match action.node.clone() {
+                        // some things like ingress have the node already set
+                        Some(n) => (Some(n), vec!()),
+                        // anything else and things with node selectors go here
+                        None => Self::choose_node(state.nodes.clone(), &action.resource)
+                    };
                     if !node.is_some() {
                         let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
                         return Err(anyhow!("failed to find feasible node: {}", reasons).into());
@@ -386,12 +410,12 @@ impl DefaultScheduler {
                         Ok(_) => {
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
 
-                            println!("{} created {} on node {}", CHECKBOX_EMOJI, action.resource.name(), node_name);
+                            println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {
                             action.error = Some(err.to_string());
-                            println!("{} failed to create {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
+                            println!("{} failed to create {} on node {}: {}", CROSS_EMOJI, action.resource.name().name, node_name, err.to_string());
                             result.push(action.clone());
                         }
                     }

@@ -1,0 +1,141 @@
+{{!--
+{
+  "port": 80,
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "Ingress",
+  "metadata": {
+    "name": "foo-external"
+  },
+  "annotations": {
+  },
+  "spec": {
+    "rules": [
+      {
+        "host": "foo.example.com",
+        "http": {
+          "paths": [
+            {
+              "path": "/",
+              "pathType": "Prefix",
+              "backend": {
+                "service": {
+                  "name": "foo",
+                  "port": {
+                    "number": 80
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+--}}
+{{#*inline "tlsSettings"}}
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA;
+
+    ssl_prefer_server_ciphers on;
+    ssl_session_timeout 5m;
+    ssl_session_cache shared:SSL:50m;
+{{/inline}}
+
+{{#*inline "enableTLS"}}
+    # anchor::domain {{baseDomain}}
+
+    ssl_certificate_by_lua_block {
+        auto_ssl:ssl_certificate()
+    }
+    {{> tlsSettings}}
+    # fallback certs
+    ssl_certificate "/usr/local/openresty/nginx/ssl/{{baseDomain}}/server.crt";
+    ssl_certificate_key "/usr/local/openresty/nginx/ssl/{{baseDomain}}/server.key";
+{{/inline}}
+
+{{#*inline "enableMaxBody"}}
+    {{#if max}}
+        client_max_body_size {{ max }};
+    {{else}}
+        client_max_body_size 5M;
+    {{/if}}
+{{/inline}}
+
+{{#*inline "proxyPassLocation"}}
+    set $upstream http://{{backend.service.name}}.cluster.skate:{{backend.service.port.number}};
+    proxy_pass $upstream;
+{{/inline}}
+
+{{#each spec.rules}}
+server {
+    set $template_root /usr/local/openresty/nginx/lua/templates;
+
+    # create the server based on the service
+    server_name {{this.host}};
+    listen {{../port}}{{#if port 443}} ssl{{/if}};
+    access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
+
+    {{#if port 443}}
+        {{> enableTLS }}
+    {{/if}}
+
+    {{> enableMaxBody metatdata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]}}
+
+    ## log error request body and response if certain error codes
+    set $response_body '';  #we must declare variables first, we cannot create vars in lua
+    set $error_request_body '';
+    set $error_response_body '';
+    body_filter_by_lua '
+        local resp_body = string.sub(ngx.arg[1], 1, 1000)  -- arg[1] contains a chunk of response content
+        ngx.ctx.buffered = string.sub((ngx.ctx.buffered or "") .. resp_body, 1, 1000)
+        if ngx.arg[2] then  -- arg[2] is true if this is the last chunk
+        ngx.var.response_body = ngx.ctx.buffered
+        end
+    ';
+    # TODO: make this configurable
+    log_by_lua '
+        local ignoreStatus = {
+        ["200"]=true,
+        ["201"]=true,
+        ["204"]=true,
+        ["301"]=true,
+        ["302"]=true,
+        ["422"]=true,
+        ["403"]=true,
+        ["404"]=true,
+        ["401"]=true
+        }
+
+        if ignoreStatus[ngx.var.status] ~= true then
+        ngx.var.error_response_body = ngx.var.response_body
+        ngx.var.error_request_body = ngx.var.request_body
+        end
+    ';
+
+
+    add_header Strict-Transport-Security "max-age=31536000";
+    add_header X-Request-ID $request_id; # Return to client
+
+
+    {{#each this.http.paths as |path|}}
+        {{#if path.pathType "prefix"}}
+        location {{path.path}} {
+            {{> proxyPassLocation path}}
+
+            location ~* \.(css|js|htm|html)$ {
+                log_not_found on;
+                access_log off;
+            }
+
+            location ~* \.(ogg|ogv|svgz|mp4|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|mid|midi|wav|bmp|eot|oft|svg|ttf|woff)$ {
+                log_not_found on;
+                access_log off;
+            }
+        }
+        {{/if}}
+    {{/each}}
+
+}
+{{/each}}

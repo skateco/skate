@@ -32,3 +32,4 @@ colored = "2.0.4"
 cni-plugin = { version = "0.3.0", git = "https://github.com/skateco/cni-plugins", features = ["release-logs"] }
 fs2 = "0.4.3"
 log = "0.4.20"
+handlebars = "5.1.2"

@@ -25,6 +25,54 @@ Supported architectures: amd64, arm64
 
 Could be described as one-shot scheduling.
 
+### Networking
+
+Static routes between hosts, maintained by a systemd unit file.
+All containers attached to the default `podman` network which we modify.
+
+### DNS
+
+Dns is coredns with fanout between all nodes along with serving from file.
+
+Hosts are maintained via a CNI plugin that adds/removes the ip to the hosts file.
+
+Pods get a hostname of `<labels.app>.<metadata.namespace>.cluster.skate.`
+
+### Ingress
+
+Nginx container listening on port 80 and 443
+
+Use an Ingress resource to enable.
+
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: foo-external
+spec:
+  rules:
+    - host: foo.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: foo
+                port:
+                  number: 80
+```
+
+Service resources are ignored and it's implicit that a pod has a service with url: `<labels.name>.<metadata.namespace>.cluster.skate`
+
+Plan:
+- Nginx container mounts /var/lib/skate/ingress/nginx.conf
+- nginx reloads on file change
+- skatelet updates the file on ingress resource change
+- use letsencrypt and http verification
+
+
 ## Registering nodes
 
 ```shell
@@ -91,11 +139,3 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] container dns
     - [ ] ingress
     - [ ] modded fanout to wait for all and round robin all
-
-### Networking
-
-Dns is coredns with fanout between all nodes along with serving from file.
-
-Hosts are maintained via a CNI plugin that adds/removes the ip to the hosts file.
-
-Good enough.

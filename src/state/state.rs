@@ -185,6 +185,7 @@ impl ClusterState {
     pub fn reconcile_object_creation(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
         match object {
             SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node_name),
+            SupportedResources::Ingress(_) => Ok(ReconciledResult{removed: 0, added: 0, updated: 1}), // TODO
             _ => todo!("reconcile not supported")
         }
     }

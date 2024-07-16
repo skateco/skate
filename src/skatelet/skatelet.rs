@@ -4,8 +4,9 @@ use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, remove, RemoveArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::system::{system, SystemArgs};
+use crate::skatelet::template::{template, TemplateArgs};
 
-pub const VAR_PATH: &str = "/var/lib/skatelet";
+pub const VAR_PATH: &str = "/var/lib/skate";
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
@@ -20,6 +21,7 @@ enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
     Remove(RemoveArgs),
+    Template(TemplateArgs),
     Cni,
 }
 
@@ -29,6 +31,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
         Commands::Apply(args) => apply::apply(args),
         Commands::System(args) => system(args).await,
         Commands::Remove(args) => remove(args),
+        Commands::Template(args) => template(args),
         Commands::Cni => {
             cni();
             Ok(())

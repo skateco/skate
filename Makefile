@@ -1,5 +1,5 @@
 .PHONY: default
-default: armv7
+default: aarch64
 
 .PHONY: armv6
 armv6: # for ras pi 1 NOTE: sometimes have to run it a few times to get the whole thing built ¯\_(ツ)_/¯
