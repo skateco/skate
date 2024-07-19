@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
+use anyhow::anyhow;
 
 use chrono::{Local, SecondsFormat};
 use clap::{Args, Subcommand};
@@ -8,10 +9,11 @@ use crate::config::Config;
 use crate::refresh::refreshed_state;
 
 
-use crate::skate::ConfigFileArgs;
+use crate::skate::{ConfigFileArgs, ResourceType, SupportedResources};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus};
-use crate::ssh;
+use crate::{skate, ssh};
 use crate::state::state::{ClusterState, NodeState};
+use crate::util::NamespacedName;
 
 
 #[derive(Debug, Clone, Args)]
@@ -44,14 +46,17 @@ pub enum GetCommands {
     Deployment(GetObjectArgs),
     #[command(alias("nodes"))]
     Node(GetObjectArgs),
+    #[command()]
+    Ingress(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
     let global_args = args.clone();
     match args.commands {
-        GetCommands::Pod(p_args) => get_pod(global_args, p_args).await,
-        GetCommands::Deployment(d_args) => get_deployment(global_args, d_args).await,
-        GetCommands::Node(n_args) => get_nodes(global_args, n_args).await
+        GetCommands::Pod(args) => get_pod(global_args, args).await,
+        GetCommands::Deployment(args) => get_deployment(global_args, args).await,
+        GetCommands::Node(args) => get_nodes(global_args, args).await,
+        GetCommands::Ingress(args) => get_ingress(global_args, args).await,
     }
 }
 
@@ -123,9 +128,70 @@ impl Lister<PodmanPodInfo> for PodLister {
     }
 }
 
+struct GenericLister {
+    resource: ResourceType,
+}
+
+impl Lister<NamespacedName> for GenericLister {
+    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<NamespacedName> {
+        let ns = filters.namespace.clone().unwrap_or_default();
+        let id = match filters.id.clone() {
+            Some(cmd) => match cmd {
+                IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
+            }
+            None => "".to_string()
+        };
+
+        let resources: Vec<_> = match &self.resource {
+            ResourceType::Ingress => {
+                state.nodes.iter().map(|node| {
+                    match &node.host_info {
+                        Some(hi) => match &hi.system_info {
+                            Some(si) => match &si.ingresses {
+                                Some(ingresses) => ingresses.iter().filter(|i|
+                                    (!ns.is_empty() && i.namespace == ns)
+                                        || (!id.is_empty() && i.name == id) || (ns.is_empty() && id.is_empty())
+                                ).map(|i| {
+                                    i.clone()
+                                }).collect(),
+                                None => vec![]
+                            }
+                            None => vec![]
+                        }
+                        None => vec![]
+                    }
+                }).flatten().collect()
+            }
+            _ => panic!("unsupported resource type for generic lister")
+        };
+
+        resources
+
+        // resources.iter().map(|(p, _)| p.clone()).collect()
+    }
+
+    fn print(&self, resources: Vec<NamespacedName>) {
+        println!(
+            "{0: <30} {1: <10}",
+            "NAME", "CREATED",
+        );
+        for resource in resources {
+            println!(
+                "{0: <30}  {1: <10}",
+                format!("{}.{}", resource.name, resource.namespace), "?"
+            )
+        }
+    }
+}
+
 
 async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
     let lister = PodLister {};
+    get_objects(global_args, args, &lister).await
+}
+
+async fn get_ingress(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+    let lister = GenericLister { resource: ResourceType::Ingress };
     get_objects(global_args, args, &lister).await
 }
 

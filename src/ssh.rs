@@ -7,10 +7,11 @@ use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
 use async_ssh2_tokio::client::{Client, CommandExecutedResult};
 use base64::Engine;
 use base64::engine::general_purpose;
+use cni_plugin::Command;
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Os, Platform};
+use crate::skate::{Distribution, Os, Platform, ResourceType};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
@@ -210,9 +211,25 @@ echo ovs=$(cat /tmp/ovs-$$);
         }
     }
 
-    pub async fn remove_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
+    pub async fn remove_resource(&self, resource_type: ResourceType, name: &str, namespace: &str) -> Result<(String, String), Box<dyn Error>> {
+        let result = self.client.execute(&format!("sudo skatelet delete {} --name {} --namespace {}", resource_type.to_string().to_lowercase(), name, namespace)).await?;
+        match result.exit_status {
+            0 => {
+                Ok((result.stdout, result.stderr))
+            }
+            _ => {
+                let message = match result.stderr.len() {
+                    0 => result.stdout,
+                    _ => result.stderr
+                };
+                Err(anyhow!("{} - failed to remove resource: exit code {}, {}", self.node_name, result.exit_status, message).into())
+            }
+        }
+    }
+
+    pub async fn remove_resource_by_manifest(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
         let base64_manifest = general_purpose::STANDARD.encode(manifest);
-        let result = self.client.execute(&format!("echo \"{}\" |base64  --decode|sudo skatelet remove -", base64_manifest)).await?;
+        let result = self.client.execute(&format!("echo \"{}\" |base64  --decode|sudo skatelet delete -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
                 Ok((result.stdout, result.stderr))
@@ -340,8 +357,17 @@ impl SshClients {
     pub fn find(&self, node_name: &str) -> Option<&SshClient> {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
-    pub fn execute(&self, _command: &str, _args: &[&str]) -> Vec<(Node, Result<CommandExecutedResult, SshError>)> {
-        todo!();
+    pub async fn execute(&self, command: &str, args: &[&str]) -> Vec<(String, Result<String, Box<dyn Error>>)> {
+        let concat_command = &format!("{} {}", &command, args.join(" "));
+        let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
+            c.execute(concat_command)
+        }).collect();
+        let result: Vec<Result<_, _>> = fut.collect().await;
+
+        result.into_iter().enumerate().map(|(i, r)| {
+            let node_name = self.clients[i].node_name.clone();
+            (node_name, r)
+        }).collect()
     }
     pub async fn get_nodes_system_info(&self) -> Vec<Result<NodeSystemInfo, Box<dyn Error>>> {
         let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {

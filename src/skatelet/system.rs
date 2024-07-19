@@ -2,6 +2,7 @@ use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, DiskKind, RefreshKind, System, SystemExt};
 use std::error::Error;
+use std::ops::Deref;
 
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
@@ -10,8 +11,10 @@ use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
+use crate::filestore::FileStore;
 
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
+use crate::util::NamespacedName;
 
 
 #[derive(Debug, Args)]
@@ -51,6 +54,7 @@ pub struct SystemInfo {
     pub num_cpus: usize,
     pub root_disk: Option<DiskInfo>,
     pub pods: Option<Vec<PodmanPodInfo>>,
+    pub ingresses: Option<Vec<NamespacedName>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -307,6 +311,16 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&result).map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
+
+    let store = FileStore::new();
+    // list ingresses
+    let ingresses = store.list_objects("ingress")?;
+    let ingresses = match ingresses.is_empty() {
+        true => None,
+        false => Some(ingresses.iter().map(|i| NamespacedName::from(i.as_str())).collect())
+    };
+
+
     let iface_ipv4 = match get_ips(&os) {
         Ok(v) => v,
         Err(e) => {
@@ -345,6 +359,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
+        ingresses: ingresses,
         hostname: sys.host_name().unwrap_or("".to_string()),
         external_ip_address: iface_ipv4.0,
         internal_ip_address: iface_ipv4.1,

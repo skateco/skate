@@ -1,7 +1,7 @@
 use std::error::Error;
 use clap::{Parser, Subcommand};
 use crate::skatelet::apply;
-use crate::skatelet::apply::{ApplyArgs, remove, RemoveArgs};
+use crate::skatelet::apply::{ApplyArgs, delete, DeleteArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
@@ -20,7 +20,7 @@ struct Cli {
 enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
-    Remove(RemoveArgs),
+    Delete(DeleteArgs),
     Template(TemplateArgs),
     Cni,
 }
@@ -30,7 +30,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     match args.command {
         Commands::Apply(args) => apply::apply(args),
         Commands::System(args) => system(args).await,
-        Commands::Remove(args) => remove(args),
+        Commands::Delete(args) => delete(args),
         Commands::Template(args) => template(args),
         Commands::Cni => {
             cni();

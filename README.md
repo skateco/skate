@@ -44,7 +44,6 @@ Nginx container listening on port 80 and 443
 
 Use an Ingress resource to enable.
 
-
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -52,26 +51,27 @@ metadata:
   name: foo-external
 spec:
   rules:
-    - host: foo.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: foo
-                port:
-                  number: 80
+  - host: foo.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: foo
+            port:
+              number: 80
 ```
 
-Service resources are ignored and it's implicit that a pod has a service with url: `<labels.name>.<metadata.namespace>.cluster.skate`
+Service resources are ignored and it's implicit that a pod has a service with
+url: `<labels.name>.<metadata.namespace>.cluster.skate`
 
 Plan:
+
 - Nginx container mounts /var/lib/skate/ingress/nginx.conf
 - nginx reloads on file change
 - skatelet updates the file on ingress resource change
 - use letsencrypt and http verification
-
 
 ## Registering nodes
 
@@ -125,17 +125,36 @@ make armv6
 sudo apt-get install -y gcc make libssl-dev pkg-config
 ```
 
-### Features
+### TODO
 
-- [x] Scheduling
+- Scheduling
     - Strategies
         - [x] Recreate
         - [ ] Rolling Deployments
-    - [x] Pods
-    - [x] Deployments
-    - [x] Daemonsets
+    - Pods
+        - [x] Apply
+        - [ ] Remove
+    - Deployments
+        - [x] Apply
+        - [ ] Remove
+    - Daemonsets
+        - [x] Apply
+        - [ ] Remove
+    - Ingress
+        - [ ] Apply (currently clobber with no concept of update)
+        - [ ] Remove
+        - [ ] List
+    - [ ] Cron
+        - [ ] Apply (currently clobber with no concept of update)
+        - [ ] Remove
 - Networking
     - [x] multi-host container network
-    - [x] container dns
-    - [ ] ingress
+- DNS
+    - [x] multi host dns
     - [ ] modded fanout to wait for all and round robin all
+- Ingress
+    - [x] Openresty config template from ingress resources
+    - [x] letsencrypt
+    - [ ] Support gateway api
+    - [ ] 
+

@@ -112,7 +112,6 @@ http {
         listen 80;
         access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
 
-        # Endpoint used for performing domain verification with Let's Encrypt.
 
         location /assets {
             root "/usr/local/openresty/nginx/html";
@@ -147,6 +146,7 @@ http {
         }
     }
 
-    include services/*.conf;
+    include ../store/ingress/*/80.conf;
+    include ../store/ingress/*/443.conf;
 
 }

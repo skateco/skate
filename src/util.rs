@@ -115,9 +115,21 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, 
     format!("{:x}", hasher.finish())
 }
 
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NamespacedName {
     pub name: String,
     pub namespace: String,
+}
+
+impl From<&str> for NamespacedName {
+    fn from(s: &str) -> Self {
+        let parts: Vec<_> = s.split('.').collect();
+        return Self{
+            name: parts.first().unwrap_or(&"").to_string(),
+            namespace: parts.last().unwrap_or(&"").to_string(),
+        }
+    }
 }
 
 impl Display for NamespacedName {

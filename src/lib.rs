@@ -14,6 +14,7 @@ mod get;
 mod executor;
 
 mod describe;
+mod filestore;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

@@ -7,17 +7,26 @@ use anyhow::anyhow;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
 use serde_json::Value::Number;
+use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::{hash_string, metadata_name};
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;
-    fn remove(&self, manifest: &str, grace: Option<usize>) -> Result<(), Box<dyn Error>>;
+    fn manifest_delete(&self, object: SupportedResources, grace: Option<usize>) -> Result<(), Box<dyn Error>>;
 }
 
-pub struct DefaultExecutor {}
+pub struct DefaultExecutor {
+    store: FileStore,
+}
 
 impl DefaultExecutor {
+    pub fn new() -> Self {
+        DefaultExecutor {
+            store: FileStore::new(),
+        }
+    }
+
     fn write_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
         let file_path = format!("/tmp/skate-{}.yaml", hash_string(manifest));
         let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");
@@ -25,7 +34,23 @@ impl DefaultExecutor {
         Ok(file_path)
     }
 
+    fn reload_ingress(&self) -> Result<(), Box<dyn Error>> {
+        // trigger SIGHUP to ingress container
+        // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
+        let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
+
+        if id.is_empty() {
+            return Err(anyhow!("no ingress container found").into());
+        }
+
+        let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &format!("{}", id)])?;
+        Ok(())
+    }
+
     fn apply_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
+        let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        self.store.write_file("ingress", &metadata_name(&ingress).name, "manifest.yaml", ingress_string.as_bytes())?;
+
         let output = exec_cmd("mkdir", &["-p", "/var/lib/skate/ingress/services"])?;
 
         let main_template_data = json!({
@@ -60,41 +85,34 @@ impl DefaultExecutor {
             let json_ingress_string = json_ingress.to_string();
 
 
-            let mut child = process::Command::new("bash")
-                .args(&["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/ingress--{}--{}.conf", ns_name.name, port)])
+            let mut child = process::Command::new("skatelet")
+                .args(&["template", "--file", "/var/lib/skate/ingress/service.conf.tmpl", "-"])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped()).spawn()?;
 
             child.stdin.as_ref().unwrap().write(json_ingress_string.as_ref()).unwrap();
 
-
             let output = child.wait_with_output()
                 .map_err(|e| anyhow!(e).context("failed to apply resource"))?;
-
 
             if !output.status.success() {
                 return Err(anyhow!("exit code {}, stderr: {}", output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
             }
+
+            self.store.write_file("ingress", &metadata_name(&ingress).name, &format!("{}.conf", port), output.stdout.as_slice())?;
         }
 
-
-        // trigger SIGHUP to ingress container
-        // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
-        let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
-
-        if id.is_empty() {
-            return Err(anyhow!("no ingress container found").into());
-        }
-
-        exec_cmd("podman", &["kill", "--signal", "HUP", &format!("{}", id)])?;
+        self.reload_ingress()?;
 
         Ok(())
     }
 
     fn remove_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        // in all nodes
-        // in /etc/skate/ingress/includes delete any <ingress-name>--<namespace>.conf
-        // trigger SIGHUP to ingress container
+        let ns_name = metadata_name(&ingress);
+        let _ = self.store.remove_object("ingress", &format!("{}.{}", ns_name.name, ns_name.namespace))?;
+
+        self.reload_ingress()?;
+
         Ok(())
     }
 
@@ -178,9 +196,8 @@ impl Executor for DefaultExecutor {
         }
     }
 
-    fn remove(&self, manifest: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
-        let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
 
+    fn manifest_delete(&self, object: SupportedResources, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         let namespaced_name = object.name();
         match object {
             SupportedResources::Pod(p) => {

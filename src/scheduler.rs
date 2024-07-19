@@ -358,7 +358,7 @@ impl DefaultScheduler {
         let conn = conns.find(&resource.node.unwrap().node_name).ok_or("failed to find connection to host")?;
 
         let manifest = serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");
-        match conn.remove_resource(&manifest).await {
+        match conn.remove_resource_by_manifest(&manifest).await {
             Ok(_) => Ok(()),
             Err(err) => Err(err)
         }

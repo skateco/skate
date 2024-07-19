@@ -81,6 +81,13 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Display, Clone)]
+pub enum ResourceType {
+    Pod,
+    Deployment,
+    DaemonSet,
+    Ingress,
+}
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
 pub enum SupportedResources {
