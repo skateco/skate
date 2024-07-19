@@ -151,6 +151,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] multi-host container network
 - DNS
     - [x] multi host dns
+    - [x] ingress
     - [ ] modded fanout to wait for all and round robin all
 - Ingress
     - [x] Openresty config template from ingress resources
