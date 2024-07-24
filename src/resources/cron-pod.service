@@ -2,6 +2,7 @@
 Description={{description}}
 Requires=podman.service
 After=podman.service
+Wants={{timer}}
 
 [Service]
 Restart=no

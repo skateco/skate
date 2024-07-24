@@ -1,5 +1,6 @@
 [Unit]
 Description={{description}}
+Requires={{target_unit}}
 
 [Timer]
 OnCalendar={{on_calendar}}
