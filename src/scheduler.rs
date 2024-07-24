@@ -16,7 +16,7 @@ use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodStatus;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name};
 
 
 #[derive(Debug)]
@@ -330,6 +330,9 @@ impl DefaultScheduler {
     }
 
     fn plan_cronjob(state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
+
+        let name = metadata_name(cron);
+
         let mut new_cron = cron.clone();
         // TODO - check with current state
 
@@ -339,7 +342,8 @@ impl DefaultScheduler {
 
         let new_hash = hash_k8s_resource(&mut new_cron);
 
-        let existing_cron = state.locate_cronjob(&new_cron.metadata.name.clone().unwrap_or("".to_string()), &new_cron.metadata.namespace.clone().unwrap_or("".to_string()));
+
+        let existing_cron = state.locate_cronjob(&name.name, &name.namespace);
 
 
         match existing_cron {
@@ -397,17 +401,61 @@ impl DefaultScheduler {
 
     fn plan_ingress(state: &ClusterState, ingress: &Ingress) -> Result<ApplyPlan, Box<dyn Error>> {
 
-        // TODO - check with current state
         // TODO - warn about unsupported settings
         let mut actions = vec!();
 
+        let mut new_ingress = ingress.clone();
+
+        let new_hash = hash_k8s_resource(&mut new_ingress);
+
+        let name = metadata_name(ingress);
+
         for node in state.nodes.iter() {
-            actions.push(ScheduledOperation {
-                node: Some(node.clone()),
-                resource: SupportedResources::Ingress(ingress.clone()),
-                error: None,
-                operation: OpType::Create,
-            });
+            let existing_ingress = state.locate_ingress(&node.node_name, &name.name, &name.namespace);
+
+            match existing_ingress {
+                Some(c) => {
+                    if c.0.manifest_hash == new_hash {
+
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Ingress(new_ingress.clone()),
+                            error: None,
+                            operation: OpType::Unchanged,
+                            node: Some(node.clone()),
+                        });
+                        // nothing to do
+                    } else {
+
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Ingress(new_ingress.clone()),
+                            error: None,
+                            operation: OpType::Delete,
+                            node: Some(node.clone()),
+                        });
+
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Ingress(new_ingress.clone()),
+                            error: None,
+                            operation: OpType::Create,
+                            node: Some(node.clone()),
+                        });
+
+
+                    }
+                }
+                None => {
+
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::Ingress(new_ingress.clone()),
+                        error: None,
+                        operation: OpType::Create,
+                        node: Some(node.clone()),
+                    });
+
+                }
+            }
+
+
         }
 
         Ok(ApplyPlan {

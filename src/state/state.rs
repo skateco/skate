@@ -186,8 +186,8 @@ impl ClusterState {
     pub fn reconcile_object_creation(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
         match object {
             SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node_name),
-            SupportedResources::Ingress(_) => Ok(ReconciledResult{removed: 0, added: 0, updated: 1}), // TODO
-            SupportedResources::CronJob(_) => Ok(ReconciledResult{removed: 0, added: 0, updated: 1}), // TODO
+            SupportedResources::Ingress(_) => Ok(ReconciledResult { removed: 0, added: 0, updated: 1 }), // TODO
+            SupportedResources::CronJob(_) => Ok(ReconciledResult { removed: 0, added: 0, updated: 1 }), // TODO
             _ => todo!("reconcile not supported")
         }
     }
@@ -308,8 +308,8 @@ impl ClusterState {
         res
     }
 
-    pub fn locate_ingress(&self, name: &str, namespace: &str) -> Option<(ObjectListItem, &NodeState)> {
-        let res = self.nodes.iter().find_map(|n| {
+    pub fn locate_ingress(&self, node: &str, name: &str, namespace: &str) -> Option<(ObjectListItem, &NodeState)> {
+        let res = self.nodes.iter().find(|n| n.node_name == node).and_then(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {
                     i.ingresses.and_then(|p| {
@@ -320,6 +320,7 @@ impl ClusterState {
                 })
             })
         });
+
         res
     }
 
