@@ -329,18 +329,73 @@ impl DefaultScheduler {
         })
     }
 
-    fn plan_cronjob(_state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
+    fn plan_cronjob(state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut new_cron = cron.clone();
         // TODO - check with current state
+
         // Sanitise manifest since we'll be running that later via kube play
         // - only 1 replica
         let mut actions = vec!();
 
-        actions.push(ScheduledOperation {
-            resource: SupportedResources::CronJob(cron.clone()),
-            error: None,
-            operation: OpType::Create,
-            node: None,
-        });
+        let new_hash = hash_k8s_resource(&mut new_cron);
+
+        let existing_cron = state.locate_cronjob(&new_cron.metadata.name.clone().unwrap_or("".to_string()), &new_cron.metadata.namespace.clone().unwrap_or("".to_string()));
+
+
+        match existing_cron {
+            Some(c) => {
+                if c.0.manifest_hash == new_hash {
+
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::CronJob(new_cron),
+                        error: None,
+                        operation: OpType::Unchanged,
+                        node: Some(c.1.clone()),
+                    });
+                    // nothing to do
+                } else {
+                    let mut cj = CronJob::default();
+                    cj.metadata.name = Some(c.0.name.name.clone());
+                    cj.metadata.namespace = Some(c.0.name.namespace.clone());
+                    cj.metadata.labels = Some(BTreeMap::from([
+                        ("skate.io/name".to_string(), c.0.name.name),
+                        ("skate.io/namespace".to_string(), c.0.name.namespace),
+                    ]));
+
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::CronJob(cj),
+                        error: None,
+                        operation: OpType::Delete,
+                        node: Some(c.1.clone()),
+                    });
+
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::CronJob(new_cron),
+                        error: None,
+                        operation: OpType::Create,
+                        node: None,
+                    });
+
+
+                }
+            }
+            None => {
+
+                actions.push(ScheduledOperation {
+                    resource: SupportedResources::CronJob(new_cron),
+                    error: None,
+                    operation: OpType::Create,
+                    node: None,
+                });
+
+            }
+        }
+
+
+        // check if we have an existing cronjob for this
+        // if so compare hashes, if differ then create, otherwise no change
+
+
 
         Ok(ApplyPlan {
             actions,
@@ -389,7 +444,7 @@ impl DefaultScheduler {
     async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.len() == 0 {
-            return Err(anyhow!("failed to schedule resources").into());
+            return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
 
         let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();

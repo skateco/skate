@@ -61,6 +61,12 @@ impl DefaultExecutor {
 
         self.store.write_file("cronjob", &ns_name.to_string(), "manifest.yaml", cron_job_string.as_bytes())?;
 
+        let hash = cron_job.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+
+        if !hash.is_empty() {
+            self.store.write_file("cronjob", &ns_name.to_string(), "hash", &hash.as_bytes())?;
+        }
+
         let spec = cron_job.spec.clone().unwrap_or_default();
         let timezone = spec.time_zone.unwrap_or_default();
 
@@ -155,6 +161,12 @@ impl DefaultExecutor {
 
         // manifest goes into store
         self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
+
+        let hash = ingress.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+
+        if !hash.is_empty() {
+            self.store.write_file("ingress", &name, "hash", &hash.as_bytes())?;
+        }
 
 
         ////////////////////////////////////////////////////

@@ -11,6 +11,7 @@ use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
 use strum_macros::Display;
 use crate::config::{cache_dir, Config};
+use crate::filestore::ObjectListItem;
 
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
@@ -290,6 +291,21 @@ impl ClusterState {
 
     pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         self.filter_pods(&|p| p.name == name && p.namespace() == namespace)
+    }
+
+    pub fn locate_cronjob(&self, name: &str, namespace: &str) -> Option<(ObjectListItem, &NodeState)> {
+        let res = self.nodes.iter().find_map(|n| {
+            n.host_info.as_ref().and_then(|h| {
+                h.system_info.clone().and_then(|i| {
+                    i.cronjobs.and_then(|p| {
+                        p.clone().into_iter().find(|p| {
+                            p.name.name == name && p.name.namespace == namespace
+                        }).map(|p| (p, n))
+                    })
+                })
+            })
+        });
+        res
     }
 
     pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {

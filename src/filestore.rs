@@ -2,6 +2,8 @@ use std::error::Error;
 use std::fs::{create_dir_all, ReadDir};
 use std::io::Write;
 use anyhow::anyhow;
+use serde::{Deserialize, Serialize};
+use crate::util::NamespacedName;
 
 // all dirs/files live under /var/lib/skate/store
 // One directory for
@@ -12,6 +14,12 @@ use anyhow::anyhow;
 // /var/lib/skate/store/ingress/ingress-name.namespace/443.conf
 pub struct FileStore {
     base_path: String,
+}
+
+#[derive(Debug,Clone, Deserialize, Serialize)]
+pub struct ObjectListItem {
+    pub name: NamespacedName,
+    pub manifest_hash: String,
 }
 
 impl FileStore {
@@ -61,7 +69,7 @@ impl FileStore {
         }
     }
 
-    pub fn list_objects(&self, object_type: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    pub fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>> {
         let dir = format!("{}/{}", self.base_path, object_type);
         let entries = match std::fs::read_dir(&dir) {
             Err(e) => match e.kind() {
@@ -70,12 +78,29 @@ impl FileStore {
             },
             Ok(result) => result
         };
+
         let mut result = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| anyhow!(e).context("failed to read entry"))?;
             let path = entry.path();
             let file_name = path.file_name().ok_or(anyhow!("failed to get file name"))?;
-            result.push(file_name.to_string_lossy().to_string());
+
+            let ns_name = NamespacedName::from(file_name.to_string_lossy().as_ref());
+
+            let hash_file_name = format!("{}/hash", path.to_string_lossy());
+
+            let hash = match std::fs::read_to_string(&hash_file_name) {
+                Err(_) => {
+                    eprintln!("WARNING: failed to read hash file {}", &hash_file_name);
+                    "".to_string()
+                }
+                Ok(result) => result
+            };
+
+            result.push(ObjectListItem {
+                name: ns_name,
+                manifest_hash: hash,
+            });
         }
         Ok(result)
     }

@@ -11,7 +11,7 @@ use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
 use crate::util::NamespacedName;
@@ -54,7 +54,8 @@ pub struct SystemInfo {
     pub num_cpus: usize,
     pub root_disk: Option<DiskInfo>,
     pub pods: Option<Vec<PodmanPodInfo>>,
-    pub ingresses: Option<Vec<NamespacedName>>,
+    pub ingresses: Option<Vec<ObjectListItem>>,
+    pub cronjobs: Option<Vec<ObjectListItem>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -315,10 +316,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let store = FileStore::new();
     // list ingresses
     let ingresses = store.list_objects("ingress")?;
-    let ingresses = match ingresses.is_empty() {
-        true => None,
-        false => Some(ingresses.iter().map(|i| NamespacedName::from(i.as_str())).collect())
-    };
+    let cronjobs = store.list_objects("cronjob")?;
 
 
     let iface_ipv4 = match get_ips(&os) {
@@ -359,7 +357,14 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
-        ingresses: ingresses,
+        ingresses: match ingresses.is_empty() {
+            true => None,
+            false => Some(ingresses),
+        },
+        cronjobs: match cronjobs.is_empty() {
+            true => None,
+            false => Some(cronjobs),
+        },
         hostname: sys.host_name().unwrap_or("".to_string()),
         external_ip_address: iface_ipv4.0,
         internal_ip_address: iface_ipv4.1,

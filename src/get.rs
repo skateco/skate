@@ -12,6 +12,7 @@ use crate::refresh::refreshed_state;
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus};
 use crate::{ssh};
+use crate::filestore::ObjectListItem;
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::NamespacedName;
 
@@ -132,8 +133,8 @@ struct GenericLister {
     resource: ResourceType,
 }
 
-impl Lister<NamespacedName> for GenericLister {
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<NamespacedName> {
+impl Lister<ObjectListItem> for GenericLister {
+    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<ObjectListItem> {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = match filters.id.clone() {
             Some(cmd) => match cmd {
@@ -149,8 +150,8 @@ impl Lister<NamespacedName> for GenericLister {
                         Some(hi) => match &hi.system_info {
                             Some(si) => match &si.ingresses {
                                 Some(ingresses) => ingresses.iter().filter(|i|
-                                    (!ns.is_empty() && i.namespace == ns)
-                                        || (!id.is_empty() && i.name == id) || (ns.is_empty() && id.is_empty())
+                                    (!ns.is_empty() && i.name.namespace == ns)
+                                        || (!id.is_empty() && i.name.name == id) || (ns.is_empty() && id.is_empty())
                                 ).map(|i| {
                                     i.clone()
                                 }).collect(),
@@ -170,7 +171,7 @@ impl Lister<NamespacedName> for GenericLister {
         // resources.iter().map(|(p, _)| p.clone()).collect()
     }
 
-    fn print(&self, resources: Vec<NamespacedName>) {
+    fn print(&self, resources: Vec<ObjectListItem>) {
         println!(
             "{0: <30} {1: <10}",
             "NAME", "CREATED",
@@ -178,7 +179,7 @@ impl Lister<NamespacedName> for GenericLister {
         for resource in resources {
             println!(
                 "{0: <30}  {1: <10}",
-                format!("{}.{}", resource.name, resource.namespace), "?"
+                resource.name, "?"
             )
         }
     }
