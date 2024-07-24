@@ -354,16 +354,9 @@ impl DefaultScheduler {
                     });
                     // nothing to do
                 } else {
-                    let mut cj = CronJob::default();
-                    cj.metadata.name = Some(c.0.name.name.clone());
-                    cj.metadata.namespace = Some(c.0.name.namespace.clone());
-                    cj.metadata.labels = Some(BTreeMap::from([
-                        ("skate.io/name".to_string(), c.0.name.name),
-                        ("skate.io/namespace".to_string(), c.0.name.namespace),
-                    ]));
 
                     actions.push(ScheduledOperation {
-                        resource: SupportedResources::CronJob(cj),
+                        resource: SupportedResources::CronJob(new_cron.clone()),
                         error: None,
                         operation: OpType::Delete,
                         node: Some(c.1.clone()),
@@ -403,6 +396,7 @@ impl DefaultScheduler {
     }
 
     fn plan_ingress(state: &ClusterState, ingress: &Ingress) -> Result<ApplyPlan, Box<dyn Error>> {
+
         // TODO - check with current state
         // TODO - warn about unsupported settings
         let mut actions = vec!();

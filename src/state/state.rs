@@ -308,6 +308,22 @@ impl ClusterState {
         res
     }
 
+    pub fn locate_ingress(&self, name: &str, namespace: &str) -> Option<(ObjectListItem, &NodeState)> {
+        let res = self.nodes.iter().find_map(|n| {
+            n.host_info.as_ref().and_then(|h| {
+                h.system_info.clone().and_then(|i| {
+                    i.ingresses.and_then(|p| {
+                        p.clone().into_iter().find(|p| {
+                            p.name.name == name && p.name.namespace == namespace
+                        }).map(|p| (p, n))
+                    })
+                })
+            })
+        });
+        res
+    }
+
+
     pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
         self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
