@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::io;
-use std::ops::Deref;
+
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use handlebars::{Context, Handlebars, handlebars_helper, Helper, Output, RenderContext, RenderError, RenderErrorReason, ScopedJson};
+use handlebars::{Handlebars};
 use serde_json::Value;
-use crate::skatelet::apply::{ApplyArgs, StdinCommand};
+
 
 
 #[derive(Debug, Subcommand)]
@@ -23,7 +23,7 @@ pub struct TemplateArgs {
 }
 
 pub fn template(template_args: TemplateArgs) -> Result<(), Box<dyn Error>> {
-    let manifest = match template_args.command {
+    let _manifest = match template_args.command {
         StdinJsonCommand::Stdin {} => Ok(()),
         _ => Err(anyhow!("must give '-' to use stdin as input"))
     }?;

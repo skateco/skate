@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error;
-use anyhow::anyhow;
+
 
 use chrono::{Local, SecondsFormat};
 use clap::{Args, Subcommand};
@@ -9,9 +9,9 @@ use crate::config::Config;
 use crate::refresh::refreshed_state;
 
 
-use crate::skate::{ConfigFileArgs, ResourceType, SupportedResources};
+use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus};
-use crate::{skate, ssh};
+use crate::{ssh};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::NamespacedName;
 

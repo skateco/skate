@@ -2,17 +2,18 @@ use clap::{Args, Subcommand};
 use std::error::Error;
 
 use std::{io};
+use std::collections::BTreeMap;
 
 use std::io::{Read};
 
 
 use crate::executor::{DefaultExecutor, Executor};
 use crate::skate::SupportedResources;
-use crate::skate::SupportedResources::Ingress;
+use crate::skate::SupportedResources::{CronJob, Ingress};
+use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;
 
 use k8s_openapi::api::networking::v1::Ingress as K8sIngress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use log::Metadata;
 
 
 #[derive(Debug, Args)]
@@ -62,6 +63,7 @@ pub enum DeleteResourceCommands {
     #[command(flatten)]
     StdinCommand(StdinCommand),
     Ingress(DeleteResourceArgs),
+    Cronjob(DeleteResourceArgs)
 }
 
 #[derive(Debug, Args, Clone)]
@@ -76,31 +78,40 @@ pub fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
     match &args.command {
         DeleteResourceCommands::Ingress(resource_args) => delete_ingress(args.clone(), resource_args.clone()),
         DeleteResourceCommands::StdinCommand(_) => delete_stdin(args),
+        DeleteResourceCommands::Cronjob(resource_args) => delete_cronjob(args.clone(), resource_args.clone()),
     }
 }
 
 
 pub fn delete_ingress(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
     let executor = DefaultExecutor::new();
+    let mut meta = ObjectMeta::default();
+    meta.name = Some(resource_args.name.clone());
+    meta.namespace = Some(resource_args.namespace.clone());
+    meta.labels = Some(BTreeMap::from([
+        ("skate.io/name".to_string(), resource_args.name),
+        ("skate.io/namespace".to_string(), resource_args.namespace),
+    ]));
 
     executor.manifest_delete(Ingress(K8sIngress {
-        metadata: ObjectMeta {
-            annotations: None,
-            creation_timestamp: None,
-            deletion_grace_period_seconds: None,
-            deletion_timestamp: None,
-            finalizers: None,
-            generate_name: None,
-            generation: None,
-            labels: None,
-            managed_fields: None,
-            name: Some(resource_args.name),
-            namespace: Some(resource_args.namespace),
-            owner_references: None,
-            resource_version: None,
-            self_link: None,
-            uid: None,
-        },
+        metadata: meta,
+        spec: None,
+        status: None,
+    }), delete_args.termination_grace_period)
+}
+
+pub fn delete_cronjob(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+    let executor = DefaultExecutor::new();
+    let mut meta = ObjectMeta::default();
+    meta.name = Some(resource_args.name.clone());
+    meta.namespace = Some(resource_args.namespace.clone());
+    meta.labels = Some(BTreeMap::from([
+        ("skate.io/name".to_string(), resource_args.name),
+        ("skate.io/namespace".to_string(), resource_args.namespace),
+    ]));
+
+    executor.manifest_delete(CronJob(K8sCronJob {
+        metadata: meta,
         spec: None,
         status: None,
     }), delete_args.termination_grace_period)

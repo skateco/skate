@@ -3,10 +3,16 @@ use std::fs::File;
 use std::io::{Write};
 use std::process;
 use std::process::Stdio;
+
 use anyhow::anyhow;
+use handlebars::Handlebars;
+
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::api::networking::v1::Ingress;
-use serde_json::json;
-use serde_json::Value::Number;
+use serde_json::{json, Value};
+
+use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::{hash_string, metadata_name};
@@ -27,7 +33,7 @@ impl DefaultExecutor {
         }
     }
 
-    fn write_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
+    fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
         let file_path = format!("/tmp/skate-{}.yaml", hash_string(manifest));
         let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");
         file.write_all(manifest.as_ref()).expect("failed to write manifest to file");
@@ -35,6 +41,7 @@ impl DefaultExecutor {
     }
 
     fn reload_ingress(&self) -> Result<(), Box<dyn Error>> {
+
         // trigger SIGHUP to ingress container
         // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
         let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
@@ -47,11 +54,112 @@ impl DefaultExecutor {
         Ok(())
     }
 
+    fn apply_cronjob(&self, cron_job: CronJob) -> Result<(), Box<dyn Error>> {
+        let cron_job_string = serde_yaml::to_string(&cron_job).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+
+        let ns_name = metadata_name(&cron_job);
+
+        self.store.write_file("cronjob", &ns_name.to_string(), "manifest.yaml", cron_job_string.as_bytes())?;
+
+        let spec = cron_job.spec.clone().unwrap_or_default();
+        let timezone = spec.time_zone.unwrap_or_default();
+
+        let systemd_timer_schedule = cron_to_systemd(&spec.schedule, &timezone)?;
+
+        ////////////////////////////////////////////////////
+        // extract pod spec and add file /pod-manifest.yaml
+        ////////////////////////////////////////////////////
+
+        let pod_template_spec = spec.job_template.spec.unwrap_or_default().template;
+
+        let mut pod = Pod::default();
+        pod.spec = pod_template_spec.spec;
+        pod.metadata = cron_job.metadata.clone();
+        let mut_spec = pod.spec.as_mut().unwrap();
+        mut_spec.restart_policy = Some("Never".to_string());
+
+        let pod_string = serde_yaml::to_string(&pod).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
+
+        let mut handlebars = Handlebars::new();
+        handlebars.set_strict_mode(true);
+        ////////////////////////////////////////////////////
+        // template cron-pod.service to /var/lib/state/store/cronjob/<name>/systemd.service
+        ////////////////////////////////////////////////////
+
+
+        handlebars.register_template_string("unit", include_str!("./resources/cron-pod.service")).map_err(|e| anyhow!(e).context("failed to load service template file"))?;
+
+        let json: Value = json!({
+            "description": &format!("{} Job", ns_name.to_string()),
+            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --network podman -w", ns_name.to_string()),
+        });
+
+        let output = handlebars.render("unit", &json)?;
+        // /etc/systemd/system/skate-cronjob-{}.service
+
+        let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
+        file.write_all(output.as_bytes())?;
+
+
+        ////////////////////////////////////////////////////
+        // template cron-pod.timer to /var/lib/state/store/cronjob/<name>/systemd.timer
+        ////////////////////////////////////////////////////
+
+        handlebars.register_template_string("timer", include_str!("./resources/cron-pod.timer")).map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
+
+        let json: Value = json!({
+            "description": &format!("{} Timer", ns_name.to_string()),
+            "target_unit": &format!("skate-cronjob-{}.service", &ns_name.to_string()),
+            "on_calendar": systemd_timer_schedule,
+        });
+
+        let output = handlebars.render("timer", &json)?;
+        // /etc/systemd/system/skate-cronjob-{}.timer
+        let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
+        file.write_all(output.as_bytes())?;
+
+
+        // systemctl daemon-reload
+        exec_cmd("systemctl", &["daemon-reload"])?;
+        exec_cmd("systemctl", &["enable", "--now", &format!("skate-cronjob-{}", &ns_name.to_string())])?;
+
+        Ok(())
+    }
+
+
+    fn remove_cron(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(&cron);
+        // systemctl stop skate-cronjob-{}
+        exec_cmd("systemctl", &["stop", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+
+        // systemctl disable skate-cronjob-{}
+        exec_cmd("systemctl", &["disable", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+        // rm /etc/systemd/system/skate-cronjob-{}.service
+        exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
+        exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
+        // systemctl daemon-reload
+        exec_cmd("systemctl", &["daemon-reload"])?;
+        // systemctl reset-failed
+        exec_cmd("systemctl", &["reset-failed"])?;
+        let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
+        Ok(())
+    }
+
+
     fn apply_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
         let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        self.store.write_file("ingress", &metadata_name(&ingress).name, "manifest.yaml", ingress_string.as_bytes())?;
+        let name = &metadata_name(&ingress).to_string();
 
-        let output = exec_cmd("mkdir", &["-p", "/var/lib/skate/ingress/services"])?;
+        exec_cmd("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
+
+        // manifest goes into store
+        self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
+
+
+        ////////////////////////////////////////////////////
+        // Template main nginx conf
+        ////////////////////////////////////////////////////
 
         let main_template_data = json!({
             "letsEncrypt": {
@@ -74,7 +182,11 @@ impl DefaultExecutor {
             return Err(anyhow!("exit code {}, stderr: {}", output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
 
-        let ns_name = metadata_name(&ingress);
+        let _ns_name = metadata_name(&ingress);
+
+        ////////////////////////////////////////////////////
+        // Template service nginx confs for http/https
+        ////////////////////////////////////////////////////
 
         for port in [80, 443] {
             // convert manifest to json
@@ -85,8 +197,8 @@ impl DefaultExecutor {
             let json_ingress_string = json_ingress.to_string();
 
 
-            let mut child = process::Command::new("skatelet")
-                .args(&["template", "--file", "/var/lib/skate/ingress/service.conf.tmpl", "-"])
+            let child = process::Command::new("bash")
+                .args(&["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped()).spawn()?;
 
@@ -98,8 +210,6 @@ impl DefaultExecutor {
             if !output.status.success() {
                 return Err(anyhow!("exit code {}, stderr: {}", output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
             }
-
-            self.store.write_file("ingress", &metadata_name(&ingress).name, &format!("{}.conf", port), output.stdout.as_slice())?;
         }
 
         self.reload_ingress()?;
@@ -109,18 +219,24 @@ impl DefaultExecutor {
 
     fn remove_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&ingress);
-        let _ = self.store.remove_object("ingress", &format!("{}.{}", ns_name.name, ns_name.namespace))?;
+        let _ = self.store.remove_object("ingress", &ns_name.to_string())?;
+        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name.to_string());
+        let result = std::fs::remove_dir_all(&dir);
+        if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
+            return Err(anyhow!(result.unwrap_err()).context(format!("failed to remove directory {}", dir)).into());
+        }
 
         self.reload_ingress()?;
 
         Ok(())
     }
 
+
     fn apply_play(&self, object: SupportedResources) -> Result<(), Box<dyn Error>> {
 
         // check if object's hostNetwork: true then don't use network=podman
 
-        let file_path = DefaultExecutor::write_to_file(&serde_yaml::to_string(&object)?)?;
+        let file_path = DefaultExecutor::write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
 
         let mut args = vec!["play", "kube", &file_path, "--start"];
         if !object.host_network() {
@@ -141,7 +257,7 @@ impl DefaultExecutor {
 
         Ok(())
     }
-    fn remove_pod(&self, id: &str, namespace: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+    fn remove_pod(&self, id: &str, _namespace: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         if id.is_empty() {
             return Err(anyhow!("no metadata.name found").into());
         }
@@ -193,6 +309,9 @@ impl Executor for DefaultExecutor {
             SupportedResources::Ingress(ingress) => {
                 self.apply_ingress(ingress)
             }
+            SupportedResources::CronJob(cron) => {
+                self.apply_cronjob(cron)
+            }
         }
     }
 
@@ -200,7 +319,7 @@ impl Executor for DefaultExecutor {
     fn manifest_delete(&self, object: SupportedResources, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         let namespaced_name = object.name();
         match object {
-            SupportedResources::Pod(p) => {
+            SupportedResources::Pod(_p) => {
                 self.remove_pod(&namespaced_name.name, &namespaced_name.namespace, grace_period)
             }
             SupportedResources::Deployment(_d) => {
@@ -211,6 +330,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::Ingress(ingress) => {
                 self.remove_ingress(ingress)
+            }
+            SupportedResources::CronJob(cron) => {
+                self.remove_cron(cron)
             }
         }
     }

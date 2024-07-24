@@ -2,7 +2,7 @@ use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, DiskKind, RefreshKind, System, SystemExt};
 use std::error::Error;
-use std::ops::Deref;
+
 
 use anyhow::anyhow;
 use chrono::{DateTime, Local};

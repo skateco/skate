@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, ReadDir};
 use std::io::Write;
 use anyhow::anyhow;
 
@@ -63,7 +63,13 @@ impl FileStore {
 
     pub fn list_objects(&self, object_type: &str) -> Result<Vec<String>, Box<dyn Error>> {
         let dir = format!("{}/{}", self.base_path, object_type);
-        let entries = std::fs::read_dir(&dir).map_err(|e| anyhow!(e).context(format!("failed to read directory {}", dir)))?;
+        let entries = match std::fs::read_dir(&dir) {
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+                _ => return Err(anyhow!(e).context(format!("failed to read directory {}", dir)).into())
+            },
+            Ok(result) => result
+        };
         let mut result = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| anyhow!(e).context("failed to read entry"))?;

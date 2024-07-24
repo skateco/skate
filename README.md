@@ -58,7 +58,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: foo
+            name: mypod.myns.cluster.skate
             port:
               number: 80
 ```
@@ -66,12 +66,11 @@ spec:
 Service resources are ignored and it's implicit that a pod has a service with
 url: `<labels.name>.<metadata.namespace>.cluster.skate`
 
-Plan:
+Currently only Prefix pathType is supported.
 
-- Nginx container mounts /var/lib/skate/ingress/nginx.conf
-- nginx reloads on file change
-- skatelet updates the file on ingress resource change
-- use letsencrypt and http verification
+### Cron
+
+
 
 ## Registering nodes
 
@@ -141,9 +140,9 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [ ] Remove
     - Ingress
-        - [ ] Apply (currently clobber with no concept of update)
-        - [ ] Remove
-        - [ ] List
+        - [x] Apply (currently clobber with no concept of update)
+        - [x] Remove
+        - [x] List
     - [ ] Cron
         - [ ] Apply (currently clobber with no concept of update)
         - [ ] Remove
@@ -156,6 +155,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Ingress
     - [x] Openresty config template from ingress resources
     - [x] letsencrypt
+      - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
-    - [ ] 
 

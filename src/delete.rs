@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use crate::config::Config;
-use crate::refresh::refreshed_state;
+
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
 
@@ -19,6 +19,7 @@ pub struct DeleteArgs {
 pub enum DeleteCommands {
     Node(DeleteResourceArgs),
     Ingress(DeleteResourceArgs),
+    Cronjob(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -36,12 +37,13 @@ pub struct DeleteResourceArgs {
 pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         DeleteCommands::Node(args) => delete_node(args).await?,
-        DeleteCommands::Ingress(args) => delete_ingress(args).await?
+        DeleteCommands::Ingress(args) => delete_resource(ResourceType::Ingress, args).await?,
+        DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
     }
     Ok(())
 }
 
-async fn delete_ingress(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
     // fetch state for resource type from nodes
 
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
@@ -60,7 +62,7 @@ async fn delete_ingress(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> 
     let mut errors = vec!();
 
     for conn in conns.clients {
-        match conn.remove_resource(ResourceType::Ingress, &args.name, &args.namespace).await {
+        match conn.remove_resource(r_type.clone(), &args.name, &args.namespace).await {
             Ok(result) => {
                 results.push(result)
             },

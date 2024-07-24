@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
+use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
@@ -328,7 +329,27 @@ impl DefaultScheduler {
         })
     }
 
+    fn plan_cronjob(_state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
+        // TODO - check with current state
+        // Sanitise manifest since we'll be running that later via kube play
+        // - only 1 replica
+        let mut actions = vec!();
+
+        actions.push(ScheduledOperation {
+            resource: SupportedResources::CronJob(cron.clone()),
+            error: None,
+            operation: OpType::Create,
+            node: None,
+        });
+
+        Ok(ApplyPlan {
+            actions,
+        })
+    }
+
     fn plan_ingress(state: &ClusterState, ingress: &Ingress) -> Result<ApplyPlan, Box<dyn Error>> {
+        // TODO - check with current state
+        // TODO - warn about unsupported settings
         let mut actions = vec!();
 
         for node in state.nodes.iter() {
@@ -350,7 +371,8 @@ impl DefaultScheduler {
             SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
             SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
             SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds),
-            SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress)
+            SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress),
+            SupportedResources::CronJob(cron) => Self::plan_cronjob(state, cron),
         }
     }
 
@@ -407,10 +429,10 @@ impl DefaultScheduler {
                     let serialized = serde_yaml::to_string(&action.resource).expect("failed to serialize object");
 
                     match client.apply_resource(&serialized).await {
-                        Ok(_) => {
+                        Ok((stdout, stderr)) => {
+                            println!("{}{}", stdout, stderr);
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
-
-                            println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name().name, node_name);
+                            println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {

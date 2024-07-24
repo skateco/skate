@@ -1,0 +1,14 @@
+[Unit]
+Description={{description}}
+Requires=podman.service
+After=podman.service
+
+[Service]
+Restart=no
+ExecStart={{command}}
+User=root
+Group=root
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target

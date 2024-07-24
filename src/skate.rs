@@ -25,6 +25,7 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 use path_absolutize::*;
 use anyhow::anyhow;
+use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde_yaml::{Error as SerdeYamlError, Value};
@@ -87,6 +88,7 @@ pub enum ResourceType {
     Deployment,
     DaemonSet,
     Ingress,
+    CronJob,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -99,16 +101,19 @@ pub enum SupportedResources {
     DaemonSet(DaemonSet),
     #[strum(serialize = "Ingress")]
     Ingress(Ingress),
+    #[strum(serialize = "CronJob")]
+    CronJob(CronJob),
 }
 
 
 impl SupportedResources {
     pub fn name(&self) -> NamespacedName {
         match self {
-            SupportedResources::Pod(p) => metadata_name(p),
-            SupportedResources::Deployment(d) => metadata_name(d),
-            SupportedResources::DaemonSet(d) => metadata_name(d),
-            SupportedResources::Ingress(i) => metadata_name(i),
+            SupportedResources::Pod(r) => metadata_name(r),
+            SupportedResources::Deployment(r) => metadata_name(r),
+            SupportedResources::DaemonSet(r) => metadata_name(r),
+            SupportedResources::Ingress(r) => metadata_name(r),
+            SupportedResources::CronJob(r) => metadata_name(r),
         }
     }
 
@@ -119,14 +124,17 @@ impl SupportedResources {
             SupportedResources::Deployment(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
             SupportedResources::DaemonSet(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
             SupportedResources::Ingress(_) => false,
+            SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
         }
     }
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
+        let name = meta.name.clone().unwrap();
 
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
+        labels.insert("skate.io/name".to_string(), name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
 
         match extra_labels {
@@ -140,7 +148,49 @@ impl SupportedResources {
     pub fn fixup(self) -> Result<Self, Box<dyn Error>> {
         let mut resource = self.clone();
         let resource = match resource {
+            SupportedResources::CronJob(ref mut c) => {
+                let original_name = c.metadata.name.clone().unwrap_or("".to_string());
+                if original_name.is_empty() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if c.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
+
+                let mut extra_labels = HashMap::from([
+                    ("skate.io/cronjob".to_string(), original_name)
+                ]);
+                c.metadata = Self::fixup_metadata(c.metadata.clone(), None)?;
+                c.spec = match c.spec.clone() {
+                    Some(mut spec) => {
+                        match spec.job_template.spec {
+                            Some(mut job_spec) => {
+                                job_spec.template.metadata = match job_spec.template.metadata.clone() {
+                                    Some(meta) => {
+                                        let mut meta = meta.clone();
+                                        // forward the namespace
+                                        meta.namespace = c.metadata.namespace.clone();
+                                        // if no name is set, set it to the cronjob name
+                                        if meta.name.is_none() {
+                                            meta.name = Some(c.metadata.name.clone().unwrap());
+                                        }
+                                        let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                                        Some(meta)
+                                    }
+                                    None => None
+                                };
+                                spec.job_template.spec = Some(job_spec);
+                                Some(spec)
+                            }
+                            None => None
+                        }
+                    }
+                    None => None
+                };
+                resource
+            }
             SupportedResources::Ingress(ref mut i) => {
+                let original_name = i.metadata.name.clone().unwrap_or("".to_string());
                 if i.metadata.name.is_none() {
                     return Err(anyhow!("metadata.name is empty").into());
                 }
@@ -148,7 +198,9 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                i.metadata = Self::fixup_metadata(i.metadata.clone(), None)?;
+                let mut extra_labels = HashMap::from([]);
+
+                i.metadata = Self::fixup_metadata(i.metadata.clone(), Some(extra_labels))?;
                 // set name to be name.namespace
                 i.metadata.name = Some(format!("{}", metadata_name(i)));
                 resource
@@ -175,7 +227,7 @@ impl SupportedResources {
                 }
 
                 let mut extra_labels = HashMap::from([
-                    ("skate.io/deployment".to_string(), original_name)
+                    ("skate.io/deployment".to_string(), original_name.clone())
                 ]);
                 d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
 
@@ -186,6 +238,9 @@ impl SupportedResources {
                                 let mut meta = meta.clone();
                                 // forward the namespace
                                 meta.namespace = d.metadata.namespace.clone();
+                                if meta.name.clone().unwrap_or_default().is_empty() {
+                                    meta.name = Some(original_name.clone());
+                                }
                                 let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
                                 Some(meta)
                             }
@@ -207,7 +262,7 @@ impl SupportedResources {
                 }
 
                 let mut extra_labels = HashMap::from([
-                    ("skate.io/daemonset".to_string(), original_name)
+                    ("skate.io/daemonset".to_string(), original_name.clone())
                 ]);
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
                 ds.spec = match ds.spec.clone() {
@@ -217,6 +272,9 @@ impl SupportedResources {
                                 let mut meta = meta.clone();
                                 // forward the namespace
                                 meta.namespace = ds.metadata.namespace.clone();
+                                if meta.name.clone().unwrap_or_default().is_empty() {
+                                    meta.name = Some(original_name.clone());
+                                }
                                 let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
                                 Some(meta)
                             }
@@ -276,6 +334,13 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                         {
                             let ingress: Ingress = serde::Deserialize::deserialize(value)?;
                             result.push(SupportedResources::Ingress(ingress))
+                        }
+                    (Some(api_version), Some(kind)) if
+                    api_version == <CronJob as Resource>::API_VERSION &&
+                        kind == <CronJob as Resource>::KIND =>
+                        {
+                            let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
+                            result.push(SupportedResources::CronJob(cronjob))
                         }
                     _ => {
                         return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());

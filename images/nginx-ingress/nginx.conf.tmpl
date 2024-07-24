@@ -146,7 +146,7 @@ http {
         }
     }
 
-    include ../store/ingress/*/80.conf;
-    include ../store/ingress/*/443.conf;
+    include ./services/*/80.conf;
+    include ./services/*/443.conf;
 
 }

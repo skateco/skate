@@ -14,7 +14,7 @@ use crate::config::{cache_dir, Config};
 
 use crate::skate::SupportedResources;
 use crate::skatelet::PodmanPodInfo;
-use crate::ssh::NodeSystemInfo;
+use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};
 
@@ -29,7 +29,7 @@ pub enum NodeStatus {
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
-    pub host_info: Option<NodeSystemInfo>,
+    pub host_info: Option<HostInfo>,
 }
 
 impl Into<K8sNode> for NodeState {
@@ -157,7 +157,7 @@ impl ClusterState {
         }
     }
 
-    pub fn reconcile_node(&mut self, node: &NodeSystemInfo) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_node(&mut self, node: &HostInfo) -> Result<ReconciledResult, Box<dyn Error>> {
         let pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
 
         let result = match pos {
@@ -186,6 +186,7 @@ impl ClusterState {
         match object {
             SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node_name),
             SupportedResources::Ingress(_) => Ok(ReconciledResult{removed: 0, added: 0, updated: 1}), // TODO
+            SupportedResources::CronJob(_) => Ok(ReconciledResult{removed: 0, added: 0, updated: 1}), // TODO
             _ => todo!("reconcile not supported")
         }
     }
@@ -208,7 +209,7 @@ impl ClusterState {
             updated: 0,
         })
     }
-    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<NodeSystemInfo>) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<HostInfo>) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.current_cluster()?;
         self.hash = hash_string(cluster);
 

@@ -147,7 +147,20 @@ impl NamespacedName {
 // returns name, namespace
 pub fn metadata_name(obj: &impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta>) -> NamespacedName
 {
-    NamespacedName::new(obj.metadata().name.clone().unwrap_or_default(), obj.metadata().namespace.clone().unwrap_or_default())
+    let m = obj.metadata();
+
+    let name = m.labels.as_ref().and_then(|l| l.get("skate.io/name"));
+    let ns = m.labels.as_ref().and_then(|l| l.get("skate.io/namespace"));
+
+    if name.is_none() {
+        panic!("metadata missing skate.io/name label")
+    }
+
+    if ns.is_none() {
+        panic!("metadata missing skate.io/namespace label")
+    }
+
+    NamespacedName::new(name.unwrap().clone(), ns.unwrap().clone())
 }
 
 pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String

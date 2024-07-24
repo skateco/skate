@@ -1,0 +1,9 @@
+[Unit]
+Description={{description}}
+
+[Timer]
+OnCalendar={{on_calendar}}
+Unit={{target_unit}}
+
+[Install]
+WantedBy=timers.target

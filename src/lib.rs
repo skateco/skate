@@ -15,6 +15,7 @@ mod executor;
 
 mod describe;
 mod filestore;
+mod cron;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

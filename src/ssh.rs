@@ -4,10 +4,10 @@ use std::fmt::{Debug, Formatter};
 use std::time::Duration;
 use anyhow::anyhow;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
-use async_ssh2_tokio::client::{Client, CommandExecutedResult};
+use async_ssh2_tokio::client::{Client};
 use base64::Engine;
 use base64::engine::general_purpose;
-use cni_plugin::Command;
+
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
@@ -34,7 +34,7 @@ pub struct SshClients {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeSystemInfo {
+pub struct HostInfo {
     pub node_name: String,
     pub hostname: String,
     pub platform: Platform,
@@ -44,7 +44,7 @@ pub struct NodeSystemInfo {
     pub ovs_version: Option<String>,
 }
 
-impl Into<NodeState> for NodeSystemInfo {
+impl Into<NodeState> for HostInfo {
     fn into(self) -> NodeState {
         NodeState {
             node_name: self.node_name.to_string(),
@@ -57,7 +57,7 @@ impl Into<NodeState> for NodeSystemInfo {
     }
 }
 
-impl NodeSystemInfo {
+impl HostInfo {
     pub fn healthy(&self) -> bool {
         // TODO - actual checks for things that matter
         self.skatelet_version.is_some()
@@ -65,7 +65,7 @@ impl NodeSystemInfo {
 }
 
 impl SshClient {
-    pub async fn get_node_system_info(&self) -> Result<NodeSystemInfo, Box<dyn Error>> {
+    pub async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>> {
         let command = "\
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
@@ -95,7 +95,7 @@ echo ovs=$(cat /tmp/ovs-$$);
             return Err(anyhow!(errlines.join("\n")).into());
         }
         let lines = result.stdout.lines();
-        let mut host_info = NodeSystemInfo {
+        let mut host_info = HostInfo {
             node_name: self.node_name.clone(),
             hostname: "".to_string(),
             platform: Platform {
@@ -369,7 +369,7 @@ impl SshClients {
             (node_name, r)
         }).collect()
     }
-    pub async fn get_nodes_system_info(&self) -> Vec<Result<NodeSystemInfo, Box<dyn Error>>> {
+    pub async fn get_nodes_system_info(&self) -> Vec<Result<HostInfo, Box<dyn Error>>> {
         let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
             c.get_node_system_info()
         }).collect();
