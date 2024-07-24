@@ -144,8 +144,9 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Remove
         - [x] List
     - [ ] Cron
-        - [ ] Apply (currently clobber with no concept of update)
-        - [ ] Remove
+        - [x] Apply (currently will not cleanup previous applys!! Run delete first)
+        - [x] Remove
+        - [ ] Hash checking
 - Networking
     - [x] multi-host container network
 - DNS
