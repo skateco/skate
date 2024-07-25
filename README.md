@@ -133,12 +133,15 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - Pods
         - [x] Apply
         - [ ] Remove
+        - [x] List
     - Deployments
         - [x] Apply
         - [ ] Remove
+        - [x] List
     - Daemonsets
         - [x] Apply
         - [ ] Remove
+        - [ ] List
     - Ingress
         - [x] Apply
         - [x] Remove
@@ -147,6 +150,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [x] Remove
         - [x] Hash checking
+        - [x] List
 - Networking
     - [x] multi-host container network
 - DNS
