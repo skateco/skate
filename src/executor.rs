@@ -135,6 +135,7 @@ impl DefaultExecutor {
     }
 
 
+    // TODO - warn about failures
     fn remove_cron(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&cron);
         // systemctl stop skate-cronjob-{}

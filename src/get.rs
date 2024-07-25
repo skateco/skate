@@ -10,7 +10,7 @@ use crate::refresh::refreshed_state;
 
 
 use crate::skate::{ConfigFileArgs, ResourceType};
-use crate::skatelet::{PodmanPodInfo, PodmanPodStatus};
+use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
 use crate::{ssh};
 use crate::filestore::ObjectListItem;
 use crate::state::state::{ClusterState, NodeState};
@@ -49,6 +49,8 @@ pub enum GetCommands {
     Node(GetObjectArgs),
     #[command()]
     Ingress(GetObjectArgs),
+    #[command(alias("cronjobs"))]
+    Cronjob(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
@@ -58,6 +60,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
         GetCommands::Deployment(args) => get_deployment(global_args, args).await,
         GetCommands::Node(args) => get_nodes(global_args, args).await,
         GetCommands::Ingress(args) => get_ingress(global_args, args).await,
+        GetCommands::Cronjob(args) => get_cronjobs(global_args, args).await,
     }
 }
 
@@ -100,8 +103,11 @@ impl Lister<PodmanPodInfo> for PodLister {
         };
 
         let pods = state.filter_pods(&|p| {
-            return (!ns.is_empty() && p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone() == ns)
-                || (!id.is_empty() && (p.id == id || p.name == id)) || (ns.is_empty() && id.is_empty());
+            let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
+
+            return (!ns.is_empty() && pod_ns == ns)
+                || (!id.is_empty() && (p.id == id || p.name == id))
+                || (ns.is_empty() && id.is_empty() && pod_ns != "skate");
         });
         pods.iter().map(|(p, _)| p.clone()).collect()
     }
@@ -129,8 +135,9 @@ impl Lister<PodmanPodInfo> for PodLister {
     }
 }
 
+
 struct GenericLister {
-    resource: ResourceType,
+    selector: Box<dyn Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>>
 }
 
 impl Lister<ObjectListItem> for GenericLister {
@@ -143,28 +150,25 @@ impl Lister<ObjectListItem> for GenericLister {
             None => "".to_string()
         };
 
-        let resources: Vec<_> = match &self.resource {
-            ResourceType::Ingress => {
-                state.nodes.iter().map(|node| {
-                    match &node.host_info {
-                        Some(hi) => match &hi.system_info {
-                            Some(si) => match &si.ingresses {
-                                Some(ingresses) => ingresses.iter().filter(|i|
-                                    (!ns.is_empty() && i.name.namespace == ns)
-                                        || (!id.is_empty() && i.name.name == id) || (ns.is_empty() && id.is_empty())
-                                ).map(|i| {
-                                    i.clone()
-                                }).collect(),
-                                None => vec![]
-                            }
-                            None => vec![]
-                        }
+        let selector = &self.selector;
+
+        let resources = state.nodes.iter().map(|node| {
+            match &node.host_info {
+                Some(hi) => match &hi.system_info {
+                    Some(si) => match selector(&si) {
+                        Some(ingresses) => ingresses.iter().filter(|i|
+                            (!ns.is_empty() && i.name.namespace == ns)
+                                || (!id.is_empty() && i.name.name == id) || (ns.is_empty() && id.is_empty())
+                        ).map(|i| {
+                            i.clone()
+                        }).collect(),
                         None => vec![]
                     }
-                }).flatten().collect()
+                    None => vec![]
+                }
+                None => vec![]
             }
-            _ => panic!("unsupported resource type for generic lister")
-        };
+        }).flatten().collect();
 
         resources
 
@@ -173,17 +177,19 @@ impl Lister<ObjectListItem> for GenericLister {
 
     fn print(&self, resources: Vec<ObjectListItem>) {
         println!(
-            "{0: <30} {1: <10}",
+            "{0: <30} {1: <20}",
             "NAME", "CREATED",
         );
         for resource in resources {
             println!(
-                "{0: <30}  {1: <10}",
-                resource.name, "?"
+                "{0: <30}  {1: <20}",
+                resource.name, resource.created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
             )
         }
     }
 }
+
+
 
 
 async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
@@ -191,8 +197,14 @@ async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dy
     get_objects(global_args, args, &lister).await
 }
 
+
 async fn get_ingress(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
-    let lister = GenericLister { resource: ResourceType::Ingress };
+    let lister = GenericLister { selector: Box::new(|si| si.ingresses.clone()) };
+    get_objects(global_args, args, &lister).await
+}
+
+async fn get_cronjobs(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+    let lister = GenericLister { selector: Box::new(|si| si.cronjobs.clone()) };
     get_objects(global_args, args, &lister).await
 }
 

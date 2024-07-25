@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fs::{create_dir_all, ReadDir};
 use std::io::Write;
 use anyhow::anyhow;
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use crate::util::NamespacedName;
 
@@ -16,10 +17,11 @@ pub struct FileStore {
     base_path: String,
 }
 
-#[derive(Debug,Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ObjectListItem {
     pub name: NamespacedName,
     pub manifest_hash: String,
+    pub created_at: DateTime<Local>,
 }
 
 impl FileStore {
@@ -96,10 +98,12 @@ impl FileStore {
                 }
                 Ok(result) => result
             };
+            let created_at = entry.metadata()?.created()?;
 
             result.push(ObjectListItem {
                 name: ns_name,
                 manifest_hash: hash,
+                created_at: DateTime::from(created_at),
             });
         }
         Ok(result)

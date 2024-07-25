@@ -334,7 +334,6 @@ impl DefaultScheduler {
         let name = metadata_name(cron);
 
         let mut new_cron = cron.clone();
-        // TODO - check with current state
 
         // Sanitise manifest since we'll be running that later via kube play
         // - only 1 replica
