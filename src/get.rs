@@ -177,8 +177,8 @@ impl Lister<ObjectListItem> for GenericLister {
 
     fn print(&self, resources: Vec<ObjectListItem>) {
         println!(
-            "{0: <30} {1: <20} {2: <20}",
-            "NAME", "READY", "CREATED",
+            "{0: <30}  {1: <5}  {2: <20}",
+            "NAME", "#", "CREATED",
         );
         let map = resources.iter().fold(HashMap::<String, Vec<ObjectListItem>>::new(), |mut acc, item| {
             acc.entry(item.name.to_string()).or_insert(vec![]).push(item.clone());
@@ -186,7 +186,7 @@ impl Lister<ObjectListItem> for GenericLister {
         });
         for (name, item) in map {
             println!(
-                "{0: <30}  {1: <20} {2: <20}",
+                "{0: <30}  {1: <5}  {2: <20}",
                 name, item.len(), item.first().unwrap().created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
             )
         }
