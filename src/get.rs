@@ -9,12 +9,12 @@ use crate::config::Config;
 use crate::refresh::refreshed_state;
 
 
-use crate::skate::{ConfigFileArgs, ResourceType};
+use crate::skate::{ConfigFileArgs};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
 use crate::{ssh};
 use crate::filestore::ObjectListItem;
 use crate::state::state::{ClusterState, NodeState};
-use crate::util::NamespacedName;
+
 
 
 #[derive(Debug, Clone, Args)]

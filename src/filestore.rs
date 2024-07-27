@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fs::{create_dir_all, ReadDir};
+use std::fs::{create_dir_all};
 use std::io::Write;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
