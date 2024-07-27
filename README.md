@@ -151,6 +151,9 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Remove
         - [x] Hash checking
         - [x] List
+    - Secret
+        - Goal here is to support private image pull
+
 - Networking
     - [x] multi-host container network
 - DNS
