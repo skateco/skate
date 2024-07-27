@@ -126,6 +126,12 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 
 ### TODO
 
+- Install
+  - Supported distros/arch
+    - [x] Ubuntu 24.04 amd64/aarch64
+    - [ ] Raspbian armv7
+  - [ ] Idempotent install
+
 - Scheduling
     - Strategies
         - [x] Recreate
@@ -138,31 +144,40 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [ ] Remove
         - [x] List
+        - [ ] Output matches kubectl
     - Daemonsets
         - [x] Apply
         - [ ] Remove
         - [ ] List
+        - [ ] Output matches kubectl
     - Ingress
         - [x] Apply
         - [x] Remove
         - [x] List
+        - [ ] Output matches kubectl
     -  Cron
         - [x] Apply
         - [x] Remove
         - [x] Hash checking
         - [x] List
+        - [ ] Output matches kubectl
     - Secret
         - [ ] Apply
         - [ ] Remove
         - [ ] List
+        - [ ] Output matches kubectl
         - Goal here is to support private image pull
+    - ClusterIssuer
+      - For letsencrypt
 
 - Networking
-    - [x] multi-host container network
+    - [x] multi-host container network (currently static routes)
+    - [ ] Use something fancier like vxlan
 - DNS
     - [x] multi host dns
     - [x] ingress
     - [ ] modded fanout to wait for all and round robin all
+    - [ ] something more barebones than coredns??
 - Ingress
     - [x] Openresty config template from ingress resources
     - [x] letsencrypt
