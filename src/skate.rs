@@ -372,13 +372,12 @@ impl Os {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
     pub arch: String,
-    pub os: Os,
     pub distribution: Distribution,
 }
 
 impl Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("arch: {}, os: {}, distribution: {}", self.arch, self.os, self.distribution))
+        f.write_str(&format!("arch: {}, distribution: {}", self.arch, self.distribution))
     }
 }
 
@@ -386,23 +385,13 @@ impl Platform {
     pub fn target() -> Self {
         let parts: Vec<&str> = TARGET.split('-').collect();
 
-        let os = match parts.last().expect("failed to find os").to_lowercase() {
-            s if s.starts_with("linux") => Linux,
-            s if s.starts_with("darwin") => Darwin,
-            _ => Os::Unknown
-        };
 
         let arch = parts.first().expect("failed to find arch");
 
-        let distro: Option<String> = match os {
-            Linux => {
-                let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
-                Some(issue.split_whitespace().next().expect("no distribution found in /etc/issue").into())
-            }
-            _ => None
-        };
+        let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
+        let distro = issue.split_whitespace().next().expect("no distribution found in /etc/issue");
 
-        return Platform { arch: arch.to_string(), os, distribution: Distribution::from(distro.unwrap_or_default()) };
+        return Platform { arch: arch.to_string(), distribution: Distribution::from(distro) };
     }
 }
 
@@ -414,8 +403,8 @@ pub enum Distribution {
     Ubuntu,
 }
 
-impl From<String> for Distribution {
-    fn from(s: String) -> Self {
+impl From<&str> for Distribution {
+    fn from(s: &str) -> Self {
         match s.to_lowercase() {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,

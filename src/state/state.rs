@@ -74,15 +74,6 @@ impl Into<K8sNode> for NodeState {
                             type_: "Hostname".to_string(),
                         },
                     ];
-                    match si.external_ip_address {
-                        Some(ip) => {
-                            addresses.push(NodeAddress {
-                                address: ip,
-                                type_: "ExternalIP".to_string(),
-                            })
-                        }
-                        None => {}
-                    }
                     match si.internal_ip_address {
                         Some(ip) => {
                             addresses.push(NodeAddress {
@@ -96,7 +87,6 @@ impl Into<K8sNode> for NodeState {
                 }), (
                      Some(BTreeMap::<String, String>::from([
                          ("skate.io/arch".to_string(), si.platform.arch.clone()),
-                         ("skate.io/os".to_string(), si.platform.os.to_string().to_lowercase()),
                          ("skate.io/nodename".to_string(), self.node_name.clone()),
                          ("skate.io/hostname".to_string(), si.hostname.clone()),
                      ]))

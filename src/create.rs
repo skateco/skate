@@ -112,13 +112,6 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     println!("{:}", &info.platform);
 
-    match &(info.platform).os {
-        Os::Linux => {}
-        _ => {
-            return Err(anyhow!("detected os {}: only linux is supported", &(info.platform).os).into());
-        }
-    }
-
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
@@ -142,26 +135,21 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
         // instruct on installing newer podman version
         None => {
-            let installed = match info.platform.clone().os {
-                Os::Linux => {
-                    match info.platform.distribution {
-                        Distribution::Unknown => false,
-                        Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
-                            let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman containernetworking-plugins'";
-                            println!("installing podman with command {}", command);
-                            let result = conn.client.execute(command).await?;
-                            if result.exit_status > 0 {
-                                let mut lines = result.stderr.lines();
-                                println!("failed to install podman {} :\n{}", CROSS_EMOJI, lines.join("\n"));
-                                false
-                            } else {
-                                println!("podman installed successfully {} ", CHECKBOX_EMOJI);
-                                true
-                            }
-                        }
+            let installed = match info.platform.distribution {
+                Distribution::Unknown => false,
+                Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
+                    let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman containernetworking-plugins'";
+                    println!("installing podman with command {}", command);
+                    let result = conn.client.execute(command).await?;
+                    if result.exit_status > 0 {
+                        let mut lines = result.stderr.lines();
+                        println!("failed to install podman {} :\n{}", CROSS_EMOJI, lines.join("\n"));
+                        false
+                    } else {
+                        println!("podman installed successfully {} ", CHECKBOX_EMOJI);
+                        true
                     }
                 }
-                _ => false
             };
             if !installed {
                 return Err(anyhow!("podman not installed, see https://podman.io/docs/installation").into());

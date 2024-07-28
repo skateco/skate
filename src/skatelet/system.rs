@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
-use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, RefreshKind, System};
+use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use std::error::Error;
 
 
@@ -14,7 +14,6 @@ use strum_macros::{Display, EnumString};
 use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
-
 
 
 #[derive(Debug, Args)]
@@ -61,7 +60,6 @@ pub struct SystemInfo {
     pub cpu_brand: String,
     pub cpu_vendor_id: String,
     pub internal_ip_address: Option<String>,
-    pub external_ip_address: Option<String>,
     pub hostname: String,
 }
 
@@ -246,16 +244,22 @@ pub struct PodmanContainerInfo {
 }
 
 // returns (external, internal)
-fn get_ips(os: &Os) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
-    let iface_cmd = match os {
-        Os::Unknown => None,
-        Os::Darwin | Os::Linux => Some("ifconfig -a | awk '
-/^[a-zA-Z0-9_\\-]+:/ {
-  sub(/:/, \"\");iface=$1}
+fn internal_ip() -> Result<Option<String>, Box<dyn Error>> {
+    let iface_cmd = match exec_cmd("which", &["ifconfig"]) {
+        Ok(_) => Some(r#"ifconfig -a | awk '
+/^[a-zA-Z0-9_\-]+:/ {
+  sub(/:/, "");iface=$1}
 /^[[:space:]]*inet / {
-  split($2, a, \"/\")
-  print iface\"  \"a[1]
-}'"),
+  split($2, a, "/")
+  print iface"  "a[1]
+}'"#),
+        _ => Some(r#"ip address|awk '
+/^[0-9]+: [a-zA-Z]+[a-zA-Z0-9_\-]+:/ {
+  sub(/[0-9]+:/, "");sub(/:/, "");iface=$1}
+/^[[:space:]]*inet / {
+  split($2, a, "/")
+  print iface"  "a[1]
+}'"#)
     };
 
     let iface_ips: Vec<_> = match iface_cmd {
@@ -272,15 +276,11 @@ fn get_ips(os: &Os) -> Result<(Option<String>, Option<String>), Box<dyn Error>> 
         }
     };
 
-    let external_ip = iface_ips.iter().find(|(iface, _)| {
-        match os {
-            Os::Darwin => iface == "en0",
-            Os::Linux => iface == "eth0",
-            _ => false
-        }
+    let internal_ip = iface_ips.iter().find(|(iface, _)| {
+        ["eth0", "eno1"].contains(&iface.as_str())
     }).map(|(_, ip)| ip.clone()).unwrap_or("".to_string());
 
-    Ok((Some(external_ip), None))
+    Ok(Some(internal_ip))
 }
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
@@ -290,7 +290,6 @@ async fn info() -> Result<(), Box<dyn Error>> {
         .with_cpu(CpuRefreshKind::everything())
         .with_memory(MemoryRefreshKind::everything())
     );
-    let os = Os::from_str_loose(&(System::name().ok_or("")?));
 
     let result = match exec_cmd(
         "sudo",
@@ -316,13 +315,10 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let cronjobs = store.list_objects("cronjob")?;
 
 
-    let iface_ipv4 = match get_ips(&os) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("failed to get interface ipv4 addresses: {}", e);
-            (None, None)
-        }
-    };
+    let internal_ip_addr = internal_ip().unwrap_or_else(|e| {
+        eprintln!("failed to get interface ipv4 addresses: {}", e);
+        None
+    });
 
 
     let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/")
@@ -340,7 +336,6 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let info = SystemInfo {
         platform: Platform {
             arch: ARCH.to_string(),
-            os,
             distribution: Distribution::Unknown, // TODO
         },
         total_memory_mib: sys.total_memory() / BYTES_IN_MIB,
@@ -363,8 +358,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             false => Some(cronjobs),
         },
         hostname: sysinfo::System::host_name().unwrap_or("".to_string()),
-        external_ip_address: iface_ipv4.0,
-        internal_ip_address: iface_ipv4.1,
+        internal_ip_address: internal_ip_addr,
     };
     let json = serde_json::to_string(&info)?;
     println!("{}", json);

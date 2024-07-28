@@ -100,7 +100,6 @@ echo ovs=$(cat /tmp/ovs-$$);
             hostname: "".to_string(),
             platform: Platform {
                 arch: "".to_string(),
-                os: Os::Unknown,
                 distribution: Distribution::Unknown,
             },
             skatelet_version: None,
@@ -115,8 +114,7 @@ echo ovs=$(cat /tmp/ovs-$$);
                     match k {
                         "hostname" => host_info.hostname = v.to_string(),
                         "arch" => arch = Some(v.to_string()),
-                        "os" => host_info.platform.os = Os::from_str_loose(v),
-                        "distro" => host_info.platform.distribution = Distribution::from(v.to_string()),
+                        "distro" => host_info.platform.distribution = Distribution::from(v),
                         "skatelet" => host_info.skatelet_version = match v {
                             "" => None,
                             _ => Some(v.to_string())
