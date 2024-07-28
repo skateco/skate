@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
-use sysinfo::{CpuExt, CpuRefreshKind, DiskExt, DiskKind, RefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use std::error::Error;
 
 
@@ -288,12 +288,9 @@ const BYTES_IN_MIB: u64 = (2u64).pow(20);
 async fn info() -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::new()
         .with_cpu(CpuRefreshKind::everything())
-        .with_memory()
-        .with_networks()
-        .with_disks()
-        .with_disks_list()
+        .with_memory(MemoryRefreshKind::everything())
     );
-    let os = Os::from_str_loose(&(sys.name().ok_or("")?));
+    let os = Os::from_str_loose(&(System::name().ok_or("")?));
 
     let result = match exec_cmd(
         "sudo",
@@ -328,7 +325,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
     };
 
 
-    let root_disk = sys.disks().iter().find(|d| d.mount_point().to_string_lossy() == "/")
+    let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/")
         .and_then(|d| Some(DiskInfo {
             available_space_mib: d.available_space() / BYTES_IN_MIB,
             total_space_mib: d.total_space() / BYTES_IN_MIB,
@@ -365,7 +362,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             true => None,
             false => Some(cronjobs),
         },
-        hostname: sys.host_name().unwrap_or("".to_string()),
+        hostname: sysinfo::System::host_name().unwrap_or("".to_string()),
         external_ip_address: iface_ipv4.0,
         internal_ip_address: iface_ipv4.1,
     };
