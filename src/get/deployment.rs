@@ -8,7 +8,7 @@ use crate::state::state::ClusterState;
 pub (crate) struct DeploymentLister {}
 
 impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<(String, PodmanPodInfo)>> {
+    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<(String, PodmanPodInfo)>> {
         todo!()
     }
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(String, PodmanPodInfo)> {

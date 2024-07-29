@@ -12,7 +12,7 @@ use semver::{Version, VersionReq};
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::refresh::refreshed_state;
-use crate::skate::{ConfigFileArgs, Distribution, Os};
+use crate::skate::{ConfigFileArgs, Distribution};
 
 use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
 

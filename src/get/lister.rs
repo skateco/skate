@@ -1,6 +1,6 @@
 use crate::filestore::ObjectListItem;
 use crate::get::{GetObjectArgs, IdCommand};
-use crate::skatelet::{PodmanPodInfo, SystemInfo};
+use crate::skatelet::{SystemInfo};
 use crate::state::state::ClusterState;
 
 pub(crate) trait NameFilters {

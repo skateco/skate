@@ -1,21 +1,21 @@
 use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
-use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
+use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, RefreshKind, System};
 use std::error::Error;
 
 
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
-use k8s_openapi::api::batch::v1::CronJob;
+
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use crate::filestore::{FileStore, ObjectListItem};
 
-use crate::skate::{Distribution, exec_cmd, Os, Platform};
-use crate::util::NamespacedName;
+use crate::skate::{Distribution, exec_cmd, Platform};
+
 
 
 #[derive(Debug, Args)]

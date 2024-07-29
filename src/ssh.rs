@@ -11,7 +11,7 @@ use base64::engine::general_purpose;
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Os, Platform, ResourceType};
+use crate::skate::{Distribution, Platform, ResourceType};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;

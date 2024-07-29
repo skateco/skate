@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::error::Error;
-use chrono::{Local, SecondsFormat};
-use itertools::Itertools;
-use crate::get::{get_objects, GetArgs, GetObjectArgs, IdCommand, Lister};
-use crate::get::deployment::DeploymentLister;
-use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
+
+
+
+
+use crate::get::{GetObjectArgs, IdCommand, Lister};
+
+use crate::skatelet::{SystemInfo};
 use crate::state::state::{ClusterState, NodeState};
 
 
@@ -13,7 +13,7 @@ use crate::state::state::{ClusterState, NodeState};
 pub (crate) struct NodeLister {}
 
 impl Lister<NodeState> for NodeLister {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<NodeState>> {
+    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<NodeState>> {
         todo!()
     }
 
