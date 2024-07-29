@@ -4,6 +4,7 @@ use std::io::Write;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use crate::util::NamespacedName;
 
 // all dirs/files live under /var/lib/skate/store
@@ -21,6 +22,7 @@ pub struct FileStore {
 pub struct ObjectListItem {
     pub name: NamespacedName,
     pub manifest_hash: String,
+    pub manifest: Option<Value>,
     pub created_at: DateTime<Local>,
 }
 
@@ -98,11 +100,21 @@ impl FileStore {
                 }
                 Ok(result) => result
             };
+
+            let manifest_file_name = format!("{}/manifest.yaml", path.to_string_lossy());
+            let manifest: Option<Value> = match std::fs::read_to_string(&manifest_file_name) {
+                Err(e) => {
+                    eprintln!("WARNING: failed to read manifest file {}: {}", &manifest_file_name, e);
+                    None
+                }
+                Ok(result) => Some(serde_yaml::from_str(&result).unwrap())
+            };
             let created_at = entry.metadata()?.created()?;
 
             result.push(ObjectListItem {
                 name: ns_name,
                 manifest_hash: hash,
+                manifest,
                 created_at: DateTime::from(created_at),
             });
         }

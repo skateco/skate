@@ -7,6 +7,7 @@ use std::error::Error;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
+use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use strum_macros::{Display, EnumString};
 use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Os, Platform};
+use crate::util::NamespacedName;
 
 
 #[derive(Debug, Args)]
@@ -63,6 +65,7 @@ pub struct SystemInfo {
     pub hostname: String,
 }
 
+
 #[derive(Clone, Debug, EnumString, Display, Serialize, Deserialize, PartialEq)]
 pub enum PodmanPodStatus {
     Created,
@@ -110,6 +113,7 @@ pub struct PodmanPodInfo {
     pub labels: BTreeMap<String, String>,
     pub containers: Option<Vec<PodmanContainerInfo>>,
 }
+
 
 impl PodmanPodInfo {
     pub fn namespace(&self) -> String {
