@@ -139,17 +139,17 @@ impl DefaultExecutor {
     fn remove_cron(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&cron);
         // systemctl stop skate-cronjob-{}
-        exec_cmd("systemctl", &["stop", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+        let _ = exec_cmd("systemctl", &["stop", &format!("skate-cronjob-{}", &ns_name.to_string())]);
 
         // systemctl disable skate-cronjob-{}
-        exec_cmd("systemctl", &["disable", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+        let _ = exec_cmd("systemctl", &["disable", &format!("skate-cronjob-{}", &ns_name.to_string())]);
         // rm /etc/systemd/system/skate-cronjob-{}.service
-        exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
-        exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
+        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
+        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
         // systemctl daemon-reload
-        exec_cmd("systemctl", &["daemon-reload"])?;
+        let _ = exec_cmd("systemctl", &["daemon-reload"])?;
         // systemctl reset-failed
-        exec_cmd("systemctl", &["reset-failed"])?;
+        let _ = exec_cmd("systemctl", &["reset-failed"])?;
         let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
         Ok(())
     }

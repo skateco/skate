@@ -23,7 +23,7 @@ impl Lister<PodmanPodInfo> for PodLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<PodmanPodInfo>> {
         return si.pods.as_ref().and_then(|pods| {
             Some(pods.iter().filter(|p| {
-                let filterable: Box<dyn NameFilters> = Box::new(p.clone());
+                let filterable: Box<dyn NameFilters> = Box::new(*p);
                 filterable.filter_names(id, ns)
             }).map(|p| p.clone()).collect())
         })

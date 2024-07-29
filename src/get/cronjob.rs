@@ -10,7 +10,7 @@ pub (crate) struct CronjobsLister {}
 impl Lister<ObjectListItem> for CronjobsLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<ObjectListItem>> {
         si.cronjobs.as_ref().and_then(|jobs| Some(jobs.iter().filter(|j| {
-            let filterable: Box<dyn NameFilters> = Box::new(j.clone());
+            let filterable: Box<dyn NameFilters> = Box::new(*j);
             return filterable.filter_names(id, ns);
         }).map(|p| p.clone()).collect()))
     }
