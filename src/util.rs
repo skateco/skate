@@ -116,7 +116,7 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, 
 }
 
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub struct NamespacedName {
     pub name: String,
     pub namespace: String,

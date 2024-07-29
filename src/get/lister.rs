@@ -8,7 +8,7 @@ pub(crate) trait NameFilters {
     fn name(&self) -> String;
     fn namespace(&self) -> String;
     fn filter_names(&self, name: &str, ns: &str) -> bool {
-        let ns = match ns.is_empty(){
+        let ns = match ns.is_empty() {
             true => &"default",
             false => ns
         };
@@ -16,7 +16,7 @@ pub(crate) trait NameFilters {
         if !ns.is_empty() && self.namespace() != ns {
             return false;
         }
-        if !name.is_empty() && ( self.id() != name || self.name() != name ) {
+        if !name.is_empty() && (self.id() != name || self.name() != name) {
             return false;
         }
         if ns.is_empty() && name.is_empty() && self.namespace() == "skate" {
