@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
+use chrono::{DateTime, Local};
 use deunicode::deunicode_char;
 use itertools::Itertools;
 use k8s_openapi::{Metadata, NamespaceResourceScope};
@@ -125,10 +126,10 @@ pub struct NamespacedName {
 impl From<&str> for NamespacedName {
     fn from(s: &str) -> Self {
         let parts: Vec<_> = s.split('.').collect();
-        return Self{
+        return Self {
             name: parts.first().unwrap_or(&"").to_string(),
             namespace: parts.last().unwrap_or(&"").to_string(),
-        }
+        };
     }
 }
 
@@ -163,6 +164,7 @@ pub fn metadata_name(obj: &impl Metadata<Scope=NamespaceResourceScope, Ty=Object
     NamespacedName::new(name.unwrap().clone(), ns.unwrap().clone())
 }
 
+// hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it
 pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String
 
 {
@@ -172,4 +174,14 @@ pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, 
     labels.insert("skate.io/hash".to_string(), hash.clone());
     obj.metadata_mut().labels = Option::from(labels);
     hash
+}
+
+// age returns the age of a resource in a human-readable format, with only the first 2 resolutions (eg 2d1h4m  becomes 2d1h)
+pub fn age(date_time: DateTime<Local>) -> String {
+    match Local::now().signed_duration_since(date_time).to_std() {
+        Ok(age) => humantime::format_duration(age).to_string()
+            .split_whitespace().take(2).collect::<Vec<&str>>()
+            .join(""),
+        Err(_) => "".to_string()
+    }
 }

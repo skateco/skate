@@ -6,7 +6,7 @@ use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
-use crate::util::NamespacedName;
+use crate::util::{age, NamespacedName};
 
 pub(crate) struct CronjobsLister {}
 
@@ -20,7 +20,7 @@ impl Lister<ObjectListItem> for CronjobsLister {
 
     fn print(&self, resources: Vec<ObjectListItem>) {
         println!(
-            "{0: <10}  {1: <10}  {2: <10}  {3: <5}  {4: <10}  {5: <10}  {6: <10}  {7: <10}",
+            "{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}",
             "NAMESPACE", "NAME", "SCHEDULE", "TIMEZONE", "SUSPEND", "ACTIVE", "LAST SCHEDULE", "AGE"
         );
         let map = resources.iter().fold(HashMap::<NamespacedName, Vec<ObjectListItem>>::new(), |mut acc, item| {
@@ -33,13 +33,10 @@ impl Lister<ObjectListItem> for CronjobsLister {
             let schedule = spec.schedule;
             let timezone = spec.time_zone;
             let created = item.first().unwrap().created_at;
-            let age = match chrono::offset::Local::now().signed_duration_since(created).to_std() {
-                Ok(age) => humantime::format_duration(age).to_string().split_whitespace().take(2).collect::<Vec<&str>>().join(""),
-                Err(_) => "".to_string()
-            };
+            let age = age(created);
 
             println!(
-                "{0: <10}  {1: <10}  {2: <10}  {3: <5}  {4: <10}  {5: <10}  {6: <10}  {7: <10}",
+                "{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}",
                 name.namespace, name.name, "TODO", timezone.unwrap_or("-".to_string()), "False", "-", "-", age
             )
         }
