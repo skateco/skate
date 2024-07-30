@@ -18,9 +18,11 @@ impl Lister<ObjectListItem> for CronjobsLister {
         }).map(|p| p.clone()).collect()))
     }
 
+    // TODO - record last run and how many running (somehow)
     fn print(&self, resources: Vec<ObjectListItem>) {
+        macro_rules! cols { () => ("{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}") };
         println!(
-            "{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}",
+            cols!(),
             "NAMESPACE", "NAME", "SCHEDULE", "TIMEZONE", "SUSPEND", "ACTIVE", "LAST SCHEDULE", "AGE"
         );
         let map = resources.iter().fold(HashMap::<NamespacedName, Vec<ObjectListItem>>::new(), |mut acc, item| {
@@ -36,8 +38,8 @@ impl Lister<ObjectListItem> for CronjobsLister {
             let age = age(created);
 
             println!(
-                "{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}",
-                name.namespace, name.name, "TODO", timezone.unwrap_or("-".to_string()), "False", "-", "-", age
+                cols!(),
+                name.namespace, name.name, schedule, timezone.unwrap_or("<none>".to_string()), "False", "-", "-", age
             )
         }
     }
