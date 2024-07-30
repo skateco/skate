@@ -179,9 +179,22 @@ pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, 
 // age returns the age of a resource in a human-readable format, with only the first segment of resolution (eg 2d1h4m  becomes 2d)
 pub fn age(date_time: DateTime<Local>) -> String {
     match Local::now().signed_duration_since(date_time).to_std() {
-        Ok(age) => humantime::format_duration(age).to_string()
-            .split_whitespace().take(1).collect::<Vec<&str>>()
-            .join(""),
+        Ok(duration) => {
+            if duration.as_secs() < 60 {
+                return format!("{}s", duration.as_secs());
+            }
+            let minutes = (duration.as_secs() / 60) % 60;
+            if minutes < 60 {
+                return format!("{}m", minutes);
+            }
+            let hours = duration.as_secs() / 60 * 60;
+            if hours < 24 {
+                return format!("{}h", hours);
+            }
+
+            let days = duration.as_secs() / 60 * 60 * 24;
+            return format!("{}d", days);
+        }
         Err(_) => "".to_string()
     }
 }

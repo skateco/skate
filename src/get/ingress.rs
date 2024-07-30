@@ -4,6 +4,7 @@ use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
+use crate::util::{age, NamespacedName};
 
 pub(crate) struct IngresssLister {}
 
@@ -16,18 +17,27 @@ impl Lister<ObjectListItem> for IngresssLister {
     }
 
     fn print(&self, resources: Vec<ObjectListItem>) {
+        macro_rules! cols {
+            () => ("{0: <15}  {1: <15}  {2: <15}  {3: <15}  {4: <15}  {5: <15}  {6: <15}")
+        }
         println!(
-            "{0: <30}  {1: <5}  {2: <20}",
-            "NAME", "#", "CREATED",
+            cols!(),
+            "NAMESPACE", "NAME", "CLASS", "HOSTS", "ADDRESS", "PORTS", "AGE"
         );
-        let map = resources.iter().fold(HashMap::<String, Vec<ObjectListItem>>::new(), |mut acc, item| {
-            acc.entry(item.name.to_string()).or_insert(vec![]).push(item.clone());
+        let map = resources.iter().fold(HashMap::<NamespacedName, Vec<ObjectListItem>>::new(), |mut acc, item| {
+            acc.entry(item.name.clone()).or_insert(vec![]).push(item.clone());
             acc
         });
+
         for (name, item) in map {
+            let hosts = "TODO";
+            let age = age(item.first().unwrap().created_at);
+            let address = "TODO";
+            let class = "TODO";
+            let ports = "TODO";
             println!(
-                "{0: <30}  {1: <5}  {2: <20}",
-                name, item.len(), item.first().unwrap().created_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+                cols!(),
+                name.namespace, name.name, class, hosts, address, ports, age
             )
         }
     }
