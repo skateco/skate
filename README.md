@@ -11,7 +11,9 @@ Will support only a subset of resources and only a subset of their functionality
 - Pods
 - DaemonSets
 - Service: ExternalName only (w.i.p)
-- Ingress (w.i.p)
+- Ingress
+- Secrets
+- CronJobs
 
 Currently uses vendored ssh, plan is to move to openssh and use the native binary on the host.
 
@@ -68,8 +70,17 @@ url: `<labels.name>.<metadata.namespace>.cluster.skate`
 
 Currently only Prefix pathType is supported.
 
-### Cron
+### CronJobs
 
+Uses systemd timers to schedule jobs.
+Limited to always running on the same node.
+Haven't looked in to the ForbidConcurrent etc yet. 
+I 'think' systemd will just spawn a new job if they overlap.
+
+### Secrets
+
+Secrets are scheduled to all nodes for simplicity.
+Any references to secrets in a pod manifest are automatically looked up in the same namespace as the pods.
 
 
 ## Registering nodes
@@ -154,17 +165,17 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [x] Remove
         - [x] List
-        - [ ] Output matches kubectl
+        - [x] Output matches kubectl
     -  Cron
         - [x] Apply
         - [x] Remove
         - [x] Hash checking
         - [x] List
-        - [ ] Output matches kubectl
+        - [x] Output matches kubectl
     - Secret
-        - [ ] Apply
-        - [ ] Remove
-        - [ ] List
+        - [x] Apply
+        - [x] Remove
+        - [x] List
         - [ ] Output matches kubectl
         - Goal here is to support private image pull
     - ClusterIssuer
