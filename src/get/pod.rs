@@ -2,6 +2,7 @@ use chrono::SecondsFormat;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
 use crate::skatelet::{PodmanPodInfo, SystemInfo};
+use crate::util::age;
 
 pub (crate) struct PodLister {}
 
@@ -32,7 +33,7 @@ impl Lister<PodmanPodInfo> for PodLister {
     fn print(&self, pods: Vec<PodmanPodInfo>) {
         println!(
             "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-            "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
+            "NAME", "READY", "STATUS", "RESTARTS", "AGE"
         );
         for pod in pods {
             let num_containers = pod.containers.clone().unwrap_or_default().len();
@@ -46,7 +47,7 @@ impl Lister<PodmanPodInfo> for PodLister {
                 .reduce(|a, c| a + c).unwrap_or_default();
             println!(
                 "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-                pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, pod.created.to_rfc3339_opts(SecondsFormat::Secs, true)
+                pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, age(pod.created)
             )
         }
     }

@@ -5,6 +5,7 @@ mod cronjob;
 mod pod;
 mod lister;
 mod daemonset;
+mod secret;
 
 
 use std::error::Error;
@@ -28,7 +29,7 @@ use crate::get::ingress::IngresssLister;
 use crate::get::lister::Lister;
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
-
+use crate::get::secret::SecretLister;
 
 
 #[derive(Debug, Clone, Args)]
@@ -76,11 +77,11 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
     match args.commands {
         GetCommands::Pod(args) => get_pod(global_args, args).await,
         GetCommands::Deployment(args) => get_deployment(global_args, args).await,
-        GetCommands::Daemonset(args) => todo!(),
+        GetCommands::Daemonset(args) => get_daemonsets(global_args, args).await,
         GetCommands::Node(args) => get_nodes(global_args, args).await,
         GetCommands::Ingress(args) => get_ingress(global_args, args).await,
         GetCommands::Cronjob(args) => get_cronjobs(global_args, args).await,
-        GetCommands::Secret(args) => todo!(),
+        GetCommands::Secret(args) => get_secrets(global_args, args).await,
     }
 }
 
@@ -146,3 +147,9 @@ async fn get_nodes(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<
     let lister = NodeLister {};
     get_objects(global_args, args, &lister).await
 }
+
+async fn get_secrets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+    let lister = SecretLister{};
+    get_objects(global_args, args, &lister).await
+}
+

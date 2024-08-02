@@ -1,3 +1,5 @@
+mod podman;
+
 use std::collections::{BTreeMap};
 use std::env::consts::ARCH;
 use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, RefreshKind, System};
@@ -8,14 +10,16 @@ use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use clap::{Args, Subcommand};
 
-use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
+use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus, Secret};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use strum_macros::{Display, EnumString};
 use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Platform};
-
+use crate::skatelet::system::podman::PodmanSecret;
+use crate::util::NamespacedName;
 
 
 #[derive(Debug, Args)]
@@ -57,6 +61,7 @@ pub struct SystemInfo {
     pub pods: Option<Vec<PodmanPodInfo>>,
     pub ingresses: Option<Vec<ObjectListItem>>,
     pub cronjobs: Option<Vec<ObjectListItem>>,
+    pub secrets: Option<Vec<ObjectListItem>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -295,7 +300,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
         .with_memory(MemoryRefreshKind::everything())
     );
 
-    let result = match exec_cmd(
+    let pod_list_result = match exec_cmd(
         "sudo",
         &["podman", "pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
     ) {
@@ -310,13 +315,55 @@ async fn info() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&result).map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
+    let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&pod_list_result).map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
 
     let store = FileStore::new();
     // list ingresses
     let ingresses = store.list_objects("ingress")?;
     let cronjobs = store.list_objects("cronjob")?;
+
+
+    let secrets = exec_cmd("podman", &["secret", "ls", "--noheading"]).unwrap_or_else(|e| {
+        eprintln!("failed to list secrets: {}", e);
+        "".to_string()
+    });
+
+    let secret_names: Vec<&str> = secrets.split("\n").filter_map(|line| {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 5 {
+            return None;
+        }
+        let secret_name = parts[1];
+        match secret_name.rsplit_once(".") {
+            Some((_, _)) => Some(secret_name),
+            None => None,
+        }
+    }).collect();
+
+    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names].concat()).unwrap_or_else(|e| {
+        eprintln!("failed to get secret info: {}", e);
+        "[]".to_string()
+    });
+
+
+    let secret_info: Vec<PodmanSecret> = serde_json::from_str(&secret_json).map_err(|e| anyhow!(e).context("failed to deserialize secret info"))?;
+    let secret_info: Vec<ObjectListItem> = secret_info.iter().filter_map(|s| {
+
+        let yaml: Value = serde_yaml::from_str(&s.secret_data).unwrap();
+
+        let manifest_result: Result<Secret, _> = serde_yaml::from_value(yaml.clone());
+        if manifest_result.is_err() {
+            return None;
+        }
+
+        Some(ObjectListItem {
+            name: NamespacedName::from(s.spec.name.as_str()),
+            manifest_hash: "".to_string(), // TODO get from manifest
+            manifest: Some(yaml),
+            created_at: s.created_at,
+        })
+    }).collect();
 
 
     let internal_ip_addr = internal_ip().unwrap_or_else(|e| {
@@ -360,6 +407,10 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cronjobs: match cronjobs.is_empty() {
             true => None,
             false => Some(cronjobs),
+        },
+        secrets: match secrets.is_empty() {
+            true => None,
+            false => Some(secret_info),
         },
         hostname: sysinfo::System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,

@@ -4,6 +4,7 @@ use itertools::Itertools;
 use crate::get::{GetObjectArgs, IdCommand, Lister};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
 use crate::state::state::ClusterState;
+use crate::util::age;
 
 pub(crate) struct DeploymentLister {}
 
@@ -56,7 +57,7 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
     fn print(&self, items: Vec<(String, PodmanPodInfo)>) {
         println!(
             "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-            "NAME", "READY", "STATUS", "RESTARTS", "CREATED"
+            "NAME", "READY", "STATUS", "RESTARTS", "AGE"
         );
         let pods = items.into_iter().fold(HashMap::<String, Vec<PodmanPodInfo>>::new(), |mut acc, (depl, pod)| {
             acc.entry(depl).or_insert(vec![]).push(pod);
@@ -75,7 +76,7 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
 
             println!(
                 "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-                deployment, format!("{}/{}", health_pods, all_pods), "", "", created.to_rfc3339_opts(SecondsFormat::Secs, true)
+                deployment, format!("{}/{}", health_pods, all_pods), "", "", age(created)
             )
         }
     }
