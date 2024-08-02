@@ -2,18 +2,18 @@ use clap::{Args, Subcommand};
 use std::error::Error;
 
 use std::{io};
-use std::collections::BTreeMap;
+
 
 use std::io::{Read};
 
 
 use crate::executor::{DefaultExecutor, Executor};
-use crate::skate::SupportedResources;
-use crate::skate::SupportedResources::{CronJob, Ingress};
-use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;
 
-use k8s_openapi::api::networking::v1::Ingress as K8sIngress;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+
+
+
+
+
 
 
 #[derive(Debug, Args)]
