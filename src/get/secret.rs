@@ -3,6 +3,7 @@ use chrono::{Local, SecondsFormat};
 use itertools::Itertools;
 use crate::filestore::ObjectListItem;
 use crate::get::{GetObjectArgs, IdCommand, Lister};
+use crate::get::lister::NameFilters;
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
 use crate::state::state::ClusterState;
 use crate::util::age;
@@ -11,7 +12,10 @@ pub(crate) struct SecretLister {}
 
 impl Lister<ObjectListItem> for SecretLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<ObjectListItem>> {
-        si.secrets.clone()
+        si.secrets.as_ref().and_then(|secrets| Some(secrets.iter().filter(|j| {
+            let filterable: Box<dyn NameFilters> = Box::new(*j);
+            return filterable.filter_names(id, ns);
+        }).map(|p| p.clone()).collect()))
     }
 
     fn print(&self, items: Vec<ObjectListItem>) {
