@@ -5,45 +5,41 @@ use crate::get::{GetObjectArgs, IdCommand, Lister};
 use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
 use crate::state::state::ClusterState;
 
-pub(crate) struct DeploymentLister {}
+pub(crate) struct DaemonsetLister {}
 
-impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
+impl Lister<(String, PodmanPodInfo)> for DaemonsetLister {
     fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<(String, PodmanPodInfo)>> {
         todo!()
     }
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(String, PodmanPodInfo)> {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
-                let ns = args.namespace.clone();
+                let ns = args.namespace.clone().unwrap_or("default".to_string());
                 let id = match args.id.clone() {
                     Some(cmd) => match cmd {
                         IdCommand::Id(ids) => Some(ids.into_iter().next().unwrap_or("".to_string()))
                     }
                     None => None
                 };
-                let deployment = p.labels.get("skate.io/deployment");
-                let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
-                match deployment {
-                    Some(deployment) => {
-                        let match_ns = match ns.clone() {
-                            Some(ns) => {
-                                ns == pod_ns
-                            }
-                            None => false
-                        };
-                        let match_id = match id.clone() {
-                            Some(id) => {
-                                id == deployment.clone()
-                            }
-                            None => false
-                        };
-                        if match_ns || match_id || (id.is_none() && ns.is_none() && pod_ns != "skate") {
-                            return Some((deployment.clone(), p));
-                        }
-                        None
-                    }
-                    None => None
+                let daemonset = p.labels.get("skate.io/daemonset").and_then(|n| Some(n.clone())).unwrap_or_default();
+                if daemonset == "" {
+                    return None;
                 }
+                let daemonset_ns = p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone();
+
+
+                let match_ns = ns == daemonset_ns;
+
+                let match_id = match id.clone() {
+                    Some(id) => {
+                        id == daemonset
+                    }
+                    None => false
+                };
+                if match_ns || match_id || (id.is_none() && ns == "" && daemonset_ns != "skate" ) {
+                    return Some((daemonset, p));
+                }
+                None
             }).collect();
             match items.len() {
                 0 => None,

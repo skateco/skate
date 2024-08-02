@@ -4,6 +4,7 @@ mod deployment;
 mod cronjob;
 mod pod;
 mod lister;
+mod daemonset;
 
 
 use std::error::Error;
@@ -21,6 +22,7 @@ use crate::skate::{ConfigFileArgs};
 use crate::{ssh};
 
 use crate::get::cronjob::CronjobsLister;
+use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
 use crate::get::ingress::IngresssLister;
 use crate::get::lister::Lister;
@@ -57,12 +59,16 @@ pub enum GetCommands {
     Pod(GetObjectArgs),
     #[command(alias("deployments"))]
     Deployment(GetObjectArgs),
+    #[command(alias("daemonsets"))]
+    Daemonset(GetObjectArgs),
     #[command(alias("nodes"))]
     Node(GetObjectArgs),
     #[command()]
     Ingress(GetObjectArgs),
     #[command(alias("cronjobs"))]
     Cronjob(GetObjectArgs),
+    #[command(alias("secrets"))]
+    Secret(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
@@ -70,9 +76,11 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
     match args.commands {
         GetCommands::Pod(args) => get_pod(global_args, args).await,
         GetCommands::Deployment(args) => get_deployment(global_args, args).await,
+        GetCommands::Daemonset(args) => todo!(),
         GetCommands::Node(args) => get_nodes(global_args, args).await,
         GetCommands::Ingress(args) => get_ingress(global_args, args).await,
         GetCommands::Cronjob(args) => get_cronjobs(global_args, args).await,
+        GetCommands::Secret(args) => todo!(),
     }
 }
 
@@ -109,6 +117,11 @@ async fn get_objects<T>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn
 
 async fn get_deployment(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
     let lister = DeploymentLister {};
+    get_objects(global_args, args, &lister).await
+}
+
+async fn get_daemonsets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+    let lister = DaemonsetLister {};
     get_objects(global_args, args, &lister).await
 }
 

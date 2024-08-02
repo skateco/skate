@@ -19,4 +19,19 @@ spec:
       containers:
       - name: nginx1
         image: nginx:1.14.2
+        env:
+        - name: TEST_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: test
+              key: password
+        volumeMounts:
+        - name: test-mount
+          mountPath: /etc/foo
+          readOnly: true
+      volumes:
+      - name: test-mount
+        secret:
+          secretName: test
+          optional: false
 ---

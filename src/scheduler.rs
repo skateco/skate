@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Node as K8sNode, Pod};
+use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
@@ -398,6 +398,29 @@ impl DefaultScheduler {
         })
     }
 
+    // just apply on all nodes
+    fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
+
+        let mut actions = vec!();
+
+        for node in state.nodes.iter() {
+
+            actions.extend([
+                ScheduledOperation{
+                    resource: SupportedResources::Secret(secret.clone()),
+                    error: None,
+                    operation: OpType::Create,
+                    node: Some(node.clone()),
+                }
+            ]);
+        }
+
+
+        Ok(ApplyPlan {
+            actions,
+        })
+    }
+
     fn plan_ingress(state: &ClusterState, ingress: &Ingress) -> Result<ApplyPlan, Box<dyn Error>> {
 
         // TODO - warn about unsupported settings
@@ -469,15 +492,16 @@ impl DefaultScheduler {
             SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds),
             SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress),
             SupportedResources::CronJob(cron) => Self::plan_cronjob(state, cron),
+            SupportedResources::Secret(secret) => Self::plan_secret(state, secret),
         }
     }
 
-    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(), Box<dyn Error>> {
+    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(String,String), Box<dyn Error>> {
         let conn = conns.find(&resource.node.unwrap().node_name).ok_or("failed to find connection to host")?;
 
         let manifest = serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");
         match conn.remove_resource_by_manifest(&manifest).await {
-            Ok(_) => Ok(()),
+            Ok((stdout, stderr)) => Ok((stdout, stderr)),
             Err(err) => Err(err)
         }
     }
@@ -496,7 +520,13 @@ impl DefaultScheduler {
                     let node_name = action.node.clone().unwrap().node_name;
 
                     match Self::remove_existing(conns, action.clone()).await {
-                        Ok(_) => {
+                        Ok((stdout, stderr)) => {
+                            if !stdout.is_empty() {
+                                println!("{}", stdout);
+                            }
+                            if !stderr.is_empty() {
+                                eprintln!("{}", stderr)
+                            }
                             println!("{} deleted {} on node {} ", CHECKBOX_EMOJI, action.resource.name(), node_name);
                             result.push(action.clone());
                         }
@@ -526,7 +556,12 @@ impl DefaultScheduler {
 
                     match client.apply_resource(&serialized).await {
                         Ok((stdout, stderr)) => {
-                            println!("{}{}", stdout, stderr);
+                            if !stdout.trim().is_empty() {
+                                println!("{}", stdout.trim());
+                            }
+                            if !stderr.is_empty() {
+                                eprintln!("{}", stderr.trim())
+                            }
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
                             println!("{} created {} on node {}", CHECKBOX_EMOJI, &action.resource.name(), node_name);
                             result.push(action.clone());

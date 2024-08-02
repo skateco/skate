@@ -20,6 +20,7 @@ pub enum DeleteCommands {
     Node(DeleteResourceArgs),
     Ingress(DeleteResourceArgs),
     Cronjob(DeleteResourceArgs),
+    Secret(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -39,6 +40,8 @@ pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
         DeleteCommands::Node(args) => delete_node(args).await?,
         DeleteCommands::Ingress(args) => delete_resource(ResourceType::Ingress, args).await?,
         DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
+        DeleteCommands::Secret(args) => delete_resource(ResourceType::Secret, args).await?,
+        _ => todo!()
     }
     Ok(())
 }
@@ -65,13 +68,13 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
         match conn.remove_resource(r_type.clone(), &args.name, &args.namespace).await {
             Ok(result) => {
                 results.push(result)
-            },
+            }
             Err(e) => errors.push(e.to_string())
         }
     }
 
     match errors.is_empty() {
-        false => Err(anyhow!(errors.join("\n")).into()),
+        false => Err(anyhow!("\n{}", errors.join("\n")).into()),
         true => Ok(())
     }
 }

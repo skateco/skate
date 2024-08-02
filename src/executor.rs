@@ -8,7 +8,7 @@ use anyhow::anyhow;
 use handlebars::Handlebars;
 
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Pod, Secret};
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::{json, Value};
 
@@ -248,8 +248,6 @@ impl DefaultExecutor {
 
     fn apply_play(&self, object: SupportedResources) -> Result<(), Box<dyn Error>> {
 
-        // check if object's hostNetwork: true then don't use network=podman
-
         let file_path = DefaultExecutor::write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
 
         let mut args = vec!["play", "kube", &file_path, "--start"];
@@ -271,7 +269,29 @@ impl DefaultExecutor {
 
         Ok(())
     }
-    fn remove_pod(&self, id: &str, _namespace: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+
+    fn remove_secret(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
+        let fqn = format!("{}.{}", secret.metadata.name.unwrap(), secret.metadata.namespace.unwrap());
+
+        let output = process::Command::new("podman")
+            .args(["secret", "rm", &fqn])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .expect("failed to remove secret");
+
+        if !output.status.success() {
+            return Err(anyhow!("`podman secret rm {}` exited with code {}, stderr: {}", fqn, output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).trim().to_string()).into());
+        }
+
+        if !output.stdout.is_empty() {
+            println!("{}", String::from_utf8_lossy(&output.stdout).trim());
+        }
+
+        Ok(())
+    }
+
+    fn remove_pod(&self, id: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         if id.is_empty() {
             return Err(anyhow!("no metadata.name found").into());
         }
@@ -317,7 +337,7 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
-            SupportedResources::Pod(_) | SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) => {
+            SupportedResources::Pod(_) | SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) | SupportedResources::Secret(_) => {
                 self.apply_play(object)
             }
             SupportedResources::Ingress(ingress) => {
@@ -331,10 +351,10 @@ impl Executor for DefaultExecutor {
 
 
     fn manifest_delete(&self, object: SupportedResources, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
-        let namespaced_name = object.name();
         match object {
-            SupportedResources::Pod(_p) => {
-                self.remove_pod(&namespaced_name.name, &namespaced_name.namespace, grace_period)
+            SupportedResources::Pod(p) => {
+                let name = p.metadata.name.unwrap();
+                self.remove_pod(&name, grace_period)
             }
             SupportedResources::Deployment(_d) => {
                 Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
@@ -347,6 +367,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::CronJob(cron) => {
                 self.remove_cron(cron)
+            }
+            SupportedResources::Secret(secret) => {
+                self.remove_secret(secret)
             }
         }
     }

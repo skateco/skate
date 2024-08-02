@@ -1,8 +1,9 @@
 use std::error::Error;
 use clap::{Parser, Subcommand};
 use crate::skatelet::apply;
-use crate::skatelet::apply::{ApplyArgs, delete, DeleteArgs};
+use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
+use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
 

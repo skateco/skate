@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, DeploymentSpec};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Container, Pod, PodTemplateSpec, Secret};
 use serde_yaml;
 use serde::{Deserialize, Serialize};
 use tokio;
@@ -89,6 +89,7 @@ pub enum ResourceType {
     DaemonSet,
     Ingress,
     CronJob,
+    Secret,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -103,6 +104,8 @@ pub enum SupportedResources {
     Ingress(Ingress),
     #[strum(serialize = "CronJob")]
     CronJob(CronJob),
+    #[strum(serialize = "Secret")]
+    Secret(Secret),
 }
 
 
@@ -114,6 +117,7 @@ impl SupportedResources {
             SupportedResources::DaemonSet(r) => metadata_name(r),
             SupportedResources::Ingress(r) => metadata_name(r),
             SupportedResources::CronJob(r) => metadata_name(r),
+            SupportedResources::Secret(s) => metadata_name(s),
         }
     }
 
@@ -125,8 +129,48 @@ impl SupportedResources {
             SupportedResources::DaemonSet(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
             SupportedResources::Ingress(_) => false,
             SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::Secret(_) => false,
         }
     }
+    fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
+        let mut template = template.clone();
+        // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
+        template.spec = match template.spec {
+            Some(ref mut spec) => {
+                // first do env-var secrets
+                spec.containers = spec.containers.clone().into_iter().map(|mut container| {
+                    container.env = match container.env {
+                        Some(env_list) => {
+                            Some(env_list.into_iter().map(|mut e| {
+                                let name_opt = e.value_from.as_ref().and_then(|v| v.secret_key_ref.clone()).and_then(|s| s.name);
+                                if name_opt.is_some() {
+                                    e.value_from.as_mut().unwrap().secret_key_ref.as_mut().unwrap().name = Some(format!("{}.{}", &name_opt.unwrap(), &ns));
+                                }
+                                e
+                            }).collect())
+                        }
+                        None => None
+                    };
+                    container
+                }).collect();
+                // now do volume secrets
+                spec.volumes = spec.volumes.clone().and_then(|volumes| Some(volumes.into_iter().map(|mut volume| {
+                    volume.secret = volume.secret.clone().map(|mut secret| {
+                        secret.secret_name = secret.secret_name.clone().and_then(|secret_name| Some(format!("{}.{}", secret_name, ns)));
+                        secret
+                    });
+                    volume
+                }).collect()));
+
+
+                Some(spec.clone())
+            }
+            None => None
+        };
+
+        Ok(template)
+    }
+
     fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
@@ -144,10 +188,24 @@ impl SupportedResources {
         meta.labels = Some(labels);
         Ok(meta)
     }
+
     // TODO - do we need this? scheduler does most of this
     pub fn fixup(self) -> Result<Self, Box<dyn Error>> {
         let mut resource = self.clone();
         let resource = match resource {
+            SupportedResources::Secret(ref mut s) => {
+                let original_name = s.metadata.name.clone().unwrap_or("".to_string());
+                if original_name.is_empty() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if s.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
+
+                s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
+                s.metadata.name = Some(format!("{}.{}", original_name, s.metadata.namespace.clone().unwrap()));
+                resource
+            }
             SupportedResources::CronJob(ref mut c) => {
                 let original_name = c.metadata.name.clone().unwrap_or("".to_string());
                 if original_name.is_empty() {
@@ -179,6 +237,8 @@ impl SupportedResources {
                                     }
                                     None => None
                                 };
+
+                                job_spec.template = Self::fixup_pod_template(job_spec.template.clone(), c.metadata.namespace.as_ref().unwrap())?;
                                 spec.job_template.spec = Some(job_spec);
                                 Some(spec)
                             }
@@ -215,6 +275,7 @@ impl SupportedResources {
                 p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
                 // set name to be name.namespace
                 p.metadata.name = Some(format!("{}", metadata_name(p)));
+                // go through
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {
@@ -242,10 +303,12 @@ impl SupportedResources {
                                     meta.name = Some(original_name.clone());
                                 }
                                 let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+
                                 Some(meta)
                             }
                             None => None
                         };
+                        spec.template = Self::fixup_pod_template(spec.template.clone(), d.metadata.namespace.as_ref().unwrap())?;
                         Some(spec)
                     }
                     None => None
@@ -280,6 +343,7 @@ impl SupportedResources {
                             }
                             None => None
                         };
+                        spec.template = Self::fixup_pod_template(spec.template.clone(), ds.metadata.namespace.as_ref().unwrap())?;
                         Some(spec)
                     }
                     None => None
@@ -298,57 +362,57 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
 
     let mut result: Vec<SupportedResources> = Vec::new();
 
-    for filename in filenames {
-        let str_file = fs::read_to_string(filename).expect("failed to read file");
-        for document in serde_yaml::Deserializer::from_str(&str_file) {
-            let value = Value::deserialize(document).expect("failed to read document");
-            if let Value::Mapping(mapping) = &value {
-                let api_version = mapping.get(&api_version_key).and_then(Value::as_str);
-                let kind = mapping.get(&kind_key).and_then(Value::as_str);
-                match (api_version, kind) {
-                    (Some(api_version), Some(kind)) if
-                    api_version == <Pod as Resource>::API_VERSION &&
-                        kind == <Pod as Resource>::KIND =>
-                        {
-                            let pod: Pod = serde::Deserialize::deserialize(value)?;
-                            result.push(SupportedResources::Pod(pod))
-                        }
+    let supported_resources =
 
-                    (Some(api_version), Some(kind)) if
-                    api_version == <Deployment as Resource>::API_VERSION &&
-                        kind == <Deployment as Resource>::KIND =>
-                        {
-                            let deployment: Deployment = serde::Deserialize::deserialize(value)?;
-                            result.push(SupportedResources::Deployment(deployment))
+        for filename in filenames {
+            let str_file = fs::read_to_string(filename).expect("failed to read file");
+            for document in serde_yaml::Deserializer::from_str(&str_file) {
+                let value = Value::deserialize(document).expect("failed to read document");
+                if let Value::Mapping(mapping) = &value {
+                    let api_version = mapping.get(&api_version_key).and_then(Value::as_str);
+                    let kind = mapping.get(&kind_key).and_then(Value::as_str);
+                    match (api_version, kind) {
+                        (Some(api_version), Some(kind)) => {
+                            if api_version == Pod::API_VERSION &&
+                                kind == Pod::KIND
+                            {
+                                let pod: Pod = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::Pod(pod))
+                            } else if api_version == Deployment::API_VERSION &&
+                                kind == Deployment::KIND
+                            {
+                                let deployment: Deployment = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::Deployment(deployment))
+                            } else if api_version == DaemonSet::API_VERSION &&
+                                kind == DaemonSet::KIND
+                            {
+                                let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::DaemonSet(daemonset))
+                            } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND
+                            {
+                                let ingress: Ingress = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::Ingress(ingress))
+                            } else if
+                            api_version == CronJob::API_VERSION &&
+                                kind == CronJob::KIND
+                            {
+                                let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::CronJob(cronjob))
+                            } else if
+                            api_version == Secret::API_VERSION &&
+                                kind == Secret::KIND
+                            {
+                                let secret: Secret = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::Secret(secret))
+                            }
                         }
-                    (Some(api_version), Some(kind)) if
-                    api_version == <DaemonSet as Resource>::API_VERSION &&
-                        kind == <DaemonSet as Resource>::KIND =>
-                        {
-                            let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
-                            result.push(SupportedResources::DaemonSet(daemonset))
+                        _ => {
+                            return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());
                         }
-                    (Some(api_version), Some(kind)) if
-                    api_version == <Ingress as Resource>::API_VERSION &&
-                        kind == <Ingress as Resource>::KIND =>
-                        {
-                            let ingress: Ingress = serde::Deserialize::deserialize(value)?;
-                            result.push(SupportedResources::Ingress(ingress))
-                        }
-                    (Some(api_version), Some(kind)) if
-                    api_version == <CronJob as Resource>::API_VERSION &&
-                        kind == <CronJob as Resource>::KIND =>
-                        {
-                            let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
-                            result.push(SupportedResources::CronJob(cronjob))
-                        }
-                    _ => {
-                        return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());
-                    }
+                    };
                 }
             }
-        }
-    }
+        };
     Ok(result)
 }
 
