@@ -32,7 +32,7 @@ pub(crate) struct PodmanSecretDriver {
 }
 
 #[derive(Clone, Debug, EnumString, Display, Serialize, Deserialize, PartialEq)]
-pub(crate) enum PodmanPodStatus {
+pub enum PodmanPodStatus {
     Created,
     Running,
     Stopped,
@@ -68,7 +68,7 @@ impl PodmanPodStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct PodmanPodInfo {
+pub struct PodmanPodInfo {
     pub id: String,
     pub name: String,
     pub status: PodmanPodStatus,
@@ -203,7 +203,7 @@ impl Into<Pod> for PodmanPodInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct PodmanContainerInfo {
+pub struct PodmanContainerInfo {
     pub id: String,
     pub names: String,
     pub status: String,

@@ -99,7 +99,7 @@ impl DefaultExecutor {
         let json: Value = json!({
             "description": &format!("{} Job", ns_name.to_string()),
             "timer": &format!("skate-cronjob-{}.timer", &ns_name.to_string()),
-            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --network podman -w", ns_name.to_string()),
+            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --replace --network podman -w", ns_name.to_string()),
         });
 
         let output = handlebars.render("unit", &json)?;

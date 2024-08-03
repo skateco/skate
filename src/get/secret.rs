@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use k8s_openapi::api::core::v1::Secret;
 
 
 use crate::filestore::ObjectListItem;
@@ -32,10 +33,23 @@ impl Lister<ObjectListItem> for SecretLister {
             "NAMESPACE", "NAME", "TYPE", "DATA", "AGE",
         );
 
-        // TODO - get from manifest
-        let data = 1;
 
         for item in map {
+
+            let data: usize = match item.1.first().unwrap().manifest{
+                Some(ref m) => {
+                    let secret = serde_yaml::from_value::<Secret>(m.clone()).unwrap_or_default();
+                    match secret.string_data {
+                        Some(data) => data.len(),
+                        None => match secret.data {
+                            Some(data) => data.len(),
+                            None => 0
+                        }
+                    }
+                },
+                None => 0
+            };
+
             let item = item.1.first().unwrap();
             println!(cols!(), item.name.namespace, item.name.name, "Opaque", data, age(item.created_at))
         }
