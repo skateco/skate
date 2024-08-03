@@ -159,8 +159,8 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - Daemonsets
         - [x] Apply
         - [ ] Remove
-        - [ ] List
-        - [ ] Output matches kubectl
+        - [x] List
+        - [x] Output matches kubectl
     - Ingress
         - [x] Apply
         - [x] Remove
@@ -176,7 +176,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [x] Remove
         - [x] List
-        - [ ] Output matches kubectl
+        - [x] Output matches kubectl
         - Goal here is to support private image pull
     - ClusterIssuer
       - For letsencrypt

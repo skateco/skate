@@ -9,6 +9,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
 use k8s_openapi::api::core::v1::Secret;
+use k8s_openapi::ByteString;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use podman::PodmanPodInfo;
@@ -166,13 +167,22 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
     let secret_info: Vec<PodmanSecret> = serde_json::from_str(&secret_json).map_err(|e| anyhow!(e).context("failed to deserialize secret info"))?;
     let secret_info: Vec<ObjectListItem> = secret_info.iter().filter_map(|s| {
-
-        let yaml: Value = serde_yaml::from_str(&s.secret_data).unwrap();
-
-        let manifest_result: Result<Secret, _> = serde_yaml::from_value(yaml.clone());
+        let manifest_result: Result<Secret, _> = serde_yaml::from_str(&s.secret_data);
         if manifest_result.is_err() {
             return None;
         }
+
+        let mut k8s_secret = manifest_result.unwrap();
+        k8s_secret.data = k8s_secret.data.clone().and_then(|data| {
+            Some(data.into_iter().map(|(k, _)| (k, ByteString{ 0: vec![] })).collect())
+        });
+
+        k8s_secret.string_data = k8s_secret.string_data.clone().and_then(|data| {
+            Some(data.into_iter().map(|(k, _)| (k, "".to_string())).collect())
+        });
+
+        let yaml = serde_yaml::to_value(&k8s_secret).unwrap();
+
 
         Some(ObjectListItem {
             name: NamespacedName::from(s.spec.name.as_str()),

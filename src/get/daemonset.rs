@@ -76,7 +76,7 @@ impl Lister<(usize, String, PodmanPodInfo)> for DaemonsetLister {
                 return acc;
             });
             let namespace = pods.first().unwrap().labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
-            let node_selector = pods.first().unwrap().labels.iter().filter(|(k, _)| k.starts_with("nodeselector/")).map(|(k, v)| format!("{}={}", k, v)).collect_vec().join(",");
+            let node_selector = pods.first().unwrap().labels.iter().filter(|(k, _)| k.starts_with("nodeselector/")).map(|(k, v)| k.clone()).collect_vec().join(",");
 
             // assuming that we want same number as nodes, that's wrong but anyway
             println!(
