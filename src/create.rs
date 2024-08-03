@@ -172,7 +172,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     config.persist(Some(args.config.skateconfig.clone()))?;
 
-    /// Refresh state so that we can apply coredns later
+    // Refresh state so that we can apply coredns later
     let state = refreshed_state(&cluster.name, &all_conns, &config).await?;
     state.persist()?;
 
@@ -182,10 +182,11 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 }
 
 async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
-    /// COREDNS
-    /// coredns listens on port 53 and 5533
-    /// port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
-    /// uses fanout plugin
+
+    // COREDNS
+    // coredns listens on port 53 and 5533
+    // port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
+    // uses fanout plugin
 
     // replace forward list in coredns config with that of other hosts
     let fanout_list = config.nodes.iter().map(|n| n.host.clone() + ":5553").join(" ");

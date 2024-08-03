@@ -1,7 +1,8 @@
 
-use crate::get::{Lister};
+use crate::get::Lister;
 use crate::get::lister::NameFilters;
-use crate::skatelet::{PodmanPodInfo, SystemInfo};
+use crate::skatelet::SystemInfo;
+use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::util::age;
 
 pub (crate) struct PodLister {}

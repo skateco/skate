@@ -13,7 +13,7 @@ use k8s_openapi::Metadata;
 
 
 use crate::skate::SupportedResources;
-use crate::skatelet::PodmanPodStatus;
+use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name};

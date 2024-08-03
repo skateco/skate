@@ -14,7 +14,7 @@ use crate::config::{cache_dir, Config};
 use crate::filestore::ObjectListItem;
 
 use crate::skate::SupportedResources;
-use crate::skatelet::PodmanPodInfo;
+use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::util::{hash_string, slugify};

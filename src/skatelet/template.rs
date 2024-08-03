@@ -23,10 +23,6 @@ pub struct TemplateArgs {
 }
 
 pub fn template(template_args: TemplateArgs) -> Result<(), Box<dyn Error>> {
-    let _manifest = match template_args.command {
-        StdinJsonCommand::Stdin {} => Ok(()),
-        _ => Err(anyhow!("must give '-' to use stdin as input"))
-    }?;
 
     let mut handlebars = Handlebars::new();
     handlebars.set_strict_mode(true);

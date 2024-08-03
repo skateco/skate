@@ -59,7 +59,6 @@ impl Describer<NodeState> for NodeDescriber {
     fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<NodeState> {
         let id = filters.id.as_ref().and_then(|cmd| match cmd {
             IdCommand::Id(ids) => ids.first().and_then(|id| Some((*id).clone())),
-            _ => None
         });
         let id = match id {
             Some(id) => id,

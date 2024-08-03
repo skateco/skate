@@ -19,7 +19,7 @@ impl Lister<ObjectListItem> for CronjobsLister {
 
     // TODO - record last run and how many running (somehow)
     fn print(&self, resources: Vec<ObjectListItem>) {
-        macro_rules! cols { () => ("{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}") };
+        macro_rules! cols { () => ("{0: <10}  {1: <10}  {2: <10}  {3: <10}  {4: <10}  {5: <10}  {6: <15}  {7: <10}") }
         println!(
             cols!(),
             "NAMESPACE", "NAME", "SCHEDULE", "TIMEZONE", "SUSPEND", "ACTIVE", "LAST SCHEDULE", "AGE"

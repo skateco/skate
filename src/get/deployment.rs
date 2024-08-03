@@ -1,8 +1,9 @@
 use std::collections::HashMap;
-use chrono::{Local};
+use chrono::Local;
 use itertools::Itertools;
 use crate::get::{GetObjectArgs, IdCommand, Lister};
-use crate::skatelet::{PodmanPodInfo, PodmanPodStatus, SystemInfo};
+use crate::skatelet::SystemInfo;
+use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
 use crate::util::age;
 
