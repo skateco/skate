@@ -38,17 +38,18 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
     let state = refreshed_state(&cluster.name, &clients, &config).await.expect("failed to refresh state");
 
     for node in &(state.nodes) {
-        match node.status {
+        let emoji = match node.status {
             NodeStatus::Unhealthy => {
-                println!("node {} {} - {} ", node.node_name, node.status, CROSS_EMOJI)
+                CROSS_EMOJI
             }
             NodeStatus::Healthy => {
-                println!("node {} {} - {} ", node.node_name, node.status, CHECKBOX_EMOJI)
+                CHECKBOX_EMOJI
             }
             NodeStatus::Unknown => {
-                println!("node {} {} - {} ", node.node_name, node.status, '?')
+                ' '
             }
         };
+        println!("node {} {} - {} ", node.node_name, node.status, emoji)
     }
 
     state.persist()

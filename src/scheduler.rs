@@ -215,7 +215,6 @@ impl DefaultScheduler {
             let mut labels = meta.labels.unwrap_or_default();
             labels.insert("skate.io/deployment".to_string(), d.metadata.name.as_ref().unwrap().clone());
             labels.insert("skate.io/replica".to_string(), i.to_string());
-            meta.labels = Some(labels.clone());
             meta.labels = Some(labels);
 
             let pod = Pod {

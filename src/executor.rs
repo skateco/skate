@@ -81,6 +81,7 @@ impl DefaultExecutor {
         let mut pod = Pod::default();
         pod.spec = pod_template_spec.spec;
         pod.metadata = cron_job.metadata.clone();
+        pod.metadata.name = Some(format!("{}.c", ns_name.to_string()));
         let mut_spec = pod.spec.as_mut().unwrap();
         mut_spec.restart_policy = Some("Never".to_string());
 
