@@ -167,6 +167,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] List
         - [x] Output matches kubectl
         - [ ] Https redirect
+          - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
     -  Cron
         - [x] Apply
         - [x] Remove
