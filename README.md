@@ -166,18 +166,22 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Remove
         - [x] List
         - [x] Output matches kubectl
+        - [ ] Https redirect
     -  Cron
         - [x] Apply
         - [x] Remove
         - [x] Hash checking
         - [x] List
         - [x] Output matches kubectl
+        - [ ] ForbidConcurrent
+        - [ ] Create the pod when creating the cronjob to check it's legit
     - Secret
         - [x] Apply
         - [x] Remove
         - [x] List
         - [x] Output matches kubectl
-        - Goal here is to support private image pull
+        - [ ] Support private registry secrets
+        - 
     - ClusterIssuer
       - For letsencrypt
 
