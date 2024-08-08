@@ -44,15 +44,15 @@
 {{/inline}}
 
 {{#*inline "enableTLS"}}
-    # anchor::domain {{baseDomain}}
+    # anchor::domain {{domain}}
 
     ssl_certificate_by_lua_block {
         auto_ssl:ssl_certificate()
     }
     {{> tlsSettings}}
     # fallback certs
-    ssl_certificate "/usr/local/openresty/nginx/ssl/{{baseDomain}}/server.crt";
-    ssl_certificate_key "/usr/local/openresty/nginx/ssl/{{baseDomain}}/server.key";
+    ssl_certificate "/usr/local/openresty/nginx/ssl/{{domain}}/server.crt";
+    ssl_certificate_key "/usr/local/openresty/nginx/ssl/{{domain}}/server.key";
 {{/inline}}
 
 {{#*inline "enableMaxBody"}}
@@ -78,7 +78,7 @@ server {
     access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
 
     {{#if (eq ../port 443)}}
-        {{> enableTLS baseDomain=../baseDomain}}
+        {{> enableTLS domain=this.host}}
     {{/if}}
 
     {{> enableMaxBody metatdata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]}}

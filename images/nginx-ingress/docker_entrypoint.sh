@@ -57,7 +57,7 @@ export SYSTEM_RESOLVER
 
 prepare_config() {
     # ensure self signed cert exists for base url
-    domains=$(grep "# anchor::domain" "$CONF_FILE_PATH" | awk '{print $3}' | sort -u)
+    domains=$(grep -R "# anchor::domain" "$CONF_DIR/services" | awk '{print $NF}' | sort -u)
     for domain in $domains; do
         ensure_self_signed $domain
     done
@@ -71,7 +71,10 @@ prepare_config() {
     if ! /usr/local/openresty/bin/openresty -c $CONF_FILE_PATH -t; then
         cat --number $CONF_FILE_PATH
         # restore prev config
-        mv ${CONF_FILE_PATH}.old $CONF_FILE_PATH
+        if [[ -f "${CONF_FILE_PATH}.old" ]]; then
+            echo "restoring previous config"
+            mv ${CONF_FILE_PATH}.old $CONF_FILE_PATH
+        fi
     fi
 
 }

@@ -208,9 +208,6 @@ impl DefaultExecutor {
             // set "port" key
             let mut json_ingress = serde_json::to_value(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to json"))?;
             json_ingress["port"] = json!(port);
-            // TODO - figure out how best to deal with fallback TLS certificates.
-            // Should we create a self signed every time?
-            json_ingress["baseDomain"] = json!("fallback.com");
 
             let json_ingress_string = json_ingress.to_string();
 
