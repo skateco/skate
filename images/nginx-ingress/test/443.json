@@ -1,0 +1,34 @@
+{
+  "port": 443,
+  "baseDomain": "example.com",
+  "apiVersion": "networking.k8s.io/v1",
+  "kind": "Ingress",
+  "metadata": {
+    "name": "foo-external"
+  },
+  "annotations": {
+  },
+  "spec": {
+    "rules": [
+      {
+        "host": "foo.example.com",
+        "http": {
+          "paths": [
+            {
+              "path": "/",
+              "pathType": "Prefix",
+              "backend": {
+                "service": {
+                  "name": "foo",
+                  "port": {
+                    "number": 80
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

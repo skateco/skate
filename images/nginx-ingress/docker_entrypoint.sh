@@ -90,6 +90,7 @@ reload_and_wait() {
         # have lock
         pid="$(cat $pidfile 2>/dev/null || echo '')"
         if [ -z "${pid:-}" ]; then
+            echo "no pid found"
             return
         fi
 
@@ -100,6 +101,8 @@ reload_and_wait() {
         rm /tmp/ingressreload.lock
         echo "waiting on $pid"
         wait "$pid"
+    else
+        echo "lock failed"
     fi
 }
 

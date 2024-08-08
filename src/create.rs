@@ -166,7 +166,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
 
     _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress").await?;
-    _ = conn.execute("sudo podman rm -fa").await;
+    // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
 

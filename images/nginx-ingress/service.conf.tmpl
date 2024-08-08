@@ -74,11 +74,11 @@ server {
 
     # create the server based on the service
     server_name {{this.host}};
-    listen {{../port}}{{#if port 443}} ssl{{/if}};
+    listen {{../port}}{{#if (eq ../port 443)}} ssl{{/if}};
     access_log "/usr/local/openresty/nginx/logs/access.log" vhost;
 
-    {{#if port 443}}
-        {{> enableTLS }}
+    {{#if (eq ../port 443)}}
+        {{> enableTLS baseDomain=../baseDomain}}
     {{/if}}
 
     {{> enableMaxBody metatdata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]}}
@@ -120,7 +120,7 @@ server {
 
 
     {{#each this.http.paths as |path|}}
-        {{#if path.pathType "prefix"}}
+        {{#if (eq path.pathType "prefix")}}
         location {{path.path}} {
             {{> proxyPassLocation path}}
 

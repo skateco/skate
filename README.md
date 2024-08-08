@@ -151,6 +151,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [ ] Remove
         - [x] List
         - [ ] Store manifest in store so CNI plugin can get access
+        - [ ] Fix pod naming to avoid collisions
     - Deployments
         - [x] Apply
         - [ ] Remove
@@ -199,6 +200,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] letsencrypt
         - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
+    - [ ] Fix sihup reload
 - CNI
     - [ ] Get pod config from store and not sqlite
     - [ ] Reload nginx 
