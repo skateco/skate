@@ -11,7 +11,7 @@ use clap::{Args, Subcommand};
 use k8s_openapi::api::core::v1::Secret;
 use k8s_openapi::ByteString;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+
 use podman::PodmanPodInfo;
 use crate::filestore::{FileStore, ObjectListItem};
 

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus, Secret};
+use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use strum_macros::{Display, EnumString};
 
