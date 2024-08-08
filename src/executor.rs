@@ -189,7 +189,7 @@ impl DefaultExecutor {
 
         let main_template_data = json!({
             "letsEncrypt": {
-                "endpoint": "https://acme-staging-v02.api.letsencrypt.org/directory",
+                "endpoint": "", //"https://acme-staging-v02.api.letsencrypt.org/directory",
                 "allowDomains": le_allow_domains
             },
         });

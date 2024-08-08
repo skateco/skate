@@ -165,7 +165,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
 
-    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress").await?;
+    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress /var/lib/skate/ingress/letsencrypt_storage").await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;

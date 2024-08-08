@@ -93,7 +93,7 @@ server {
     add_header X-Request-ID $request_id; # Return to client
 
     {{#each this.http.paths as |path|}}
-        {{#if (eq path.pathType "prefix")}}
+        {{#if (eq path.pathType "Prefix")}}
         location {{path.path}} {
             {{> proxyPassLocation path}}
 

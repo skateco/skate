@@ -20,9 +20,14 @@ spec:
       - name: ingress
         hostPath:
           path: /var/lib/skate/ingress
+      - name: le_storage
+        hostPath:
+          path: /var/lib/skate/ingress/letsencrypt_storage
       containers:
       - name: nginx
         image: ghcr.io/skateco/nginx-ingress
         volumeMounts:
         - mountPath: /var/lib/skate/ingress
           name: ingress
+        - mountPath: /etc/resty-auto-ssl/storage
+          name: le_storage
