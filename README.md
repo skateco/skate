@@ -74,14 +74,13 @@ Currently only Prefix pathType is supported.
 
 Uses systemd timers to schedule jobs.
 Limited to always running on the same node.
-Haven't looked in to the ForbidConcurrent etc yet. 
+Haven't looked in to the ForbidConcurrent etc yet.
 I 'think' systemd will just spawn a new job if they overlap.
 
 ### Secrets
 
 Secrets are scheduled to all nodes for simplicity.
 Any references to secrets in a pod manifest are automatically looked up in the same namespace as the pods.
-
 
 ## Registering nodes
 
@@ -138,10 +137,10 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 ### TODO
 
 - Install
-  - Supported distros/arch
-    - [x] Ubuntu 24.04 amd64/aarch64
-    - [ ] Raspbian armv7
-  - [ ] Idempotent install
+    - Supported distros/arch
+        - [x] Ubuntu 24.04 amd64/aarch64
+        - [ ] Raspbian armv7
+    - [ ] Idempotent install
 
 - Scheduling
     - Strategies
@@ -151,6 +150,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [ ] Remove
         - [x] List
+        - [ ] Store manifest in store so CNI plugin can get access
     - Deployments
         - [x] Apply
         - [ ] Remove
@@ -167,8 +167,8 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] List
         - [x] Output matches kubectl
         - [ ] Https redirect
-          - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
-    -  Cron
+            - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
+    - Cron
         - [x] Apply
         - [x] Remove
         - [x] Hash checking
@@ -182,9 +182,9 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] List
         - [x] Output matches kubectl
         - [ ] Support private registry secrets
-        - 
+        -
     - ClusterIssuer
-      - For letsencrypt
+        - For letsencrypt
 
 - Networking
     - [x] multi-host container network (currently static routes)
@@ -197,6 +197,9 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Ingress
     - [x] Openresty config template from ingress resources
     - [x] letsencrypt
-      - [ ] Cluster Issuer to set letsencrypt url
+        - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
+- CNI
+    - [ ] Get pod config from store and not sqlite
+    - [ ] Reload nginx 
 

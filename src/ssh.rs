@@ -330,7 +330,7 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
 async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {
     let default_key = "";
     let key = node.key.clone().unwrap_or(default_key.to_string());
-    let key = shellexpand::tilde(&key);
+    let key = shellexpand::tilde(&key).to_string();
     let timeout = Duration::from_secs(5);
 
     let auth_method = AuthMethod::with_key_file(&key, None);
