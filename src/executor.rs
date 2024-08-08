@@ -6,7 +6,7 @@ use std::process::Stdio;
 
 use anyhow::anyhow;
 use handlebars::Handlebars;
-
+use itertools::Itertools;
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, Secret};
 use k8s_openapi::api::networking::v1::Ingress;
@@ -172,13 +172,25 @@ impl DefaultExecutor {
         }
 
 
+        let le_allow_domains: Vec<_> = self.store.list_objects("ingress")?.into_iter().filter_map(|i| {
+            match i.manifest {
+                Some(m) => {
+                    let rules = serde_yaml::from_value::<Ingress>(m).ok()?.spec?.rules?;
+                    Some(rules.into_iter().filter_map(|r| r.host).collect::<Vec<String>>())
+                }
+                None => None
+            }
+        }).flatten().unique().collect();
+
+
         ////////////////////////////////////////////////////
         // Template main nginx conf
         ////////////////////////////////////////////////////
 
         let main_template_data = json!({
             "letsEncrypt": {
-                "endpoint": ""
+                "endpoint": "https://acme-staging-v02.api.letsencrypt.org/directory",
+                "allowDomains": le_allow_domains
             },
         });
 
@@ -248,7 +260,6 @@ impl DefaultExecutor {
 
 
     fn apply_play(&self, object: SupportedResources) -> Result<(), Box<dyn Error>> {
-
         let file_path = DefaultExecutor::write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
 
         let mut args = vec!["play", "kube", &file_path, "--start"];

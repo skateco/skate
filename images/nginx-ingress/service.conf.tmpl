@@ -79,45 +79,18 @@ server {
 
     {{#if (eq ../port 443)}}
         {{> enableTLS domain=this.host}}
+    {{else}}
+    location /.well-known/acme-challenge/ {
+        content_by_lua_block {
+            auto_ssl:challenge_server()
+        }
+    }
     {{/if}}
 
     {{> enableMaxBody metatdata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]}}
 
-    ## log error request body and response if certain error codes
-    set $response_body '';  #we must declare variables first, we cannot create vars in lua
-    set $error_request_body '';
-    set $error_response_body '';
-    body_filter_by_lua '
-        local resp_body = string.sub(ngx.arg[1], 1, 1000)  -- arg[1] contains a chunk of response content
-        ngx.ctx.buffered = string.sub((ngx.ctx.buffered or "") .. resp_body, 1, 1000)
-        if ngx.arg[2] then  -- arg[2] is true if this is the last chunk
-        ngx.var.response_body = ngx.ctx.buffered
-        end
-    ';
-    # TODO: make this configurable
-    log_by_lua '
-        local ignoreStatus = {
-        ["200"]=true,
-        ["201"]=true,
-        ["204"]=true,
-        ["301"]=true,
-        ["302"]=true,
-        ["422"]=true,
-        ["403"]=true,
-        ["404"]=true,
-        ["401"]=true
-        }
-
-        if ignoreStatus[ngx.var.status] ~= true then
-        ngx.var.error_response_body = ngx.var.response_body
-        ngx.var.error_request_body = ngx.var.request_body
-        end
-    ';
-
-
     add_header Strict-Transport-Security "max-age=31536000";
     add_header X-Request-ID $request_id; # Return to client
-
 
     {{#each this.http.paths as |path|}}
         {{#if (eq path.pathType "prefix")}}

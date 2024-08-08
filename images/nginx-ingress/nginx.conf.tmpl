@@ -1,7 +1,8 @@
 {{!--
 {
     "letsEncrypt": {
-        "endpoint": ""
+        "endpoint": "",
+        "allowDomains": ["domainOne", "domainTwo"]
     }
 }
 --}}
@@ -95,7 +96,12 @@ http {
         -- so this must be configured.
         auto_ssl:set("allow_domain", function(domain)
             -- TODO - somehow maintain domains list for this
-            return true
+            local allowed = {
+            {{#each letsEncrypt.allowDomains}}
+            ['{{this}}']=true,
+            {{/each}}
+            }
+            return allowed[domain]
 
         end)
 
