@@ -140,7 +140,7 @@ impl DefaultScheduler {
             let mut pod_spec = ds.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
 
             let mut meta = ds.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
-            meta.name = Some(format!("{}-{}", ds.metadata.name.as_ref().unwrap(), node_name));
+            meta.name = Some(format!("dms-{}.{}-{}", ds.metadata.name.as_ref().unwrap(), ds.metadata.namespace.as_ref().unwrap(), node_name));
             meta.namespace = ds.metadata.namespace.clone();
 
             let mut labels = meta.labels.clone().unwrap_or_default();
@@ -210,7 +210,8 @@ impl DefaultScheduler {
             let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
 
             let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
-            meta.name = Some(format!("{}-{}", d.metadata.name.as_ref().unwrap(), i));
+            // name format needs to be <type>.<fqn>.<replica>
+            meta.name = Some(format!("dpl-{}.{}-{}", d.metadata.name.as_ref().unwrap(), d.metadata.namespace.as_ref().unwrap(), i));
             meta.namespace = d.metadata.namespace.clone();
             let mut labels = meta.labels.unwrap_or_default();
             labels.insert("skate.io/deployment".to_string(), d.metadata.name.as_ref().unwrap().clone());

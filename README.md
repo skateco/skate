@@ -160,7 +160,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Apply
         - [ ] Remove
         - [x] List
-        - [ ] Output matches kubectl
+        - [x] Output matches kubectl
     - Daemonsets
         - [x] Apply
         - [ ] Remove
@@ -194,7 +194,8 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Networking
     - [x] multi-host container network (currently static routes)
     - [ ] Debug why setting up routes again breaks existing container -> route
-    - [ ] Use something fancier like vxlan
+      - Most likely to do with force deleting the podman network
+    - [ ] Use something fancier like vxlan, tailscale etc
 - DNS
     - [x] multi host dns
     - [x] ingress
