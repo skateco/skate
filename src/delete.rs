@@ -22,6 +22,8 @@ pub enum DeleteCommands {
     Ingress(DeleteResourceArgs),
     Cronjob(DeleteResourceArgs),
     Secret(DeleteResourceArgs),
+    Deployment(DeleteResourceArgs),
+    Daemonset(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -39,6 +41,8 @@ pub struct DeleteResourceArgs {
 pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         DeleteCommands::Node(args) => delete_node(args).await?,
+        DeleteCommands::Daemonset(args) => delete_resource(ResourceType::DaemonSet, args).await?,
+        DeleteCommands::Deployment(args) => delete_resource(ResourceType::Deployment, args).await?,
         DeleteCommands::Ingress(args) => delete_resource(ResourceType::Ingress, args).await?,
         DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
         DeleteCommands::Secret(args) => delete_resource(ResourceType::Secret, args).await?,

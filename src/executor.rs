@@ -7,6 +7,7 @@ use std::process::Stdio;
 use anyhow::anyhow;
 use handlebars::Handlebars;
 use itertools::Itertools;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, Secret};
 use k8s_openapi::api::networking::v1::Ingress;
@@ -267,40 +268,31 @@ impl DefaultExecutor {
             args.push("--network=podman")
         }
 
-        let output = process::Command::new("podman")
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .output()
-            .expect(&format!("failed to apply resource via `podman {}`", &args.join(" ")));
+        let result = exec_cmd("podman", &args)?;
 
-        if !output.status.success() {
-            return Err(anyhow!("`podman {}` exited with code {}, stderr: {}", args.join(" "), output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
+        if !result.is_empty() {
+            println!("{}", result);
         }
-
-
         Ok(())
     }
 
     fn remove_secret(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
         let fqn = format!("{}.{}", secret.metadata.name.unwrap(), secret.metadata.namespace.unwrap());
+        let output = exec_cmd("podman", &["secret", "rm", &fqn])?;
 
-        let output = process::Command::new("podman")
-            .args(["secret", "rm", &fqn])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .output()
-            .expect("failed to remove secret");
-
-        if !output.status.success() {
-            return Err(anyhow!("`podman secret rm {}` exited with code {}, stderr: {}", fqn, output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).trim().to_string()).into());
-        }
-
-        if !output.stdout.is_empty() {
-            println!("{}", String::from_utf8_lossy(&output.stdout).trim());
+        if !output.is_empty() {
+            println!("{}", output);
         }
 
         Ok(())
+    }
+
+    fn remove_deployment(&self, deployment: Deployment) -> Result<(), Box<dyn Error>> {
+        todo!("not implemented")
+    }
+
+    fn remove_daemonset(&self, daemonset: DaemonSet) -> Result<(), Box<dyn Error>> {
+        todo!("not implemented")
     }
 
     fn remove_pod(&self, id: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
@@ -315,31 +307,24 @@ impl DefaultExecutor {
             vec!("pod", "stop", "-t", &grace_str),
             vec!(&id),
         ].concat();
-        let _output = process::Command::new("podman")
-            .args(stop_cmd.clone())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .output()
-            .expect("failed to stop pod");
 
-        // if !output.status.success() {
-        //     return Err(anyhow!("{:?} - exit code {}, stderr: {}", stop_cmd, output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
-        // }
+        let result = exec_cmd("podman", &stop_cmd);
+
+        if result.is_err() {
+            eprintln!("{}", result.unwrap_err());
+        }
 
         let rm_cmd = [
             vec!("pod", "rm", "--force"),
             vec!(&id),
         ].concat();
-        let output = process::Command::new("podman")
-            .args(rm_cmd.clone())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .output()
-            .expect("failed to remove pod");
 
-        if !output.status.success() {
-            return Err(anyhow!("{:?} - exit code {}, stderr: {}", rm_cmd,  output.status, String::from_utf8_lossy(&output.stderr).to_string()).into());
+        let output = exec_cmd("podman", &rm_cmd)?;
+
+        if !output.is_empty() {
+            println!("{}", output);
         }
+
         Ok(())
     }
 }
@@ -368,11 +353,11 @@ impl Executor for DefaultExecutor {
                 let name = p.metadata.name.unwrap();
                 self.remove_pod(&name, grace_period)
             }
-            SupportedResources::Deployment(_d) => {
-                Err(anyhow!("removing a deployment is not supported, instead supply it's individual pods").into())
+            SupportedResources::Deployment(d) => {
+                self.remove_deployment(d)
             }
-            SupportedResources::DaemonSet(_) => {
-                Err(anyhow!("removing a daemonset is not supported, instead supply it's individual pods").into())
+            SupportedResources::DaemonSet(d) => {
+                self.remove_daemonset(d)
             }
             SupportedResources::Ingress(ingress) => {
                 self.remove_ingress(ingress)

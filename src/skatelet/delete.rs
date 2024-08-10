@@ -29,6 +29,8 @@ pub enum DeleteResourceCommands {
     Ingress(DeleteResourceArgs),
     Cronjob(DeleteResourceArgs),
     Secret(DeleteResourceArgs),
+    Deployment(DeleteResourceArgs),
+    Daemonset(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -45,6 +47,8 @@ pub fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
         DeleteResourceCommands::StdinCommand(_) => delete_stdin(args),
         DeleteResourceCommands::Cronjob(resource_args) => delete_cronjob(args.clone(), resource_args.clone()),
         DeleteResourceCommands::Secret(resource_args) => delete_secret(args.clone(), resource_args.clone()),
+        DeleteResourceCommands::Daemonset(resource_args) => delete_daemonset(args.clone(), resource_args.clone()),
+        DeleteResourceCommands::Deployment(resource_args) => delete_deployment(args.clone(), resource_args.clone()),
     }
 }
 
@@ -93,7 +97,7 @@ pub fn delete_secret(delete_args: DeleteArgs, resource_args: DeleteResourceArgs)
         ("skate.io/namespace".to_string(), resource_args.namespace),
     ]));
 
-    executor.manifest_delete(SupportedResources::Secret(Secret{
+    executor.manifest_delete(SupportedResources::Secret(Secret {
         data: None,
         immutable: None,
         metadata: meta,
@@ -113,4 +117,38 @@ pub fn delete_stdin(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
     let executor = DefaultExecutor::new();
     let object: SupportedResources = serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
     executor.manifest_delete(object, args.termination_grace_period)
+}
+
+pub fn delete_deployment(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+    let executor = DefaultExecutor::new();
+    let mut meta = ObjectMeta::default();
+    meta.name = Some(resource_args.name.clone());
+    meta.namespace = Some(resource_args.namespace.clone());
+    meta.labels = Some(BTreeMap::from([
+        ("skate.io/name".to_string(), resource_args.name),
+        ("skate.io/namespace".to_string(), resource_args.namespace),
+    ]));
+
+    executor.manifest_delete(SupportedResources::Deployment(k8s_openapi::api::apps::v1::Deployment {
+        metadata: meta,
+        spec: None,
+        status: None,
+    }), delete_args.termination_grace_period)
+}
+
+pub fn delete_daemonset(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+    let executor = DefaultExecutor::new();
+    let mut meta = ObjectMeta::default();
+    meta.name = Some(resource_args.name.clone());
+    meta.namespace = Some(resource_args.namespace.clone());
+    meta.labels = Some(BTreeMap::from([
+        ("skate.io/name".to_string(), resource_args.name),
+        ("skate.io/namespace".to_string(), resource_args.namespace),
+    ]));
+
+    executor.manifest_delete(SupportedResources::DaemonSet(k8s_openapi::api::apps::v1::DaemonSet {
+        metadata: meta,
+        spec: None,
+        status: None,
+    }), delete_args.termination_grace_period)
 }
