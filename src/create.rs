@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use base64::Engine;
 use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
+use cni_plugin::logger::install;
 use itertools::Itertools;
 use semver::{Version, VersionReq};
 
@@ -32,6 +33,7 @@ pub struct CreateArgs {
 #[derive(Debug, Subcommand)]
 pub enum CreateCommands {
     Node(CreateNodeArgs),
+    ClusterResources(CreateClusterResourcesArgs),
 }
 
 #[derive(Debug, Args)]
@@ -53,11 +55,35 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
+#[derive(Debug, Args)]
+pub struct CreateClusterResourcesArgs {
+    #[command(flatten)]
+    config: ConfigFileArgs,
+}
+
 pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
-        CreateCommands::Node(args) => create_node(args).await?
+        CreateCommands::Node(args) => create_node(args).await?,
+        CreateCommands::ClusterResources(args) => create_cluster_resources(args).await?
     }
     Ok(())
+}
+async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<(), Box<dyn Error>> {
+    let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
+
+    let context = match args.config.context {
+        None => match config.current_context {
+            None => {
+                Err(anyhow!("--context is required unless there is already a current context"))
+            }
+            Some(ref context) => Ok(context)
+        }
+        Some(ref context) => Ok(context)
+    }.map_err(Into::<Box<dyn Error>>::into)?;
+
+    let (_, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+
+    install_cluster_manifests(&args.config, cluster).await
 }
 
 async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
@@ -176,12 +202,12 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let state = refreshed_state(&cluster.name, &all_conns, &config).await?;
     state.persist()?;
 
-    install_manifests(&args, &cluster, &node).await?;
+    install_cluster_manifests(&args.config, &cluster).await?;
 
     Ok(())
 }
 
-async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
 
     // COREDNS
     // coredns listens on port 53 and 5533
@@ -193,7 +219,7 @@ async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node)
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
-    let coredns_yaml_path = format!("/tmp/skate-coredns-{}.yaml", node.name);
+    let coredns_yaml_path = format!("/tmp/skate-coredns.yaml");
     let mut file = File::create(&coredns_yaml_path)?;
     file.write_all(coredns_yaml.as_bytes())?;
 
@@ -201,12 +227,12 @@ async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node)
     apply(ApplyArgs {
         filename: vec![coredns_yaml_path],
         grace_period: 0,
-        config: args.config.clone(),
+        config: args.clone(),
     }).await?;
 
     // nginx ingress
 
-    let nginx_yaml_path = format!("/tmp/skate-nginx-ingress-{}.yaml", node.name);
+    let nginx_yaml_path = format!("/tmp/skate-nginx-ingress.yaml");
     let mut file = File::create(&nginx_yaml_path)?;
     file.write_all(INGRESS_MANIFEST.as_bytes())?;
 
@@ -214,12 +240,13 @@ async fn install_manifests(args: &CreateNodeArgs, config: &Cluster, node: &Node)
     apply(ApplyArgs {
         filename: vec![nginx_yaml_path],
         grace_period: 0,
-        config: args.config.clone(),
+        config: args.clone(),
     }).await?;
 
     Ok(())
 }
 
+// TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let cmd = "sqlite3 -version || sudo apt-get install -y sqlite3";
     conn.execute(cmd).await?;
@@ -232,6 +259,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let cmd = "sudo sed -i 's&#network_backend[ =].*&network_backend = \"cni\"&' /etc/containers/containers.conf";
     conn.execute(&cmd).await?;
 
+    // TODO - especially don't do this unless needed
     let cmd = "sudo ip link del cni-podman0|| exit 0";
     conn.execute(&cmd).await?;
 
@@ -318,9 +346,9 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
         route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }
 
-    route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
+    route_file = route_file + "[ $(sysctl net.ipv4.ip_forward -b) -eq 1 ] || sysctl -w net.ipv4.ip_forward=1\n";
+    route_file = route_file + "[ $(sysctl fs.inotify.max_user_instances) -eq 1280 ] || sysctl fs.inotify.max_user_instances=1280\n";
+    route_file = route_file + "[ $(sysctl fs.inotify.max_user_watches) -eq 655360 ] || sysctl fs.inotify.max_user_watches=655360\n";
     route_file = route_file + "sysctl -p\n";
 
 
@@ -330,11 +358,12 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
 
     // Create systemd unit file to call the skate routes file on startup after internet
+    // TODO - only add if different
     let path = "/etc/systemd/system/skate-routes.service";
     let unit_file = include_str!("./resources/skate-routes.service");
     let unit_file = general_purpose::STANDARD.encode(unit_file.as_bytes());
 
-    let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > {}\"", unit_file, path);
+    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", unit_file, path);
     conn.execute(&cmd).await?;
 
     conn.execute("sudo systemctl daemon-reload").await?;

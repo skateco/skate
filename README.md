@@ -171,7 +171,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Remove
         - [x] List
         - [x] Output matches kubectl
-        - [ ] Https redirect
+        - [x] Https redirect
             - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
     - Cron
         - [x] Apply
@@ -193,6 +193,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 
 - Networking
     - [x] multi-host container network (currently static routes)
+    - [ ] Debug why setting up routes again breaks existing container -> route
     - [ ] Use something fancier like vxlan
 - DNS
     - [x] multi host dns
@@ -204,7 +205,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [x] letsencrypt
         - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
-    - [ ] Fix sihup reload
+    - [ ] Recreate & fix whatever breaks the sighup reload. 
 - CNI
     - [ ] Get pod config from store and not sqlite
     - [ ] Reload nginx 
