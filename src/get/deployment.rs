@@ -5,15 +5,15 @@ use crate::get::{GetObjectArgs, IdCommand, Lister};
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
-use crate::util::age;
+use crate::util::{age, NamespacedName};
 
 pub(crate) struct DeploymentLister {}
 
-impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
-    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<(String, PodmanPodInfo)>> {
+impl Lister<(NamespacedName, PodmanPodInfo)> for DeploymentLister {
+    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<(NamespacedName, PodmanPodInfo)>> {
         todo!()
     }
-    fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(String, PodmanPodInfo)> {
+    fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(NamespacedName, PodmanPodInfo)> {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
                 let ns = args.namespace.clone();
@@ -40,7 +40,7 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
                             None => false
                         };
                         if match_ns || match_id || (id.is_none() && ns.is_none() && pod_ns != "skate") {
-                            return Some((deployment.clone(), p));
+                            return Some((NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()), p));
                         }
                         None
                     }
@@ -55,12 +55,12 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
         pods
     }
 
-    fn print(&self, items: Vec<(String, PodmanPodInfo)>) {
+    fn print(&self, items: Vec<(NamespacedName, PodmanPodInfo)>) {
         println!(
-            "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-            "NAME", "READY", "STATUS", "RESTARTS", "AGE"
+            "{0: <30}  {1: <30}  {2: <10}  {3: <10}  {4: <10}  {5: <30}",
+            "NAMESPACE","NAME", "READY", "UP-TO-DATE", "AVAILABLE", "AGE"
         );
-        let pods = items.into_iter().fold(HashMap::<String, Vec<PodmanPodInfo>>::new(), |mut acc, (depl, pod)| {
+        let pods = items.into_iter().fold(HashMap::<NamespacedName, Vec<PodmanPodInfo>>::new(), |mut acc, (depl, pod)| {
             acc.entry(depl).or_insert(vec![]).push(pod);
             acc
         });
@@ -76,8 +76,8 @@ impl Lister<(String, PodmanPodInfo)> for DeploymentLister {
             });
 
             println!(
-                "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-                deployment, format!("{}/{}", health_pods, all_pods), "", "", age(created)
+                "{0: <30}  {1: <30}  {2: <10}  {3: <10}  {4: <10}  {5: <30}",
+                deployment.namespace, deployment.name, format!("{}/{}", health_pods, all_pods), all_pods, health_pods, age(created)
             )
         }
     }
