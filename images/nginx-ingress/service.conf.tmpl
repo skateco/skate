@@ -96,16 +96,6 @@ server {
         {{#if (eq path.pathType "Prefix")}}
         location {{path.path}} {
             {{> proxyPassLocation path}}
-
-            location ~* \.(css|js|htm|html)$ {
-                log_not_found on;
-                access_log off;
-            }
-
-            location ~* \.(ogg|ogv|svgz|mp4|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|mid|midi|wav|bmp|eot|oft|svg|ttf|woff)$ {
-                log_not_found on;
-                access_log off;
-            }
         }
         {{/if}}
     {{/each}}
