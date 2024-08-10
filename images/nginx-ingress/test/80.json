@@ -3,9 +3,10 @@
   "apiVersion": "networking.k8s.io/v1",
   "kind": "Ingress",
   "metadata": {
-    "name": "foo-external"
-  },
-  "annotations": {
+    "name": "foo-external",
+    "annotations": {
+      "nginx.ingress.kubernetes.io/ssl-redirect": ""
+    }
   },
   "spec": {
     "rules": [

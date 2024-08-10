@@ -4,9 +4,9 @@
   "apiVersion": "networking.k8s.io/v1",
   "kind": "Ingress",
   "metadata": {
-    "name": "foo-external"
-  },
-  "annotations": {
+    "name": "foo-external",
+    "annotations": {
+    },
   },
   "spec": {
     "rules": [
@@ -87,18 +87,27 @@ server {
     }
     {{/if}}
 
-    {{> enableMaxBody metatdata.annotations["nginx.ingress.kubernetes.io/proxy-body-size"]}}
+    {{> enableMaxBody ../metadata.annotations.[nginx.ingress.kubernetes.io/proxy-body-size]}}
 
     add_header Strict-Transport-Security "max-age=31536000";
     add_header X-Request-ID $request_id; # Return to client
 
-    {{#each this.http.paths as |path|}}
-        {{#if (eq path.pathType "Prefix")}}
-        location {{path.path}} {
-            {{> proxyPassLocation path}}
+    {{#if (eq ../port 80)}}
+    # redirect to https if port 80 and not disabled
+
+        location / {
+            return 301 https://$host$request_uri;
         }
-        {{/if}}
-    {{/each}}
+
+    {{else}}
+        {{#each this.http.paths as |path|}}
+            {{#if (eq path.pathType "Prefix")}}
+            location {{path.path}} {
+                {{> proxyPassLocation path}}
+            }
+            {{/if}}
+        {{/each}}
+    {{/if}}
 
 }
 {{/each}}

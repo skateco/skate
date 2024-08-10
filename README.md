@@ -70,6 +70,10 @@ url: `<labels.name>.<metadata.namespace>.cluster.skate`
 
 Currently only Prefix pathType is supported.
 
+Supported annotations:
+- [ ] `nginx.ingress.kubernetes.io/ssl-redirect`
+- [x] `nginx.ingress.kubernetes.io/proxy-body-size`
+
 ### CronJobs
 
 Uses systemd timers to schedule jobs.
