@@ -6,6 +6,7 @@ use crate::config::Config;
 
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
+use crate::util::CHECKBOX_EMOJI;
 
 #[derive(Debug, Args)]
 pub struct DeleteArgs {
@@ -74,7 +75,10 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
 
     match errors.is_empty() {
         false => Err(anyhow!("\n{}", errors.join("\n")).into()),
-        true => Ok(())
+        true => {
+            println!("{} deleted {} {}.{}", CHECKBOX_EMOJI, r_type.to_string(), args.name, args.namespace);
+            Ok(())
+        }
     }
 }
 
