@@ -294,7 +294,7 @@ impl DefaultExecutor {
 
         let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/deployment={}", name), "-q"])?;
 
-        let ids = ids.split("\n").collect::<Vec<&str>>();
+        let ids = ids.split("\n").map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<&str>>();
 
         self.remove_pods(ids, grace_period)
     }
@@ -304,10 +304,9 @@ impl DefaultExecutor {
         let ns = daemonset.metadata.namespace.unwrap_or("default".to_string());
 
         let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
-        let ids = ids.split("\n").collect::<Vec<&str>>();
-        let result = self.remove_pods(ids, grace_period);
-        let _ = self.reload_ingress();
-        result
+        let ids = ids.split("\n").map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<&str>>();
+
+        self.remove_pods(ids, grace_period)
     }
 
     fn remove_pods(&self, ids: Vec<&str>, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {

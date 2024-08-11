@@ -158,12 +158,12 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [ ] Fix pod naming to avoid collisions
     - Deployments
         - [x] Apply
-        - [ ] Remove
+        - [x] Remove
         - [x] List
         - [x] Output matches kubectl
     - Daemonsets
         - [x] Apply
-        - [ ] Remove
+        - [x] Remove
         - [x] List
         - [x] Output matches kubectl
     - Ingress
