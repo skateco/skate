@@ -296,9 +296,7 @@ impl DefaultExecutor {
 
         let ids = ids.split("\n").collect::<Vec<&str>>();
 
-        let result = self.remove_pods(ids, grace_period);
-        let _ = self.reload_ingress();
-        result
+        self.remove_pods(ids, grace_period)
     }
 
     fn remove_daemonset(&self, daemonset: DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
@@ -372,12 +370,7 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
-            SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) => {
-                let result = self.apply_play(object);
-                let _ = self.reload_ingress();
-                result
-            }
-            SupportedResources::Pod(_) | SupportedResources::Secret(_) => {
+            SupportedResources::Pod(_) | SupportedResources::Secret(_) | SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) => {
                 self.apply_play(object)
             }
             SupportedResources::Ingress(ingress) => {
