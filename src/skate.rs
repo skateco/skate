@@ -35,6 +35,7 @@ use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
 use crate::describe::{DescribeArgs, describe};
+use crate::logs::{LogArgs, logs};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
 use crate::ssh::SshClient;
@@ -57,6 +58,7 @@ enum Commands {
     Refresh(RefreshArgs),
     Get(GetArgs),
     Describe(DescribeArgs),
+    Logs(LogArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -78,6 +80,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Refresh(args) => refresh(args).await,
         Commands::Get(args) => get(args).await,
         Commands::Describe(args) => describe(args).await,
+        Commands::Logs(args) => logs(args).await,
         _ => Ok(())
     }
 }

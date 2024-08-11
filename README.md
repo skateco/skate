@@ -155,11 +155,12 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [ ] Remove
         - [x] List
         - [ ] Store manifest in store so CNI plugin can get access
-        - [ ] Fix pod naming to avoid collisions
+        - [x] Fix pod naming to avoid collisions
     - Deployments
         - [x] Apply
         - [x] Remove
         - [x] List
+        - [ ] Logs
         - [x] Output matches kubectl
     - Daemonsets
         - [x] Apply

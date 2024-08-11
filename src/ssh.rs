@@ -1,6 +1,8 @@
 use std::error::Error;
+use russh;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
+use std::process::Stdio;
 use std::time::Duration;
 use anyhow::anyhow;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
@@ -240,6 +242,41 @@ echo ovs=$(cat /tmp/ovs-$$);
                 Err(anyhow!("failed to remove resource: exit code {}, {}", result.exit_status, message).into())
             }
         }
+    }
+
+    pub async fn execute_stdout(self: &SshClient, cmd: &str) -> Result<(), Box<dyn Error>> {
+        let mut ch = self.client.get_channel().await?;
+        let _ = ch.exec(true, cmd).await?;
+
+        let mut result: Option<_> = None;
+
+        while let Some(msg) = ch.wait().await {
+            //dbg!(&msg);
+            match msg {
+                // If we get data, add it to the buffer
+                russh::ChannelMsg::Data { ref data } => print!("{}", &String::from_utf8_lossy(&data.to_vec())),
+                russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                    if ext == 1 {
+                        eprint!("{}", &String::from_utf8_lossy(&data.to_vec()))
+                    }
+                }
+                // If we get an exit code report, store it, but crucially don't
+                // assume this message means end of communications. The data might
+                // not be finished yet!
+                russh::ChannelMsg::ExitStatus { exit_status } => result = Some(exit_status),
+
+                // We SHOULD get this EOF messagge, but 4254 sec 5.3 also permits
+                // the channel to close without it being sent. And sometimes this
+                // message can even precede the Data message, so don't handle it
+                // russh::ChannelMsg::Eof => break,
+                _ => {}
+            }
+        }
+
+        if result.is_none() || result == Some(0) {
+            return Ok(());
+        }
+        Err(anyhow!("exit status {}", result.unwrap()).into())
     }
 
     pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
