@@ -74,7 +74,7 @@ impl DefaultExecutor {
         let systemd_timer_schedule = cron_to_systemd(&spec.schedule, &timezone)?;
 
         ////////////////////////////////////////////////////
-        // extract pod spec and add file /pod-manifest.yaml
+        // extract pod spec and add file /pod.yaml
         ////////////////////////////////////////////////////
 
         let pod_template_spec = spec.job_template.spec.unwrap_or_default().template;
@@ -287,12 +287,56 @@ impl DefaultExecutor {
         Ok(())
     }
 
-    fn remove_deployment(&self, deployment: Deployment) -> Result<(), Box<dyn Error>> {
-        todo!("not implemented")
+    fn remove_deployment(&self, deployment: Deployment, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+        // find all pod ids for the deployment
+        let name = deployment.metadata.name.unwrap();
+        let ns = deployment.metadata.namespace.unwrap_or("default".to_string());
+
+        let ids = exec_cmd("podman", &["ps", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/deployment={}", name), "-q"])?;
+
+        let ids = ids.split("\n").collect::<Vec<&str>>();
+
+
+        let mut failed = false;
+        for id in ids {
+            match self.remove_pod(id, grace_period) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("{}", e);
+                    failed = true;
+                }
+            };
+        }
+
+        if failed {
+            return Err(anyhow!("failures when removing pods for deployment").into());
+        }
+        Ok(())
     }
 
-    fn remove_daemonset(&self, daemonset: DaemonSet) -> Result<(), Box<dyn Error>> {
-        todo!("not implemented")
+    fn remove_daemonset(&self, daemonset: DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+        let name = daemonset.metadata.name.unwrap();
+        let ns = daemonset.metadata.namespace.unwrap_or("default".to_string());
+
+        let ids = exec_cmd("podman", &["ps", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
+        let ids = ids.split("\n").collect::<Vec<&str>>();
+
+
+        let mut failed = false;
+        for id in ids {
+            match self.remove_pod(id, grace_period) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("{}", e);
+                    failed = true;
+                }
+            };
+        }
+
+        if failed {
+            return Err(anyhow!("failures when removing pods for daemonset").into());
+        }
+        Ok(())
     }
 
     fn remove_pod(&self, id: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
@@ -354,10 +398,10 @@ impl Executor for DefaultExecutor {
                 self.remove_pod(&name, grace_period)
             }
             SupportedResources::Deployment(d) => {
-                self.remove_deployment(d)
+                self.remove_deployment(d, grace_period)
             }
             SupportedResources::DaemonSet(d) => {
-                self.remove_daemonset(d)
+                self.remove_daemonset(d, grace_period)
             }
             SupportedResources::Ingress(ingress) => {
                 self.remove_ingress(ingress)
