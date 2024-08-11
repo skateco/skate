@@ -297,19 +297,19 @@ impl DefaultExecutor {
         let ids = ids.split("\n").collect::<Vec<&str>>();
 
 
-        let mut failed = false;
-        for id in ids {
+        let failures: Vec<_> = ids.iter().filter_map(|id|{
             match self.remove_pod(id, grace_period) {
-                Ok(_) => {}
+                Ok(_) => None,
                 Err(e) => {
-                    eprintln!("{}", e);
-                    failed = true;
+                    Some(e)
                 }
-            };
-        }
+            }
+        }).collect();
 
-        if failed {
-            return Err(anyhow!("failures when removing pods for deployment").into());
+        if !failures.is_empty() {
+            let mut err =  anyhow!("failures when removing pods for deployment");
+            err  = failures.iter().fold(err, |a, b| a.context(b.to_string()));
+            return Err(err.into());
         }
         Ok(())
     }
@@ -322,19 +322,19 @@ impl DefaultExecutor {
         let ids = ids.split("\n").collect::<Vec<&str>>();
 
 
-        let mut failed = false;
-        for id in ids {
+        let failures: Vec<_> = ids.iter().filter_map(|id|{
             match self.remove_pod(id, grace_period) {
-                Ok(_) => {}
+                Ok(_) => None,
                 Err(e) => {
-                    eprintln!("{}", e);
-                    failed = true;
+                    Some(e)
                 }
-            };
-        }
+            }
+        }).collect();
 
-        if failed {
-            return Err(anyhow!("failures when removing pods for daemonset").into());
+        if !failures.is_empty() {
+            let mut err =  anyhow!("failures when removing pods for daemonset");
+            err  = failures.iter().fold(err, |a, b| a.context(b.to_string()));
+            return Err(err.into());
         }
         Ok(())
     }
