@@ -296,22 +296,7 @@ impl DefaultExecutor {
 
         let ids = ids.split("\n").collect::<Vec<&str>>();
 
-
-        let failures: Vec<_> = ids.iter().filter_map(|id|{
-            match self.remove_pod(id, grace_period) {
-                Ok(_) => None,
-                Err(e) => {
-                    Some(e)
-                }
-            }
-        }).collect();
-
-        if !failures.is_empty() {
-            let mut err =  anyhow!("failures when removing pods for deployment");
-            err  = failures.iter().fold(err, |a, b| a.context(b.to_string()));
-            return Err(err.into());
-        }
-        Ok(())
+        self.remove_pods(ids, grace_period)
     }
 
     fn remove_daemonset(&self, daemonset: DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
@@ -320,9 +305,11 @@ impl DefaultExecutor {
 
         let ids = exec_cmd("podman", &["ps", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
         let ids = ids.split("\n").collect::<Vec<&str>>();
+        self.remove_pods(ids, grace_period)
+    }
 
-
-        let failures: Vec<_> = ids.iter().filter_map(|id|{
+    fn remove_pods(&self, ids: Vec<&str>, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+        let failures: Vec<_> = ids.iter().filter_map(|id| {
             match self.remove_pod(id, grace_period) {
                 Ok(_) => None,
                 Err(e) => {
@@ -332,8 +319,8 @@ impl DefaultExecutor {
         }).collect();
 
         if !failures.is_empty() {
-            let mut err =  anyhow!("failures when removing pods for daemonset");
-            err  = failures.iter().fold(err, |a, b| a.context(b.to_string()));
+            let mut err = anyhow!("failures when removing pods");
+            err = failures.iter().fold(err, |a, b| a.context(b.to_string()));
             return Err(err.into());
         }
         Ok(())
