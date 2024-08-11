@@ -29,7 +29,9 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let (conns, errors) = ssh::cluster_connections(cluster).await;
     match errors {
         Some(e) => {
-            eprintln!("{}", e)
+            for e in e.errors {
+                eprintln!("{} - {}", e.node_name, e.error)
+            }
         }
         _ => {}
     };

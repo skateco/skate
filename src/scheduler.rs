@@ -557,10 +557,10 @@ impl DefaultScheduler {
                     match client.apply_resource(&serialized).await {
                         Ok((stdout, stderr)) => {
                             if !stdout.trim().is_empty() {
-                                println!("{}", stdout.trim());
+                                stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
                             }
                             if !stderr.is_empty() {
-                                eprintln!("{}", stderr.trim())
+                                stderr.trim().split("\n").for_each(|line| eprintln!("{} - {}", node_name, line));
                             }
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
                             println!("{} created {} {} on node {}", CHECKBOX_EMOJI, action.resource.to_string(), &action.resource.name(), node_name);

@@ -71,6 +71,9 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
     for conn in conns.clients {
         match conn.remove_resource(r_type.clone(), &args.name, &args.namespace).await {
             Ok(result) => {
+                if !result.0.is_empty() {
+                    result.0.trim().split("\n").map(|line| format!("{} - {}", conn.node_name, line)).for_each(|line| println!("{}", line))
+                }
                 results.push(result)
             }
             Err(e) => errors.push(e.to_string())

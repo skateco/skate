@@ -292,20 +292,24 @@ impl DefaultExecutor {
         let name = deployment.metadata.name.unwrap();
         let ns = deployment.metadata.namespace.unwrap_or("default".to_string());
 
-        let ids = exec_cmd("podman", &["ps", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/deployment={}", name), "-q"])?;
+        let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/deployment={}", name), "-q"])?;
 
         let ids = ids.split("\n").collect::<Vec<&str>>();
 
-        self.remove_pods(ids, grace_period)
+        let result = self.remove_pods(ids, grace_period);
+        let _ = self.reload_ingress();
+        result
     }
 
     fn remove_daemonset(&self, daemonset: DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         let name = daemonset.metadata.name.unwrap();
         let ns = daemonset.metadata.namespace.unwrap_or("default".to_string());
 
-        let ids = exec_cmd("podman", &["ps", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
+        let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
         let ids = ids.split("\n").collect::<Vec<&str>>();
-        self.remove_pods(ids, grace_period)
+        let result = self.remove_pods(ids, grace_period);
+        let _ = self.reload_ingress();
+        result
     }
 
     fn remove_pods(&self, ids: Vec<&str>, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
@@ -334,6 +338,7 @@ impl DefaultExecutor {
         let grace = grace_period.unwrap_or(10);
 
         let grace_str = format!("{}", grace);
+        println!("gracefully stopping {}", id);
         let stop_cmd = [
             vec!("pod", "stop", "-t", &grace_str),
             vec!(&id),
@@ -342,8 +347,10 @@ impl DefaultExecutor {
         let result = exec_cmd("podman", &stop_cmd);
 
         if result.is_err() {
-            eprintln!("{}", result.unwrap_err());
+            eprintln!("failed to stop {}: {}", id, result.unwrap_err());
         }
+
+        println!("removing {}", id);
 
         let rm_cmd = [
             vec!("pod", "rm", "--force"),
@@ -365,7 +372,12 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
-            SupportedResources::Pod(_) | SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) | SupportedResources::Secret(_) => {
+            SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) => {
+                let result = self.apply_play(object);
+                let _ = self.reload_ingress();
+                result
+            }
+            SupportedResources::Pod(_) | SupportedResources::Secret(_) => {
                 self.apply_play(object)
             }
             SupportedResources::Ingress(ingress) => {
