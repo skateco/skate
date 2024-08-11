@@ -560,15 +560,15 @@ impl DefaultScheduler {
                                 stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
                             }
                             if !stderr.is_empty() {
-                                stderr.trim().split("\n").for_each(|line| eprintln!("{} - {}", node_name, line));
+                                stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
                             }
                             let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
-                            println!("{} created {} {} on node {}", CHECKBOX_EMOJI, action.resource.to_string(), &action.resource.name(), node_name);
+                            println!("{} {} {} created on node {}", CHECKBOX_EMOJI, action.resource.to_string(), &action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {
                             action.error = Some(err.to_string());
-                            println!("{} failed to create {} {} on node {}: {}", CROSS_EMOJI, action.resource.to_string(), action.resource.name().name, node_name, err.to_string());
+                            println!("{} {} {} creation failed on node {}: {}", CROSS_EMOJI, action.resource.to_string(), action.resource.name().name, node_name, err.to_string());
                             result.push(action.clone());
                         }
                     }
@@ -580,7 +580,7 @@ impl DefaultScheduler {
                 }
                 OpType::Unchanged => {
                     let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} {} on {} unchanged", EQUAL_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
+                    println!("{} {} {} unchanged on {}", EQUAL_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
                 }
             }
         }
