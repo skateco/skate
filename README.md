@@ -94,6 +94,16 @@ skate create node --name foo --host bar
 
 This will ensure all hosts are provisioned with `skatelet`, the agent
 
+## Healthchecks
+
+`podman kube play` supports `livenessProbe` in the pod manifest.
+The best way to ensure that http traffic stops being routed to an unhealthy pod is to combine that with `restartPolicy` 
+of `Always` or `OnFailure`.
+
+NOTE: using the `httpGet` probe results in podman trying to run `curl` within the container.
+With `tcpSocket` it looks for `nc`.
+
+
 ## Playing with objects
 
 ```shell

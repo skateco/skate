@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-async-ssh2-tokio = { version = "0.8.1", features = ["openssl"]}
+async-ssh2-tokio = { version = "0.8.2", features = ["openssl"] }
 async-trait = "0.1.74"
 clap = { version = "4.4.7", features = ["derive", "env"] }
 futures = "0.3.29"
@@ -34,4 +34,4 @@ fs2 = "0.4.3"
 log = "0.4.20"
 handlebars = "5.1.2"
 cron = "0.12.1"
-russh = "0.38.0"
+russh = "=0.43.0"

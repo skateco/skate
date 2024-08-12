@@ -39,7 +39,7 @@ impl LogArgs {
             let tail = format!("--tail {}", &self.tail);
             cmd.push(tail);
         }
-        return cmd
+        return cmd;
     }
 }
 
@@ -104,7 +104,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
     let result: Vec<_> = fut.collect().await;
 
     if result.iter().all(|r| r.is_err()) {
-        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
+        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
     }
 
     for res in result {
@@ -130,7 +130,7 @@ pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType
     let result: Vec<_> = fut.collect().await;
 
     if result.iter().all(|r| r.is_err()) {
-        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
+        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
     }
 
     for res in result {
