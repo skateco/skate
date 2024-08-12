@@ -1,12 +1,13 @@
 use std::error::Error;
 use std::process;
 use std::process::Stdio;
+use std::str::FromStr;
 use anyhow::anyhow;
 use clap::Args;
 use futures::stream::FuturesUnordered;
 use crate::config::Config;
 use crate::create::CreateCommands;
-use crate::skate::ConfigFileArgs;
+use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
 use futures::StreamExt;
 
@@ -28,13 +29,9 @@ pub struct LogArgs {
 }
 
 pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
-
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
 
-    if errors.is_some() {
-        eprintln!("{}", errors.as_ref().unwrap())
-    }
 
     if conns.is_none() {
         if errors.is_some() {
@@ -42,6 +39,10 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
         }
         println!("No connections found");
         return Ok(());
+    }
+
+    if errors.is_some() {
+        eprintln!("{}", errors.as_ref().unwrap())
     }
 
     let conns = conns.unwrap();
@@ -52,9 +53,42 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
     }
 
     let name = name.unwrap();
-    let ns = args.namespace.unwrap_or("default".to_string());
+    let ns = args.namespace.clone().unwrap_or("default".to_string());
 
-    let cmd = format!("sudo podman logs {}", name);
+    let (resource_type, name) = name.split_once("/").unwrap_or(("pod", name));
+
+
+    match resource_type {
+        "pod" => {
+            log_pod(&conns, name, ns, &args).await
+        }
+        "deployment" => {
+            log_deployment(&conns, name, ns, &args).await
+        }
+        "daemonset" => {
+            log_daemonset(&conns, name, ns, &args).await
+        }
+        _ => {
+            Err("Unknown resource type".into())
+        }
+    }
+}
+
+pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
+
+    if args.follow {
+        cmd.push("--follow".to_string());
+    }
+    if args.tail > 0 {
+        let tail = format!("--tail {}", &args.tail);
+        cmd.push(tail);
+    }
+
+    cmd.push(name.to_string());
+
+    let cmd = cmd.join(" ");
+
     let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
 
     let result: Vec<_> = fut.collect().await;
@@ -65,5 +99,66 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
+
+    Ok(())
+}
+
+pub async fn log_deployment(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
+
+    if args.follow {
+        cmd.push("--follow".to_string());
+    }
+    if args.tail > 0 {
+        let tail = format!("--tail {}", &args.tail);
+        cmd.push(tail);
+    }
+
+    cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/deployment={} --filter label=skate.io/namespace={} -q)", name, ns));
+
+
+    let cmd = cmd.join(" ");
+
+    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
+
+    let result: Vec<_> = fut.collect().await;
+
+    for res in result {
+        match res {
+            Err(e) => eprintln!("{}", e),
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn log_daemonset(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
+
+    if args.follow {
+        cmd.push("--follow".to_string());
+    }
+    if args.tail > 0 {
+
+        let tail = format!("--tail {}", &args.tail);
+        cmd.push(tail);
+    }
+
+    cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/daemonset={} --filter label=skate.io/namespace={} -q)", name, ns));
+
+    let cmd = cmd.join(" ");
+
+    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
+
+    let result: Vec<_> = fut.collect().await;
+
+    for res in result {
+        match res {
+            Err(e) => eprintln!("{}", e),
+            _ => {}
+        }
+    }
+
     Ok(())
 }
