@@ -28,6 +28,21 @@ pub struct LogArgs {
     var_args: Vec<String>,
 }
 
+impl LogArgs {
+    pub fn to_podman_log_args(&self) -> Vec<String> {
+        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
+
+        if self.follow {
+            cmd.push("--follow".to_string());
+        }
+        if self.tail > 0 {
+            let tail = format!("--tail {}", &self.tail);
+            cmd.push(tail);
+        }
+        return cmd
+    }
+}
+
 pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
@@ -69,21 +84,13 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
             log_daemonset(&conns, name, ns, &args).await
         }
         _ => {
-            Err("Unknown resource type".into())
+            Err(format!("Unexpected resource type {}", resource_type).into())
         }
     }
 }
 
 pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
-    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
-
-    if args.follow {
-        cmd.push("--follow".to_string());
-    }
-    if args.tail > 0 {
-        let tail = format!("--tail {}", &args.tail);
-        cmd.push(tail);
-    }
+    let mut cmd = args.to_podman_log_args();
 
     cmd.push(name.to_string());
 
@@ -92,6 +99,10 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
     let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
 
     let result: Vec<_> = fut.collect().await;
+
+    if result.iter().all(|r| r.is_err()) {
+        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
+    }
 
     for res in result {
         match res {
@@ -104,15 +115,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
 }
 
 pub async fn log_deployment(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
-    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
-
-    if args.follow {
-        cmd.push("--follow".to_string());
-    }
-    if args.tail > 0 {
-        let tail = format!("--tail {}", &args.tail);
-        cmd.push(tail);
-    }
+    let mut cmd = args.to_podman_log_args();
 
     cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/deployment={} --filter label=skate.io/namespace={} -q)", name, ns));
 
@@ -122,6 +125,10 @@ pub async fn log_deployment(conns: &ssh::SshClients, name: &str, ns: String, arg
     let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
 
     let result: Vec<_> = fut.collect().await;
+
+    if result.iter().all(|r| r.is_err()) {
+        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
+    }
 
     for res in result {
         match res {
@@ -134,16 +141,7 @@ pub async fn log_deployment(conns: &ssh::SshClients, name: &str, ns: String, arg
 }
 
 pub async fn log_daemonset(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
-    let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
-
-    if args.follow {
-        cmd.push("--follow".to_string());
-    }
-    if args.tail > 0 {
-
-        let tail = format!("--tail {}", &args.tail);
-        cmd.push(tail);
-    }
+    let mut cmd = args.to_podman_log_args();
 
     cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/daemonset={} --filter label=skate.io/namespace={} -q)", name, ns));
 
@@ -151,7 +149,12 @@ pub async fn log_daemonset(conns: &ssh::SshClients, name: &str, ns: String, args
 
     let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
 
+
     let result: Vec<_> = fut.collect().await;
+
+    if result.iter().all(|r| r.is_err()) {
+        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
+    }
 
     for res in result {
         match res {
