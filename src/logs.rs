@@ -78,13 +78,16 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
             log_pod(&conns, name, ns, &args).await
         }
         "deployment" => {
-            log_deployment(&conns, name, ns, &args).await
+            log_child_pods(&conns, ResourceType::Deployment, name, ns, &args).await
         }
         "daemonset" => {
-            log_daemonset(&conns, name, ns, &args).await
+            log_child_pods(&conns, ResourceType::DaemonSet, name, ns, &args).await
+        }
+        "cronjob" => {
+            log_child_pods(&conns, ResourceType::CronJob, name, ns, &args).await
         }
         _ => {
-            Err(format!("Unexpected resource type {}", resource_type).into())
+            Err(anyhow!("Unexpected resource type {}", resource_type).into())
         }
     }
 }
@@ -114,41 +117,15 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
     Ok(())
 }
 
-pub async fn log_deployment(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
     let mut cmd = args.to_podman_log_args();
 
-    cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/deployment={} --filter label=skate.io/namespace={} -q)", name, ns));
+    cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q)", resource_type.to_string().to_lowercase(), name, ns));
 
 
     let cmd = cmd.join(" ");
 
     let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
-
-    let result: Vec<_> = fut.collect().await;
-
-    if result.iter().all(|r| r.is_err()) {
-        return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into())
-    }
-
-    for res in result {
-        match res {
-            Err(e) => eprintln!("{}", e),
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
-
-pub async fn log_daemonset(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
-    let mut cmd = args.to_podman_log_args();
-
-    cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/daemonset={} --filter label=skate.io/namespace={} -q)", name, ns));
-
-    let cmd = cmd.join(" ");
-
-    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
-
 
     let result: Vec<_> = fut.collect().await;
 

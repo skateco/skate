@@ -156,16 +156,18 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] List
         - [ ] Store manifest in store so CNI plugin can get access
         - [x] Fix pod naming to avoid collisions
+        - [x] Logs
     - Deployments
         - [x] Apply
         - [x] Remove
         - [x] List
-        - [ ] Logs
+        - [x] Logs
         - [x] Output matches kubectl
     - Daemonsets
         - [x] Apply
         - [x] Remove
         - [x] List
+        - [x] Logs
         - [x] Output matches kubectl
     - Ingress
         - [x] Apply
@@ -180,6 +182,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] Hash checking
         - [x] List
         - [x] Output matches kubectl
+        - [x] Logs
         - [ ] ForbidConcurrent
         - [ ] Create the pod when creating the cronjob to check it's legit
     - Secret
