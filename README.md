@@ -16,9 +16,9 @@ You can deploy:
 - Pods
 - Deployments
 - DaemonSets
-- Service
-- Secrets
 - CronJobs
+- Ingress
+- Secrets
 
 An nginx ingress runs on port 80 and 443 on all nodes. 
 Lets-encrypt provides the certificates.
