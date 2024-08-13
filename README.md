@@ -1,31 +1,28 @@
 # Skate
 
-Sort of Kubernetes...
+Daemonless low footprint self-hosted mini-paas with support for deploying kubernetes manifests.
 
-An extremely low footprint mini paas for scheduling resources on a small number of hosts.
+Born out of the frustration of having to learn yet another syntax or configuration format.
 
-**Kubernetes manifest compatible.**
-Will support only a subset of resources and only a subset of their functionality:
+Skate runs as a CLI on your machine and talks to a small binary on each host over ssh.
 
-- Deployments
-- Pods
-- DaemonSets
-- Service: ExternalName only (w.i.p)
-- Ingress
-- Secrets
-- CronJobs
+Leverage (podman kube play)[https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html] to run pod manifests.
 
-Currently uses vendored ssh, plan is to move to openssh and use the native binary on the host.
 
 Supported Distro: Ubuntu 24.04
 Supported architectures: amd64, arm64
 
-## Architecture
+You can deploy:
+- Pods
+- Deployments
+- DaemonSets
+- Service
+- Secrets
+- CronJobs
 
-- `skate` cli that is basically the scheduler, run from developers machine.
-- talks to `skatelet` binaries on each host (not long lived agents, also a cli) over ssh
+An nginx ingress runs on port 80 and 443 on all nodes. 
+Lets-encrypt provides the certificates.
 
-Could be described as one-shot scheduling.
 
 ### Networking
 
@@ -44,7 +41,7 @@ Pods get a hostname of `<labels.app>.<metadata.namespace>.cluster.skate.`
 
 Nginx container listening on port 80 and 443
 
-Use an Ingress resource to enable.
+Use an Ingress resource to route traffic to a pod.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -137,8 +134,7 @@ skate apply -f manifest.yaml
 On mac I've been using cross for cross compilation:
 
 ```shell
-make armv7
-make armv6
+make amd64
 ```
 
 ### Ubuntu
@@ -201,9 +197,13 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
         - [x] List
         - [x] Output matches kubectl
         - [ ] Support private registry secrets
+          - WONTFIX: This is done in k8s by attaching the secret to the default service account, or by adding the secret
+            to the pod manifest. Since we don't want to have to deal with creating service accounts, and since podman
+            kube play doesn't support imagePullSecrets, one has to login to the registry manually per node.
         -
     - ClusterIssuer
-        - For letsencrypt
+        - [ ] Lets encrypt api endpoint
+        - [ ] email
 
 - Networking
     - [x] multi-host container network (currently static routes)
