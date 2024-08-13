@@ -6,7 +6,7 @@ Born out of the frustration of having to learn yet another syntax or configurati
 
 Skate runs as a CLI on your machine and talks to a small binary on each host over ssh.
 
-Leverage (podman kube play)[https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html] to run pod manifests.
+Leverages [podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html) to run pod manifests.
 
 
 Supported Distro: Ubuntu 24.04
