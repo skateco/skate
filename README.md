@@ -2,7 +2,7 @@
 
 Daemonless low footprint self-hosted mini-paas with support for deploying kubernetes manifests.
 
-Born out of the frustration of having to learn yet another syntax or configuration format.
+Born out of the frustration of having to learn yet another deployment configuration file syntax.
 
 Skate runs as a CLI on your machine and talks to a small binary on each host over ssh.
 
@@ -103,26 +103,14 @@ NOTE: using the `httpGet` probe results in podman trying to run `curl` within th
 With `tcpSocket` it looks for `nc`.
 
 
-## Playing with objects
+## Viewing objects
 
 ```shell
-skate get pods
-
-skate describe pod foo
-
-skate get nodes
-
-skate describe node bar
-
-skate get deployments
-
-skate describe deployment baz
-```
-
-## Refreshing state (usually done automatically)
-
-```shell
-skate refresh
+skate get pods -n <namespace>
+skate get deployments -n <namespace>
+skate get cronjobs -n <namespace>
+skate get ingress -n <namespace>
+skate get secrets -n <namespace>
 ```
 
 ## Deploying manifests
