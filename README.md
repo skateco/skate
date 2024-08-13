@@ -86,7 +86,9 @@ Any references to secrets in a pod manifest are automatically looked up in the s
 ## Registering nodes
 
 ```shell
-skate create node --name foo --host bar
+# subnet-cidr has to be unique per node
+skate create node --name node-1 --host 192.168.0.62 --subnet-cidr 20.1.0.0/16
+skate create node --name node-2 --host 192.168.0.72 --subnet-cidr 20.2.0.0/16
 ```
 
 This will ensure all hosts are provisioned with `skatelet`, the agent
