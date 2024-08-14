@@ -99,6 +99,8 @@ This will ensure all hosts are provisioned with `skatelet`, the agent
 The best way to ensure that http traffic stops being routed to an unhealthy pod is to combine that with `restartPolicy` 
 of `Always` or `OnFailure`.
 
+**Traffic will only start being routed to your pod once all containers in the pod are healthy.**
+
 NOTE: using the `httpGet` probe results in podman trying to run `curl` within the container.
 With `tcpSocket` it looks for `nc`.
 
