@@ -4,6 +4,7 @@ use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::delete::{delete, DeleteArgs};
+use crate::skatelet::dns::{dns, DnsArgs};
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
 
@@ -23,6 +24,7 @@ enum Commands {
     System(SystemArgs),
     Delete(DeleteArgs),
     Template(TemplateArgs),
+    Dns(DnsArgs),
     Cni,
 }
 
@@ -37,6 +39,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
             cni();
             Ok(())
         },
+        Commands::Dns(args) => dns(args)
         // _ => Ok(())
     }
 }

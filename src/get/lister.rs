@@ -1,5 +1,5 @@
 use crate::filestore::ObjectListItem;
-use crate::get::{GetObjectArgs, IdCommand};
+use crate::get::{GetObjectArgs };
 use crate::skatelet::{SystemInfo};
 use crate::state::state::ClusterState;
 
@@ -43,12 +43,7 @@ pub(crate) trait Lister<T> {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<T>>;
     fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T> {
         let ns = filters.namespace.clone().unwrap_or_default();
-        let id = match filters.id.clone() {
-            Some(cmd) => match cmd {
-                IdCommand::Id(ids) => ids.into_iter().next().unwrap_or("".to_string())
-            }
-            None => "".to_string()
-        };
+        let id = filters.id.clone().unwrap_or("".to_string());
 
 
         let resources = state.nodes.iter().map(|node| {

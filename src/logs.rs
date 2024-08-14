@@ -24,8 +24,8 @@ pub struct LogArgs {
     pub tail: i32,
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
-    #[arg(trailing_var_arg = true, name = "POD | TYPE/NAME")]
-    var_args: Vec<String>,
+    #[arg(name = "POD | TYPE/NAME")]
+    identifier: String
 }
 
 impl LogArgs {
@@ -62,15 +62,11 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
 
     let conns = conns.unwrap();
 
-    let name = args.var_args.first();
-    if name.is_none() {
-        return Err("No resource name provided".into());
-    }
+    let name = args.identifier.clone();
 
-    let name = name.unwrap();
     let ns = args.namespace.clone().unwrap_or("default".to_string());
 
-    let (resource_type, name) = name.split_once("/").unwrap_or(("pod", name));
+    let (resource_type, name) = name.split_once("/").unwrap_or(("pod", &name));
 
 
     match resource_type {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use chrono::Local;
 use itertools::Itertools;
-use crate::get::{GetObjectArgs, IdCommand, Lister};
+use crate::get::{GetObjectArgs, Lister};
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
@@ -17,12 +17,7 @@ impl Lister<(usize, String, PodmanPodInfo)> for DaemonsetLister {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
                 let ns = args.namespace.clone().unwrap_or("default".to_string());
-                let id = match args.id.clone() {
-                    Some(cmd) => match cmd {
-                        IdCommand::Id(ids) => Some(ids.into_iter().next().unwrap_or("".to_string()))
-                    }
-                    None => None
-                };
+                let id = args.id.clone();
                 let daemonset = p.labels.get("skate.io/daemonset").and_then(|n| Some(n.clone())).unwrap_or_default();
                 if daemonset == "" {
                     return None;

@@ -215,3 +215,12 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Get pod config from store and not sqlite
     - [ ] Reload nginx 
 
+## Plan for improving downtime during pod start and when unhealthy
+
+- in the CNI plugin, on ADD: 
+  - disown the actual part that checks if it should add the ip to the hosts file:
+    `(timeout <timeout> skatelet sd attempt-add) &`
+  - this checks the pod state and waits for it to be healthy
+
+This should only then add to addnhosts once the container reaches healthy.
+This coupled with restartPolicy: OnFailure, where once the health check fails, podman will restart the container.

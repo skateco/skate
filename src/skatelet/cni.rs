@@ -15,34 +15,9 @@ use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
 use crate::skate::exec_cmd;
+use crate::skatelet::dns;
+use crate::util::NamespacedName;
 
-
-fn conf_path_str() -> String {
-    "/var/lib/skate/cni".to_string()
-}
-
-fn lock<T>(network_name: &str, cb: &dyn Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
-    let lock_path = Path::new(&conf_path_str()).join(network_name).join("lock");
-    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
-    debug!("waiting for lock on {}", lock_path.display());
-    lock_file.lock_exclusive()?;
-    debug!("locked {}", lock_path.display());
-
-    let result = cb();
-
-    lock_file.unlock()?;
-
-    result
-}
-
-fn ensure_skatelet_cni_conf_dir(dir_name: &str) {
-    let conf_str = conf_path_str();
-    let conf_path = Path::new(&conf_str);
-    let net_path = conf_path.join(dir_name);
-
-    fs::create_dir_all(conf_path).unwrap();
-    fs::create_dir_all(net_path).unwrap();
-}
 
 fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
     let env_args = var("CNI_ARGS").and_then(|e| {
@@ -89,33 +64,17 @@ fn extract_prev_result(prev_value: Option<Value>) -> Option<SuccessReply> {
     })
 }
 
-fn write_last_run_file(msg: &str) {
-    let last_err_path = Path::new(&conf_path_str()).join(".last_run.log");
-    let mut last_err_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(last_err_path).unwrap();
-    writeln!(last_err_file, "{}", msg).unwrap();
-}
 
 pub fn cni() {
     match run() {
-        Ok(warning) => {
-            write_last_run_file(&format!("WARNING: {}", warning))
-        }
+        Ok(_) => {},
         Err(e) => {
-            write_last_run_file(&format!("ERROR: {}", e));
             panic!("{}", e)
         }
     }
 }
 
 fn run() -> Result<String, Box<dyn Error>> {
-    let conf_str = conf_path_str();
-    let conf_path = Path::new(&conf_str);
-
-    fs::create_dir_all(conf_path).unwrap();
 
     let cmd = var("CNI_COMMAND").unwrap_or_default();
     match cmd.as_str() {
@@ -155,37 +114,11 @@ fn run() -> Result<String, Box<dyn Error>> {
                 serde_json::to_writer(io::stdout(), &json)?;
                 return Ok("ADD: missing labels".to_string());
             }
+            let ip = result.ips[0].address.ip().clone().to_string();
 
-            // domain is <app>.<skate.io/namespace>.cluster.skate
-            let app = labels.get("app").ok_or(anyhow!("missing label"))?.as_str().unwrap_or_default().to_string();
-            let ns = labels.get("skate.io/namespace").ok_or(anyhow!("missing label"))?.as_str().unwrap_or_default().to_string();
-            if ns == "" {
-                serde_json::to_writer(io::stdout(), &json)?;
-                return Ok("ADD: namespace empty".to_string());
-            }
-            let domain = format!("{}.{}.cluster.skate", app.clone(), ns.clone());
-            let ip = result.ips[0].address.ip().to_string();
-
-            ensure_skatelet_cni_conf_dir(&config.name);
-
-            // Do stuff
-            lock(&config.name, &|| {
-                let addnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts");
-
-                // scope to make sure files closed after
-                {
-
-                    // create or open
-                    let mut addhosts_file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .append(true)
-                        .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
-
-                    writeln!(addhosts_file, "{} {} # {}", ip, domain, container_id).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
-                }
-
-                Ok(())
+            dns::add(container_id, ip, NamespacedName {
+                name: labels["app"].as_str().unwrap().to_string(),
+                namespace: labels["skate.io/namespace"].as_str().unwrap().to_string(),
             })?;
 
             serde_json::to_writer(io::stdout(), &json)?;
@@ -193,52 +126,11 @@ fn run() -> Result<String, Box<dyn Error>> {
         "DEL" => {
             let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!("failed to parse stdin: {}", e))?;
 
-            let config: NetworkConfig = serde_json::from_value(json.clone()).map_err(|e| anyhow!("failed to parse config: {}", e))?;
-
             let container_id = var("CNI_CONTAINERID")?;
 
             // Do stuff
-            ensure_skatelet_cni_conf_dir(&config.name);
-            lock(&config.name, &|| {
-                let _args = extract_args(&config);
-
-                let addnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts");
-                let newaddnhosts_path = Path::new(&conf_path_str()).join(config.name.clone()).join("addnhosts-new");
-
-                // scope to make sure files closed after
-                {
-                    // create or open
-
-                    let addhosts_file = OpenOptions::new()
-                        .read(true)
-                        .open(addnhosts_path.clone());
-
-                    if addhosts_file.is_err() {
-                        return Ok(());
-                    }
-                    let addhosts_file = addhosts_file?;
-
-                    let newaddhosts_file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(newaddnhosts_path.clone())?;
-
-                    let reader = BufReader::new(&addhosts_file);
-                    let mut writer = BufWriter::new(&newaddhosts_file);
-
-                    for (_index, line) in reader.lines().enumerate() {
-                        let line = line?;
-                        if !line.ends_with(&container_id) {
-                            writeln!(writer, "{}", line)?;
-                        }
-                    }
-                }
-                fs::rename(&newaddnhosts_path, &addnhosts_path)?;
-
-                serde_json::to_writer(io::stdout(), &json)?;
-                Ok(())
-            })?;
+            dns::remove(container_id)?;
+            serde_json::to_writer(io::stdout(), &json)?;
         }
         "CHECK" => {
             let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!("failed to parse stdin: {}", e))?;

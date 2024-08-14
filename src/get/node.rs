@@ -1,16 +1,10 @@
-
-
-
-
-use crate::get::{GetObjectArgs, IdCommand, Lister};
+use crate::get::{GetObjectArgs , Lister};
 
 use crate::skatelet::{SystemInfo};
 use crate::state::state::{ClusterState, NodeState};
 
 
-
-
-pub (crate) struct NodeLister {}
+pub(crate) struct NodeLister {}
 
 impl Lister<NodeState> for NodeLister {
     fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Option<Vec<NodeState>> {
@@ -18,16 +12,7 @@ impl Lister<NodeState> for NodeLister {
     }
 
     fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<NodeState> {
-        state.nodes.iter().filter(|n| {
-            match filters.clone().id {
-                Some(id) => match id {
-                    IdCommand::Id(ids) => {
-                        ids.first().unwrap_or(&"".to_string()).clone() == n.node_name
-                    }
-                }
-                _ => true
-            }
-        }).map(|n| n.clone()).collect()
+        state.nodes.iter().filter(|n| filters.id.is_none() || filters.id.clone().unwrap() == n.node_name).map(|n| n.clone()).collect()
     }
 
     fn print(&self, items: Vec<NodeState>) {

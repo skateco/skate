@@ -38,20 +38,14 @@ pub struct GetArgs {
     commands: GetCommands,
 }
 
-#[derive(Debug, Clone, Subcommand)]
-pub enum IdCommand {
-    #[clap(external_subcommand)]
-    Id(Vec<String>)
-}
-
 #[derive(Clone, Debug, Args)]
 pub struct GetObjectArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
-    #[command(subcommand)]
-    id: Option<IdCommand>,
+    #[arg()]
+    id: Option<String>
 }
 
 #[derive(Clone, Debug, Subcommand)]

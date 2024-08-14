@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use chrono::Local;
 use itertools::Itertools;
-use crate::get::{GetObjectArgs, IdCommand, Lister};
+use crate::get::{GetObjectArgs, Lister};
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
@@ -17,12 +17,7 @@ impl Lister<(NamespacedName, PodmanPodInfo)> for DeploymentLister {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
                 let ns = args.namespace.clone();
-                let id = match args.id.clone() {
-                    Some(cmd) => match cmd {
-                        IdCommand::Id(ids) => Some(ids.into_iter().next().unwrap_or("".to_string()))
-                    }
-                    None => None
-                };
+                let id = args.id.clone();
                 let deployment = p.labels.get("skate.io/deployment");
                 let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
                 match deployment {
