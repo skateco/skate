@@ -1,11 +1,10 @@
-
 use crate::get::Lister;
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::util::age;
 
-pub (crate) struct PodLister {}
+pub(crate) struct PodLister {}
 
 impl NameFilters for &PodmanPodInfo {
     fn id(&self) -> String {
@@ -28,13 +27,17 @@ impl Lister<PodmanPodInfo> for PodLister {
                 let filterable: Box<dyn NameFilters> = Box::new(*p);
                 filterable.filter_names(id, ns)
             }).map(|p| p.clone()).collect())
-        })
+        });
     }
 
     fn print(&self, pods: Vec<PodmanPodInfo>) {
+        macro_rules! cols {
+            () =>("{0: <20}  {1: <30}  {2: <10}  {3: <10}  {4: <10}  {5: <30}")
+        }
+
         println!(
-            "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-            "NAME", "READY", "STATUS", "RESTARTS", "AGE"
+            cols!(),
+            "NAMESPACE", "NAME", "READY", "STATUS", "RESTARTS", "AGE"
         );
         for pod in pods {
             let num_containers = pod.containers.clone().unwrap_or_default().len();
@@ -47,8 +50,8 @@ impl Lister<PodmanPodInfo> for PodLister {
             let restarts = pod.containers.clone().unwrap_or_default().iter().map(|c| c.restart_count.unwrap_or_default())
                 .reduce(|a, c| a + c).unwrap_or_default();
             println!(
-                "{0: <30}  {1: <10}  {2: <10}  {3: <10}  {4: <30}",
-                pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, age(pod.created)
+                cols!(),
+                pod.namespace(), pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, age(pod.created)
             )
         }
     }
