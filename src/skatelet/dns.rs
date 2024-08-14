@@ -9,9 +9,9 @@ use fs2::FileExt;
 use log::debug;
 use crate::util::NamespacedName;
 use std::io::prelude::*;
+use crate::skate::exec_cmd;
 
-
-#[derive(Debug,Subcommand)]
+#[derive(Debug, Subcommand)]
 pub enum Command {
     Add(AddArgs),
     Remove(RemoveArgs),
@@ -24,7 +24,7 @@ pub struct DnsArgs {
 
 pub fn dns(args: DnsArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
-        Command::Add(add_args) => add(add_args.container_id, add_args.ip, NamespacedName { name: add_args.name, namespace: add_args.namespace }),
+        Command::Add(add_args) => add(add_args.container_id, add_args.ip),
         Command::Remove(remove_args) => remove(remove_args.container_id),
     }
 }
@@ -59,19 +59,78 @@ fn ensure_skatelet_dns_conf_dir() {
 pub struct AddArgs {
     container_id: String,
     ip: String,
-    name: String,
-    namespace: String,
 }
 
-pub fn add(container_id: String, ip: String, namespaced_name: NamespacedName) -> Result<(), Box<dyn Error>> {
-    ensure_skatelet_dns_conf_dir();
-    let app = namespaced_name.name;
-    let ns = namespaced_name.namespace;
+fn retry<T>(attempts: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+    for _ in 0..(attempts - 1) {
+        let result = f();
+        if result.is_ok() {
+            return result;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    f()
+}
 
-    let domain = format!("{}.{}.cluster.skate", app.clone(), ns.clone());
-    let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
+pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
+    ensure_skatelet_dns_conf_dir();
+
     // Do stuff
     lock(Box::new(move || {
+
+        // TODO - store pod info in store, if no info, break retry loop
+        let json = retry(60, || {
+            let output = exec_cmd("podman", &["inspect", container_id.as_str()])?;
+            let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+            let pod = json[0]["Pod"].as_str();
+            if pod.is_none() {
+                return Err("no pod found".into());
+            }
+
+            let output = exec_cmd("podman", &["pod", "inspect", pod.unwrap()])?;
+            let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
+
+            let mut containers: Vec<_> = pod_json["Containers"].as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
+                c["Id"].as_str().unwrap()
+            ).collect();
+
+            let args = vec!(vec!("inspect"), containers).concat();
+
+            let output = exec_cmd("podman", &args)?;
+            let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+
+            // Check json for [*].State.Health.Status == "healthy"
+            let containers: Vec<_> = json.as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
+                c["State"]["Health"]["Status"].as_str().unwrap()
+            ).collect();
+
+            if containers.into_iter().all(|c| c == "healthy" || c == "") {
+                return Ok(pod_json)
+            };
+            return Err("not all containers are healthy".into());
+        })?;
+
+
+        let labels = json["Labels"].as_object().unwrap();
+        let ns = labels["skate.io/namespace"].as_str().ok_or_else(|| anyhow!("missing skate.io/namespace label"))?;
+
+        // only add for daemonsets or deployments
+        let mut parent_resource = "";
+
+        if labels.contains_key("skate.io/daemonset") {
+            parent_resource = "daemonset";
+        } else if labels.contains_key("skate.io/deployment") {
+            parent_resource = "deployment";
+        } else {
+            return Ok(())
+        }
+
+        let parent_identifer_label = format!("skate.io/{}", parent_resource);
+
+        let app = labels.get(&parent_identifer_label).unwrap().as_str().unwrap();
+
+        let domain = format!("{}.{}.cluster.skate", app, ns);
+        let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
 
         // scope to make sure files closed after
         {

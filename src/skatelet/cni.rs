@@ -10,6 +10,7 @@ use cni_plugin::reply::{SuccessReply, VersionReply};
 use fs2::FileExt;
 use log::{debug, info, error};
 use std::io::prelude::*;
+use std::process::{Command, Stdio};
 use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
@@ -92,34 +93,13 @@ fn run() -> Result<String, Box<dyn Error>> {
 
             let container_id = var("CNI_CONTAINERID")?;
 
-            // get podman info from sqlitedb in /var/lib/containers/storage/db.sql
-            let pod_json = exec_cmd(
-                "sqlite3",
-                &[
-                    "/var/lib/containers/storage/db.sql",
-                    &format!("select p.json from ContainerConfig c join PodConfig p on c.PodID = p.id where c.id = '{}'", container_id)
-                ],
-            )?;
-
-            if pod_json.is_empty() {
-                serde_json::to_writer(io::stdout(), &json)?;
-                return Ok("ADD: not a pod".to_string());
-            }
-
-            let pod_value: Value = serde_json::from_str(&pod_json).map_err(|e| anyhow!("failed to parse pod json for {} from {}: {}", container_id, pod_json, e))?;
-
-            let labels = pod_value["labels"].as_object().unwrap_or(&serde_json::Map::new()).clone();
-
-            if !labels.contains_key("app") || !labels.contains_key("skate.io/namespace") {
-                serde_json::to_writer(io::stdout(), &json)?;
-                return Ok("ADD: missing labels".to_string());
-            }
             let ip = result.ips[0].address.ip().clone().to_string();
 
-            dns::add(container_id, ip, NamespacedName {
-                name: labels["app"].as_str().unwrap().to_string(),
-                namespace: labels["skate.io/namespace"].as_str().unwrap().to_string(),
-            })?;
+            let _ = Command::new("skatelet").args(&["dns", "add", &container_id, &ip])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?;
 
             serde_json::to_writer(io::stdout(), &json)?;
         }
