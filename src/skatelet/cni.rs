@@ -8,13 +8,14 @@ use std::path::Path;
 
 use cni_plugin::reply::{SuccessReply, VersionReply};
 use fs2::FileExt;
-use log::{debug, info, error};
+use log::{debug, info, error, LevelFilter};
 use std::io::prelude::*;
 use std::process::{Command, Stdio};
 use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
+use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
 use crate::skatelet::dns;
 use crate::util::NamespacedName;
@@ -67,6 +68,7 @@ fn extract_prev_result(prev_value: Option<Value>) -> Option<SuccessReply> {
 
 
 pub fn cni() {
+
     match run() {
         Ok(_) => {},
         Err(e) => {
@@ -99,7 +101,7 @@ fn run() -> Result<String, Box<dyn Error>> {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
-                .spawn()?;
+                .spawn();
 
             serde_json::to_writer(io::stdout(), &json)?;
         }

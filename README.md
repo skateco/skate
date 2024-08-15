@@ -123,11 +123,39 @@ skate apply -f manifest.yaml
 
 ## Developing
 
-On mac I've been using cross for cross compilation:
+### Mac
+
+Native:
+
+Install the targets:
+```shell
+rustup target add x86_64-unknown-linux-gnu
+rustup target add aarch64-unknown-linux-gnu
+````
+
+Install the cross toolchains:
+```shell
+brew tap messense/macos-cross-toolchains
+# install x86_64-unknown-linux-gnu toolchain
+brew install x86_64-unknown-linux-gnu
+# install aarch64-unknown-linux-gnu toolchain
+brew install aarch64-unknown-linux-gnu
+```
 
 ```shell
 make amd64
+## or
+make aarch64
 ```
+
+Or just use [https://github.com/cross-rs/cross](https://github.com/cross-rs/cross)
+
+```shell
+make amd64-cross
+## or
+make aarch64-cross
+```
+
 
 ### Ubuntu
 

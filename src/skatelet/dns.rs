@@ -6,9 +6,10 @@ use std::path::Path;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use fs2::FileExt;
-use log::debug;
+use log::{debug, info, warn, LevelFilter};
 use crate::util::NamespacedName;
 use std::io::prelude::*;
+use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
 
 #[derive(Debug, Subcommand)]
@@ -36,13 +37,14 @@ fn conf_path_str() -> String {
 fn lock<T>(cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
     let lock_path = Path::new(&conf_path_str()).join("lock");
     let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
-    debug!("waiting for lock on {}", lock_path.display());
+    info!("waiting for lock on {}", lock_path.display());
     lock_file.lock_exclusive()?;
-    debug!("locked {}", lock_path.display());
+    info!("locked {}", lock_path.display());
 
     let result = cb();
 
     lock_file.unlock()?;
+    info!("unlocked {}", lock_path.display());
 
     result
 }
@@ -61,11 +63,13 @@ pub struct AddArgs {
     ip: String,
 }
 
-fn retry<T>(attempts: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
-    for _ in 0..(attempts - 1) {
+fn retry<T>(retries: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+    for _ in 0..(retries - 1) {
         let result = f();
         if result.is_ok() {
             return result;
+        } else {
+            warn!("retrying due to {}", result.err().unwrap());
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
@@ -75,65 +79,73 @@ fn retry<T>(attempts: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<
 pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
     ensure_skatelet_dns_conf_dir();
 
+    info!("dns add for {} {}", container_id, ip);
+
+    // TODO - store pod info in store, if no info, break retry loop
+    let json = retry(60, || {
+        debug!("inspecting container {}",container_id);
+        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
+        let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+        let pod = json[0]["Pod"].as_str();
+        if pod.is_none() {
+            warn!("no pod found");
+            return Err("no pod found".into());
+        }
+
+        debug!("inspecting pod");
+        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
+        let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
+
+        let containers: Vec<_> = pod_json["Containers"].as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
+            c["Id"].as_str().unwrap()
+        ).collect();
+
+        debug!("inspecting all pod containers");
+        let args = vec!(vec!("0.2", "podman", "inspect"), containers).concat();
+
+        let output = exec_cmd("timeout", &args)?;
+        let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+
+        // Check json for [*].State.Health.Status == "healthy"
+        let containers: Vec<_> = json.as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
+            c["State"]["Health"]["Status"].as_str().unwrap()
+        ).collect();
+
+        if containers.into_iter().all(|c| c == "healthy" || c == "") {
+            debug!("all containers healthy or no healthcheck");
+            return Ok(pod_json);
+        };
+        return Err("not all containers are healthy".into());
+    })?;
+
+
+    let labels = json["Labels"].as_object().unwrap();
+    let ns = labels["skate.io/namespace"].as_str().ok_or_else(|| anyhow!("missing skate.io/namespace label"))?;
+
+    // only add for daemonsets or deployments
+    let mut parent_resource = "";
+
+    if labels.contains_key("skate.io/daemonset") {
+        parent_resource = "daemonset";
+    } else if labels.contains_key("skate.io/deployment") {
+        parent_resource = "deployment";
+    } else {
+        return Ok(())
+    }
+
+    let parent_identifer_label = format!("skate.io/{}", parent_resource);
+
+    let app = labels.get(&parent_identifer_label).unwrap().as_str().unwrap();
+
+    let domain = format!("{}.{}.cluster.skate", app, ns);
+    let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
+
     // Do stuff
     lock(Box::new(move || {
 
-        // TODO - store pod info in store, if no info, break retry loop
-        let json = retry(60, || {
-            let output = exec_cmd("podman", &["inspect", container_id.as_str()])?;
-            let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
-            let pod = json[0]["Pod"].as_str();
-            if pod.is_none() {
-                return Err("no pod found".into());
-            }
-
-            let output = exec_cmd("podman", &["pod", "inspect", pod.unwrap()])?;
-            let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
-
-            let mut containers: Vec<_> = pod_json["Containers"].as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
-                c["Id"].as_str().unwrap()
-            ).collect();
-
-            let args = vec!(vec!("inspect"), containers).concat();
-
-            let output = exec_cmd("podman", &args)?;
-            let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
-
-            // Check json for [*].State.Health.Status == "healthy"
-            let containers: Vec<_> = json.as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
-                c["State"]["Health"]["Status"].as_str().unwrap()
-            ).collect();
-
-            if containers.into_iter().all(|c| c == "healthy" || c == "") {
-                return Ok(pod_json)
-            };
-            return Err("not all containers are healthy".into());
-        })?;
-
-
-        let labels = json["Labels"].as_object().unwrap();
-        let ns = labels["skate.io/namespace"].as_str().ok_or_else(|| anyhow!("missing skate.io/namespace label"))?;
-
-        // only add for daemonsets or deployments
-        let mut parent_resource = "";
-
-        if labels.contains_key("skate.io/daemonset") {
-            parent_resource = "daemonset";
-        } else if labels.contains_key("skate.io/deployment") {
-            parent_resource = "deployment";
-        } else {
-            return Ok(())
-        }
-
-        let parent_identifer_label = format!("skate.io/{}", parent_resource);
-
-        let app = labels.get(&parent_identifer_label).unwrap().as_str().unwrap();
-
-        let domain = format!("{}.{}.cluster.skate", app, ns);
-        let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
-
         // scope to make sure files closed after
         {
+            debug!("updating hosts file");
             // create or open
             let mut addhosts_file = OpenOptions::new()
                 .create(true)
@@ -154,6 +166,7 @@ pub struct RemoveArgs {
 }
 
 pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
+    info!("removing dns entry for {}", container_id);
     ensure_skatelet_dns_conf_dir();
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
     let newaddnhosts_path = Path::new(&conf_path_str()).join("addnhosts-new");
@@ -188,6 +201,7 @@ pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+        debug!("replacing hosts file");
         fs::rename(&newaddnhosts_path, &addnhosts_path)?;
         Ok(())
     }))
