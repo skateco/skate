@@ -248,9 +248,10 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 ## Plan for improving downtime during pod start and when unhealthy
 
 - in the CNI plugin, on ADD: 
-  - disown the actual part that checks if it should add the ip to the hosts file:
-    `(timeout <timeout> skatelet sd attempt-add) &`
-  - this checks the pod state and waits for it to be healthy
-
-This should only then add to addnhosts once the container reaches healthy.
-This coupled with restartPolicy: OnFailure, where once the health check fails, podman will restart the container.
+  - lock and add ip to hosts file, but with comment
+    `( skatelet dns add <container-id> <ip>) &`
+  - disown the actual part that checks if it should uncomment the line hosts file:
+    `(skatelet dns healthy <container-id>) &`
+    this checks the pod state and waits for all containers in the pod to be healthy
+    then uncomments the line
+    If the line is gone by the time it's uncommented then the container has been killed
