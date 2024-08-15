@@ -71,6 +71,17 @@ Supported annotations:
 - [ ] `nginx.ingress.kubernetes.io/ssl-redirect`
 - [x] `nginx.ingress.kubernetes.io/proxy-body-size`
 
+#### Healthchecks
+
+`podman kube play` supports `livenessProbe` in the pod manifest.
+The best way to ensure that http traffic stops being routed to an unhealthy pod is to combine that with `restartPolicy`
+of `Always` or `OnFailure`.
+
+**Traffic will only start being routed to your pod once all containers in the pod are healthy.**
+
+NOTE: using the `httpGet` probe results in podman trying to run `curl` within the container.
+With `tcpSocket` it looks for `nc`.
+
 ### CronJobs
 
 Uses systemd timers to schedule jobs.
@@ -93,16 +104,6 @@ skate create node --name node-2 --host 192.168.0.72 --subnet-cidr 20.2.0.0/16
 
 This will ensure all hosts are provisioned with `skatelet`, the agent
 
-## Healthchecks
-
-`podman kube play` supports `livenessProbe` in the pod manifest.
-The best way to ensure that http traffic stops being routed to an unhealthy pod is to combine that with `restartPolicy` 
-of `Always` or `OnFailure`.
-
-**Traffic will only start being routed to your pod once all containers in the pod are healthy.**
-
-NOTE: using the `httpGet` probe results in podman trying to run `curl` within the container.
-With `tcpSocket` it looks for `nc`.
 
 
 ## Viewing objects
@@ -244,14 +245,3 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - CNI
     - [ ] Get pod config from store and not podman
     - [ ] Reload nginx 
-
-## Plan for improving downtime during pod start and when unhealthy
-
-- in the CNI plugin, on ADD: 
-  - lock and add ip to hosts file, but with comment
-    `( skatelet dns add <container-id> <ip>) &`
-  - disown the actual part that checks if it should uncomment the line hosts file:
-    `(skatelet dns healthy <container-id>) &`
-    this checks the pod state and waits for all containers in the pod to be healthy
-    then uncomments the line
-    If the line is gone by the time it's uncommented then the container has been killed
