@@ -248,8 +248,6 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 
 // TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
-    let cmd = "sqlite3 -version || sudo apt-get install -y sqlite3";
-    conn.execute(cmd).await?;
 
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
     conn.execute(cmd).await?;

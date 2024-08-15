@@ -242,7 +242,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Support gateway api
     - [ ] Recreate & fix whatever breaks the sighup reload. 
 - CNI
-    - [ ] Get pod config from store and not sqlite
+    - [ ] Get pod config from store and not podman
     - [ ] Reload nginx 
 
 ## Plan for improving downtime during pod start and when unhealthy
