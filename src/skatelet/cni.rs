@@ -97,6 +97,8 @@ fn run() -> Result<String, Box<dyn Error>> {
 
             let ip = result.ips[0].address.ip().clone().to_string();
 
+            // The fact that we don't have a `?` or `unrwap` here is intentional
+            // This disowns the process, which is what we want.
             let _ = Command::new("skatelet").args(&["dns", "add", &container_id, &ip])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())

@@ -146,6 +146,8 @@ pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
     }));
 
     if result.is_ok() {
+        // The fact that we don't have a `?` or `unrwap` here is intentional
+        // This disowns the process, which is what we want.
         let _ = process::Command::new("skatelet").args(&["dns", "enable", &container_id])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
