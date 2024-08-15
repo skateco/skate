@@ -81,21 +81,22 @@ fn retry<T>(retries: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<T
 
 pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
     ensure_skatelet_dns_conf_dir();
+    let log_tag = format!("{}::add", container_id);
 
-    info!("dns add for {} {}", container_id, ip);
+    info!("{} dns add for {} {}", log_tag, container_id, ip);
 
     // TODO - store pod info in store, if no info, break retry loop
     let json = retry(10, || {
-        debug!("inspecting container {}",container_id);
+        debug!("{} inspecting container {}",log_tag, container_id);
         let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
         let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
         let pod = json[0]["Pod"].as_str();
         if pod.is_none() {
-            warn!("no pod found");
+            warn!("{} no pod found", log_tag);
             return Err("no pod found".into());
         }
 
-        debug!("inspecting pod");
+        debug!("{} inspecting pod", log_tag);
         let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
         let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
         Ok(pod_json)
@@ -129,7 +130,7 @@ pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
 
         // scope to make sure files closed after
         {
-            debug!("updating hosts file");
+            debug!("{} updating hosts file", log_tag);
             // create or open
             let mut addhosts_file = OpenOptions::new()
                 .create(true)
@@ -160,16 +161,17 @@ pub struct EnableArgs {
 }
 
 pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error>> {
-    debug!("inspecting container {}",container_id);
+    let log_tag = format!("{}::enable", container_id);
+    debug!("{} inspecting container {}",log_tag, container_id);
     let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
     let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
     let pod = json[0]["Pod"].as_str();
     if pod.is_none() {
-        warn!("no pod found");
+        warn!("{} no pod found", log_tag);
         return Err("no pod found".into());
     }
 
-    debug!("inspecting pod");
+    debug!("{} inspecting pod", log_tag);
     let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
     let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
 
@@ -177,27 +179,28 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
         c["Id"].as_str().unwrap()
     ).collect();
 
-    debug!("inspecting all pod containers");
     let args = vec!(vec!("0.2", "podman", "inspect"), containers).concat();
-
-    let output = exec_cmd("timeout", &args)?;
-    let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
 
     let mut healthy = false;
     for _ in 0..60 {
+
+        debug!("{} inspecting all pod containers",log_tag);
+        let output = exec_cmd("timeout", &args)?;
+        let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+
         // Check json for [*].State.Health.Status == "healthy"
         let containers: Vec<_> = json.as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
             c["State"]["Health"]["Status"].as_str().unwrap()
         ).collect();
 
         if containers.iter().any(|c| c.clone() == "unhealthy") {
-            debug!("at least one container unhealthy");
+            debug!("{} at least one container unhealthy",log_tag);
             // do nothing
             return Ok(());
         };
 
         if containers.into_iter().all(|c| c == "healthy" || c == "") {
-            debug!("all containers healthy or no healthcheck");
+            debug!("{} all containers healthy or no healthcheck",log_tag);
             healthy = true;
             break;
         };
@@ -205,7 +208,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
     }
 
     if !healthy {
-        warn!("timed out waiting for all containers to be healthy");
+        warn!("{} timed out waiting for all containers to be healthy",log_tag);
         return Ok(());
     }
 
@@ -235,18 +238,17 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
             let reader = BufReader::new(&addhosts_file);
             let mut writer = BufWriter::new(&newaddhosts_file);
 
-            let mut found = false;
             for (_index, line) in reader.lines().enumerate() {
                 let line = line?;
                 if line.ends_with(&container_id) {
-                    debug!("enabling dns entry for {}", container_id);
+                    debug!("{} enabling dns entry for {}", log_tag,container_id);
                     writeln!(writer, "{}", line.trim().trim_start_matches('#'))?;
                 } else {
                     writeln!(writer, "{}", line)?;
                 }
             }
         }
-        debug!("replacing hosts file");
+        debug!("{} replacing hosts file",log_tag);
         fs::rename(&newaddnhosts_path, &addnhosts_path)?;
         Ok(())
     }))
@@ -259,7 +261,8 @@ pub struct RemoveArgs {
 }
 
 pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
-    info!("removing dns entry for {}", container_id);
+    let log_tag = format!("{}::remove", container_id);
+    info!("{} removing dns entry for {}", log_tag, container_id);
     ensure_skatelet_dns_conf_dir();
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
     let newaddnhosts_path = Path::new(&conf_path_str()).join("addnhosts-new");
@@ -294,7 +297,7 @@ pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
                 }
             }
         }
-        debug!("replacing hosts file");
+        debug!("{} replacing hosts file", log_tag);
         fs::rename(&newaddnhosts_path, &addnhosts_path)?;
         Ok(())
     }))
