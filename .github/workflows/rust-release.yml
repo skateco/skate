@@ -20,7 +20,7 @@ jobs:
         # (required) GitHub token for creating GitHub Releases.
         token: ${{ secrets.GITHUB_TOKEN }}
 
-  upload-assets:
+  skatelet:
     needs: create-release
     strategy:
       matrix:
@@ -36,9 +36,31 @@ jobs:
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
         # Note that glob pattern is not supported yet.
-        bin: skate
+        bin: skatelet
         # (optional) Target triple, default is host triple.
         target: ${{ matrix.target }}
         # (required) GitHub token for uploading assets to GitHub Releases.
         token: ${{ secrets.GITHUB_TOKEN }}
-        archive: $bin-$target
+  skate:
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+        - target: aarch64-apple-darwin
+          os: ubuntu-latest
+        - target: aarch64-unknown-linux-gnu
+          os: ubuntu-latest
+        - target: x86_64-unknown-linux-gnu
+          os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: taiki-e/upload-rust-binary-action@v1
+      with:
+        # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
+        # Note that glob pattern is not supported yet.
+        bin: skatelet
+        # (optional) Target triple, default is host triple.
+        target: ${{ matrix.target }}
+        # (required) GitHub token for uploading assets to GitHub Releases.
+        token: ${{ secrets.GITHUB_TOKEN }}
