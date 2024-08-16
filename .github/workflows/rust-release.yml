@@ -34,7 +34,7 @@ jobs:
         targets: "${{ matrix.target }}"
     - name: Setup Cache
       uses: Swatinem/rust-cache@v2
-    - if: target.os == 'ubuntu-latest'
+    - if: matrix.os == 'ubuntu-latest'
       name: Install Dependencies
       run: sudo apt-get install -y protobuf-compiler libprotobuf-dev
     - name: Build Binary
