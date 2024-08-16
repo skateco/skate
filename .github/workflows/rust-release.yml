@@ -22,6 +22,7 @@ jobs:
 
   skatelet:
     needs: create-release
+    if: success() || failure()
     strategy:
       matrix:
         include:
@@ -43,6 +44,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         archive: skatelet-$target
   skate:
+    if: success() || failure()
     needs: create-release
     strategy:
       matrix:
