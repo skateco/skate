@@ -61,3 +61,9 @@ jobs:
       run: rustup target add $TARGET
     - name: Build Binary
       run: cargo build --locked --release --target ${{ matrix.target }}
+    - name: Archive binaries
+      run: |
+          mkdir -p dist
+          cd dist
+          tar -xvf skate-$TARGET.tar.gz ../target/$TARGET/release/skate
+          tar -xvf skatelet-$TARGET.tar.gz ../target/$TARGET/release/skate ../target/$TARGET/release/skatelet-netavark
