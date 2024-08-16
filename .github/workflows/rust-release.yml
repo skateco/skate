@@ -35,12 +35,6 @@ jobs:
       OS: ${{ matrix.OS }}
     steps:
     - uses: actions/checkout@v4
-    - uses: taiki-e/create-gh-release-action@v1
-      with:
-        # (optional) Path to changelog.
-#        changelog: CHANGELOG.md
-        # (required) GitHub token for creating GitHub Releases.
-        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Cargo cache
       uses: actions/cache@v2
       with:
