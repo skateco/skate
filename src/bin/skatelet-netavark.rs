@@ -3,7 +3,6 @@
 use std::error::Error;
 use skate::netavark;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     netavark();
-    Ok(())
 }

@@ -60,4 +60,4 @@ jobs:
     - name: Install rust target
       run: rustup target add $TARGET
     - name: Build Binary
-      run: cargo build --verbose --locked --release --target ${{ matrix.target }}
+      run: cargo build --locked --release --target ${{ matrix.target }}
