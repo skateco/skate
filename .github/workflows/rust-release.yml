@@ -16,39 +16,10 @@ jobs:
     - uses: taiki-e/create-gh-release-action@v1
       with:
         # (optional) Path to changelog.
-#        changelog: CHANGELOG.md
+        #        changelog: CHANGELOG.md
         # (required) GitHub token for creating GitHub Releases.
         token: ${{ secrets.GITHUB_TOKEN }}
-
-  skatelet:
-    needs: create-release
-    if: success() || failure()
-    strategy:
-      matrix:
-        include:
-        - target: aarch64-unknown-linux-gnu
-          os: ubuntu-latest
-        - target: x86_64-unknown-linux-gnu
-          os: ubuntu-latest
-    runs-on: ${{ matrix.os }}
-    steps:
-    - uses: actions/checkout@v4
-    - if: matrix.target == 'x86_64-unknown-linux-gnu'
-      run: |
-        sudo apt-get install -f protobuf-compiler
-    - uses: taiki-e/upload-rust-binary-action@v1
-      with:
-        # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
-        # Note that glob pattern is not supported yet.
-        bin: skatelet,skatelet-netavark
-        # (optional) Target triple, default is host triple.
-        target: ${{ matrix.target }}
-        # (required) GitHub token for uploading assets to GitHub Releases.
-        token: ${{ secrets.GITHUB_TOKEN }}
-        archive: skatelet-$target
-  skate:
-    if: success() || failure()
-    needs: create-release
+  build:
     strategy:
       matrix:
         include:
@@ -59,17 +30,45 @@ jobs:
         - target: x86_64-unknown-linux-gnu
           os: ubuntu-latest
     runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+      GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v4
-    - if: matrix.target == 'x86_64-unknown-linux-gnu'
-      run: |
-        sudo apt-get install -f protobuf-compiler
-    - uses: taiki-e/upload-rust-binary-action@v1
+    - name: Cargo cache
+      uses: actions/cache@v2
       with:
-        # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
-        # Note that glob pattern is not supported yet.
-        bin: skate
-        # (optional) Target triple, default is host triple.
-        target: ${{ matrix.target }}
-        # (required) GitHub token for uploading assets to GitHub Releases.
-        token: ${{ secrets.GITHUB_TOKEN }}
+        path: |
+          ~/.cargo/registry
+          ./target
+        key: build-cargo-registry-${{matrix.TARGET}}
+    - name: Install and configure dependencies
+      run: |
+        # dependencies are only needed on ubuntu as that's the only place where
+        # we make cross-compilation
+        if [[ $OS =~ ^ubuntu.*$ ]]; then
+          sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf protobuf-compiler libprotobuf-dev
+        fi
+        
+        # some additional configuration for cross-compilation on linux
+        cat >>~/.cargo/config <<EOF
+        [target.aarch64-unknown-linux-gnu]
+        linker = "aarch64-linux-gnu-gcc"
+        [target.aarch64-unknown-linux-musl]
+        linker = "aarch64-linux-gnu-gcc"
+        EOF
+    - name: Install rust target
+      run: rustup target add $TARGET
+    - name: Build Binary
+      run: cargo build --locked --release --target ${{ matrix.target }}
+    - name: Archive and upload
+      run: |
+          mkdir -p dist
+          cp target/$TARGET/release/skate dist/
+          cp target/$TARGET/release/skatelet dist/
+          cp target/$TARGET/release/skatelet-netavark dist/
+          tar -cvf skate-$TARGET.tar.gz skate
+          tar -cvf skatelet-$TARGET.tar.gz skatelet skatelet-netavark
+          gh release upload ${{github.ref_name}}  *.tar.gz
+
