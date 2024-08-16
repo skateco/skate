@@ -11,6 +11,7 @@ use crate::skatelet::dns;
 pub fn netavark() {
     // change the version to the version of your plugin
     let info = Info::new("0.1.0".to_owned(), API_VERSION.to_owned(), None);
+    std::env::args();
     PluginExec::new(Exec {}, info).exec();
 }
 

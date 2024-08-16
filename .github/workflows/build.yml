@@ -12,6 +12,10 @@ jobs:
     - name: Checkout  # Clone git repository
       uses: actions/checkout@v3
 
+    - name: Add protoc
+      run: |
+        sudo apt-get install -f protobuf-compiler
+
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
 

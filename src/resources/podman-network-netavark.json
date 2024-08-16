@@ -1,0 +1,19 @@
+{
+  "name": "skate",
+  "id": "20654766a29930e85f8346498fa3cc95e0eab027ce84f855ffe0ccd339550b97",
+  "driver": "bridge",
+  "network_interface": "podman1",
+  "created": "2024-08-16T13:07:53.009401095+02:00",
+  "subnets": [
+    {
+      "subnet": "%%subnet%%",
+      "gateway": "%%gateway%%"
+    }
+  ],
+  "ipv6_enabled": false,
+  "internal": false,
+  "dns_enabled": true,
+  "ipam_options": {
+    "driver": "host-local"
+  }
+}

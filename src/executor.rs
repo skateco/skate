@@ -101,7 +101,7 @@ impl DefaultExecutor {
         let json: Value = json!({
             "description": &format!("{} Job", ns_name.to_string()),
             "timer": &format!("skate-cronjob-{}.timer", &ns_name.to_string()),
-            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --replace --network podman -w", ns_name.to_string()),
+            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --replace --network skate -w", ns_name.to_string()),
         });
 
         let output = handlebars.render("unit", &json)?;
@@ -265,7 +265,7 @@ impl DefaultExecutor {
 
         let mut args = vec!["play", "kube", &file_path, "--start"];
         if !object.host_network() {
-            args.push("--network=podman")
+            args.push("--network=skate")
         }
 
         let result = exec_cmd("podman", &args)?;

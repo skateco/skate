@@ -229,7 +229,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
 
-    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress /var/lib/skate/ingress/letsencrypt_storage").await?;
+    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress /var/lib/skate/ingress/letsencrypt_storage /var/lib/skate/dns").await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
@@ -286,20 +286,40 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 
 // TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
-    let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-    conn.execute(cmd).await?;
 
-    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-    conn.execute(&cmd).await?;
-    let cmd = "sudo sed -i 's&#network_backend[ =].*&network_backend = \"cni\"&' /etc/containers/containers.conf";
-    conn.execute(&cmd).await?;
+    if conn.execute("test -f /etc/containers/containers.conf").await.is_err() {
 
-    // TODO - especially don't do this unless needed
-    let cmd = "sudo ip link del cni-podman0|| exit 0";
-    conn.execute(&cmd).await?;
+        let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
+        conn.execute(cmd).await?;
+
+        let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+        conn.execute(&cmd).await?;
+
+        let cmd = "sudo sed -i 's&#network_backend[ =].*&network_backend = \"netavark\"&' /etc/containers/containers.conf";
+        conn.execute(&cmd).await?;
+
+        let current_backend = conn.execute("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
+        if current_backend.trim() != "netavark" {
+            // Since we've changed the network backend we need to reset
+            conn.execute("sudo podman system reset -f").await?;
+        }
+
+        // TODO - especially don't do this unless needed
+        let cmd = "sudo ip link del cni-podman0|| exit 0";
+        conn.execute(&cmd).await?;
+
+    } else {
+        println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
+    }
 
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
     // only allocate from ip 10 onwards, reserves 1-9 for other stuff
+
+    ///////////////////
+    // CNI Network
+    // TODO - remove once netavark works
+    /////////////////
+
     let cni = include_str!("./resources/podman-network.json").replace("%%subnet%%", &node.subnet_cidr)
         .replace("%%gateway%%", &gateway);
 
@@ -314,7 +334,27 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
 
     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
     conn.execute(&cmd).await?;
+
+    ////////////////////
+    // Netavark
+    ///////////////////
+    let netavark_script = general_purpose::STANDARD.encode("#!/bin/sh
+    exec /usr/local/bin/skatelet netavark < /dev/stdin
+    ");
+
+    conn.execute("sudo mkdir -p /usr/lib/netavark").await?;
+
+    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/netavark/skatelet; chmod +x /usr/lib/netavark/skatelet'", netavark_script);
+    conn.execute(&cmd).await?;
     // check it's ok
+
+    let netavark_config = include_str!("./resources/podman-network-netavark.json").replace("%%subnet%%", &node.subnet_cidr)
+        .replace("%%gateway%%", &gateway);
+
+    let netvark_config = general_purpose::STANDARD.encode(netavark_config.as_bytes());
+
+    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/containers/networks/skate.json\"", netvark_config);
+    conn.execute(&cmd).await?;
 
     let cmd = "sudo podman run --rm -it busybox echo 1";
     conn.execute(cmd).await?;
