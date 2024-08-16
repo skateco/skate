@@ -28,9 +28,8 @@ pub enum DeleteCommands {
 
 #[derive(Debug, Args)]
 pub struct DeleteResourceArgs {
-    #[arg(long, long_help = "Name of the resource.")]
     name: String,
-    #[arg(long, long_help = "Namespace of the resource.")]
+    #[arg(long, short, long_help = "Namespace of the resource.")]
     namespace: String,
     #[command(flatten)]
     config: ConfigFileArgs,

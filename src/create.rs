@@ -33,6 +33,7 @@ pub struct CreateArgs {
 #[derive(Debug, Subcommand)]
 pub enum CreateCommands {
     Node(CreateNodeArgs),
+    Cluster(CreateClusterArgs),
     ClusterResources(CreateClusterResourcesArgs),
 }
 
@@ -61,13 +62,50 @@ pub struct CreateClusterResourcesArgs {
     config: ConfigFileArgs,
 }
 
+#[derive(Debug, Args)]
+pub struct CreateClusterArgs {
+    #[arg(long, long_help = "Configuration for skate.", default_value = "~/.skate/config.yaml")]
+    skateconfig: String,
+    name: String,
+    #[arg(long, long_help = "Default ssh user for connecting to nodes")]
+    default_user: Option<String>,
+    #[arg(long, long_help = "Default ssh key for connecting to nodes")]
+    default_key: Option<String>,
+}
+
 pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         CreateCommands::Node(args) => create_node(args).await?,
-        CreateCommands::ClusterResources(args) => create_cluster_resources(args).await?
+        CreateCommands::ClusterResources(args) => create_cluster_resources(args).await?,
+        CreateCommands::Cluster(args) => create_cluster(args).await?,
     }
     Ok(())
 }
+
+async fn create_cluster(args: CreateClusterArgs) -> Result<(), Box<dyn Error>> {
+    let mut config = Config::load(Some(args.skateconfig.clone()))?;
+
+    let cluster = Cluster {
+        default_key: args.default_key,
+        default_user: args.default_user,
+        name: args.name.clone(),
+        nodes: vec!(),
+    };
+
+    if config.clusters.iter().any(|c| c.name == args.name) {
+        return Err(anyhow!("cluster by name of {} already exists in {}", args.name, args.skateconfig).into());
+    }
+
+    config.clusters.push(cluster.clone());
+    config.current_context = Some(args.name.clone());
+
+    config.persist(Some(args.skateconfig.clone()))?;
+
+    println!("added cluster {} to {}", args.name, args.skateconfig);
+
+    Ok(())
+}
+
 async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
@@ -248,7 +286,6 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 
 // TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
-
     let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
     conn.execute(cmd).await?;
 

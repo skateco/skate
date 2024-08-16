@@ -4,17 +4,10 @@ kind: Deployment
 metadata:
   name: nginx-deployment
   namespace: foo
-  labels:
-    app: nginx
 spec:
-  replicas: 30
-  selector:
-    matchLabels:
-      app: nginx
+  replicas: 3
+  selector: {}
   template:
-    metadata:
-      labels:
-        app: nginx
     spec:
       containers:
       - name: nginx1

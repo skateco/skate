@@ -14,7 +14,7 @@ use crate::refresh::{refresh, RefreshArgs};
 use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
 use async_ssh2_tokio::Error as SshError;
 use strum_macros::{Display, EnumString};
-use std::{fs, process};
+use std::{fs, io, process};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap};
 use std::env::var;
@@ -58,7 +58,7 @@ enum Commands {
     Refresh(RefreshArgs),
     Get(GetArgs),
     Describe(DescribeArgs),
-    Logs(LogArgs)
+    Logs(LogArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -226,19 +226,16 @@ impl SupportedResources {
                     Some(mut spec) => {
                         match spec.job_template.spec {
                             Some(mut job_spec) => {
-                                job_spec.template.metadata = match job_spec.template.metadata.clone() {
-                                    Some(meta) => {
-                                        let mut meta = meta.clone();
-                                        // forward the namespace
-                                        meta.namespace = c.metadata.namespace.clone();
-                                        // if no name is set, set it to the cronjob name
-                                        if meta.name.is_none() {
-                                            meta.name = Some(c.metadata.name.clone().unwrap());
-                                        }
-                                        let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-                                        Some(meta)
+                                job_spec.template.metadata = {
+                                    let mut meta = job_spec.template.metadata.clone().unwrap_or_default();
+                                    // forward the namespace
+                                    meta.namespace = c.metadata.namespace.clone();
+                                    // if no name is set, set it to the cronjob name
+                                    if meta.name.is_none() {
+                                        meta.name = Some(c.metadata.name.clone().unwrap());
                                     }
-                                    None => None
+                                    let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                                    Some(meta)
                                 };
 
                                 job_spec.template = Self::fixup_pod_template(job_spec.template.clone(), c.metadata.namespace.as_ref().unwrap())?;
@@ -297,25 +294,24 @@ impl SupportedResources {
 
                 d.spec = match d.spec.clone() {
                     Some(mut spec) => {
-                        spec.template.metadata = match spec.template.metadata.clone() {
-                            Some(meta) => {
-                                let mut meta = meta.clone();
-                                // forward the namespace
-                                meta.namespace = d.metadata.namespace.clone();
-                                if meta.name.clone().unwrap_or_default().is_empty() {
-                                    meta.name = Some(original_name.clone());
-                                }
-                                let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-
-                                Some(meta)
+                        spec.template.metadata = {
+                            let mut meta = spec.template.metadata.clone().unwrap_or_default();
+                            // forward the namespace
+                            meta.namespace = d.metadata.namespace.clone();
+                            if meta.name.clone().unwrap_or_default().is_empty() {
+                                meta.name = Some(original_name.clone());
                             }
-                            None => None
+                            let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                            Some(meta)
                         };
+
                         spec.template = Self::fixup_pod_template(spec.template.clone(), d.metadata.namespace.as_ref().unwrap())?;
                         Some(spec)
                     }
                     None => None
                 };
+                let s: String = serde_yaml::to_string(&resource)?;
+                println!("{}", s);
                 resource
             }
             SupportedResources::DaemonSet(ref mut ds) => {
@@ -333,19 +329,17 @@ impl SupportedResources {
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
                 ds.spec = match ds.spec.clone() {
                     Some(mut spec) => {
-                        spec.template.metadata = match spec.template.metadata.clone() {
-                            Some(meta) => {
-                                let mut meta = meta.clone();
-                                // forward the namespace
-                                meta.namespace = ds.metadata.namespace.clone();
-                                if meta.name.clone().unwrap_or_default().is_empty() {
-                                    meta.name = Some(original_name.clone());
-                                }
-                                let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-                                Some(meta)
+                        spec.template.metadata = {
+                            let mut meta = spec.template.metadata.clone().unwrap();
+                            // forward the namespace
+                            meta.namespace = ds.metadata.namespace.clone();
+                            if meta.name.clone().unwrap_or_default().is_empty() {
+                                meta.name = Some(original_name.clone());
                             }
-                            None => None
+                            let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
+                            Some(meta)
                         };
+
                         spec.template = Self::fixup_pod_template(spec.template.clone(), ds.metadata.namespace.as_ref().unwrap())?;
                         Some(spec)
                     }
@@ -365,10 +359,21 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
 
     let mut result: Vec<SupportedResources> = Vec::new();
 
+    let num_filenames = filenames.len();
+
     let supported_resources =
 
         for filename in filenames {
-            let str_file = fs::read_to_string(filename).expect("failed to read file");
+            let str_file = {
+                if num_filenames == 1 && filename == "-" {
+                    let mut stdin = io::stdin();
+                    let mut buffer = String::new();
+                    stdin.read_to_string(&mut buffer)?;
+                    buffer
+                } else {
+                    fs::read_to_string(filename).expect("failed to read file")
+                }
+            };
             for document in serde_yaml::Deserializer::from_str(&str_file) {
                 let value = Value::deserialize(document).expect("failed to read document");
                 if let Value::Mapping(mapping) = &value {
