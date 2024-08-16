@@ -37,6 +37,8 @@ jobs:
         sudo apt-get install -f protobuf-compiler libprotobuf-dev
 
     - uses: taiki-e/upload-rust-binary-action@v1
+      env:
+        PROTOC: /usr/bin/protoc
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
         # Note that glob pattern is not supported yet.
@@ -64,6 +66,8 @@ jobs:
       run: |
         sudo apt-get install -f protobuf-compiler libprotobuf-dev
     - uses: taiki-e/upload-rust-binary-action@v1
+      env:
+        PROTOC: /usr/bin/protoc
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
         # Note that glob pattern is not supported yet.
