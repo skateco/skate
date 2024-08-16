@@ -65,8 +65,9 @@ jobs:
     - name: Archive and upload
       run: |
           mkdir -p dist
-          cd dist
-          tar -cvf skate-$TARGET.tar.gz ../target/$TARGET/release/skate
-          tar -cvf skatelet-$TARGET.tar.gz ../target/$TARGET/release/skatelet ../target/$TARGET/release/skatelet-netavark
+          cd target/$TARGET/release
+          tar -cvf ../../../dist/skate-$TARGET.tar.gz skate
+          tar -cvf ../../../dist/skatelet-$TARGET.tar.gz skatelet skatelet-netavark
+          cd ../../../dist
           gh release upload ${{github.ref_name}}  *.tar.gz
 
