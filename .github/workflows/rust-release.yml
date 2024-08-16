@@ -34,7 +34,7 @@ jobs:
     - uses: actions/checkout@v4
     - if: matrix.os == 'ubuntu-latest'
       run: |
-        sudo apt-get install -f protobuf-compiler
+        sudo apt-get install -f protobuf-compiler libprotobuf-dev
 
     - uses: taiki-e/upload-rust-binary-action@v1
       with:
@@ -62,7 +62,7 @@ jobs:
     - uses: actions/checkout@v4
     - if: matrix.os == 'ubuntu-latest'
       run: |
-        sudo apt-get install -f protobuf-compiler
+        sudo apt-get install -f protobuf-compiler libprotobuf-dev
     - uses: taiki-e/upload-rust-binary-action@v1
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.

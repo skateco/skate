@@ -14,7 +14,7 @@ jobs:
 
     - name: Add protoc
       run: |
-        sudo apt-get install -f protobuf-compiler
+        sudo apt-get install -f protobuf-compiler libprotobuf-dev
 
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
