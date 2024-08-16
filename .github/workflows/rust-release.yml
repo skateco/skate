@@ -32,6 +32,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
+    - if: runner.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get install -f protobuf-compiler
+
     - uses: taiki-e/upload-rust-binary-action@v1
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
