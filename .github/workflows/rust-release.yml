@@ -32,13 +32,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
-    - if: matrix.os == 'ubuntu-latest'
+    - if: ${{ matrix.os == 'ubuntu-latest' &&  matrix.target == 'x86_64-unknown-linux-gnu' }}
       run: |
         sudo apt-get install -f protobuf-compiler libprotobuf-dev
+    - if: ${{ matrix.os == 'ubuntu-latest' &&  matrix.target == 'aarch64-unknown-linux-gnu' }}
+      run: |
+        sudo apt-get install -f unzip
+        cd /tmp
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-aarch_64.zip -O protoc.zip
+        unzip protoc.zip
+        sudo mv bin/protoc /usr/bin/protoc
 
     - uses: taiki-e/upload-rust-binary-action@v1
-      env:
-        PROTOC: /usr/bin/protoc
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
         # Note that glob pattern is not supported yet.
@@ -62,12 +67,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
-    - if: matrix.os == 'ubuntu-latest'
+    - if: ${{ matrix.os == 'ubuntu-latest' &&  matrix.target == 'x86_64-unknown-linux-gnu' }}
       run: |
         sudo apt-get install -f protobuf-compiler libprotobuf-dev
+    - if: ${{ matrix.os == 'ubuntu-latest' &&  matrix.target == 'aarch64-unknown-linux-gnu' }}
+      run: |
+        sudo apt-get install -f unzip
+        cd /tmp
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-aarch_64.zip -O protoc.zip
+        unzip protoc.zip
+        sudo mv bin/protoc /usr/bin/protoc
     - uses: taiki-e/upload-rust-binary-action@v1
-      env:
-        PROTOC: /usr/bin/protoc
       with:
         # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
         # Note that glob pattern is not supported yet.
