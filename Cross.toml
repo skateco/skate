@@ -1,0 +1,8 @@
+[target.x86_64-unknown-linux-gnu]
+pre-build = [                                  # additional commands to run prior to building the package
+    "apt-get update && apt-get --assume-yes install protobuf-compiler"
+]
+[target.aarch64-unknown-linux-gnu]
+pre-build = [                                  # additional commands to run prior to building the package
+    "apt-get update && apt-get --assume-yes install protobuf-compiler"
+]

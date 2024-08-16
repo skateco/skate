@@ -39,10 +39,3 @@ env_logger = "0.11.5"
 syslog = "7.0.0"
 [target.'cfg(target_os = "linux")'.dependencies]
 netavark = "1.12.1"
-
-
-[workspace.metadata.cross.target.aarch64-unknown-linux-gnu]
-# Install libssl-dev:arm64, see <https://github.com/cross-rs/cross/blob/main/docs/custom_images.md#adding-dependencies-to-existing-images>
-pre-build = [
-    "apt-get update && apt-get install -y protobuf-compiler"
-]
