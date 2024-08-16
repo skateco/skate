@@ -33,6 +33,7 @@ jobs:
     env:
       TARGET: ${{ matrix.TARGET }}
       OS: ${{ matrix.OS }}
+      GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v4
     - name: Cargo cache
