@@ -10,6 +10,16 @@ on:
 
 jobs:
   create-release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: taiki-e/create-gh-release-action@v1
+      with:
+        # (optional) Path to changelog.
+        #        changelog: CHANGELOG.md
+        # (required) GitHub token for creating GitHub Releases.
+        token: ${{ secrets.GITHUB_TOKEN }}
+  build:
     strategy:
       matrix:
         include:
@@ -53,5 +63,7 @@ jobs:
         [target.aarch64-unknown-linux-musl]
         linker = "aarch64-linux-gnu-gcc"
         EOF
+    - name: Install rust target
+      run: rustup target add $TARGET
     - name: Build Binary
       run: cargo build --verbose --locked --release --target ${{ matrix.target }}
