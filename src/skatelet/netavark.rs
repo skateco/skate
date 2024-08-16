@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 use std::error::Error;
 use std::process::{Command, Stdio};
 use netavark::{

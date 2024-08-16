@@ -10,6 +10,7 @@ use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::dns::{dns, DnsArgs};
+#[cfg(target_os = "linux")]
 use crate::skatelet::netavark::netavark;
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
@@ -95,7 +96,12 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
             Ok(())
         },
         Commands::Netavark => {
+            #[cfg(target_os = "linux")]
             netavark();
+
+            #[cfg(not(target_os = "linux"))]
+            println!("Netavark is only supported on Linux");
+
             Ok(())
         },
         Commands::Dns(args) => dns(args)
