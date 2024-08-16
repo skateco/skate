@@ -68,5 +68,5 @@ jobs:
           cd dist
           tar -cvf skate-$TARGET.tar.gz ../target/$TARGET/release/skate
           tar -cvf skatelet-$TARGET.tar.gz ../target/$TARGET/release/skatelet ../target/$TARGET/release/skatelet-netavark
-          gh release upload ${{github.event.release.tag_name}}  *.tar.gz
+          gh release upload ${{github.ref_name}}  *.tar.gz
 
