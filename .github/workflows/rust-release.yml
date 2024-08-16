@@ -66,4 +66,4 @@ jobs:
           mkdir -p dist
           cd dist
           tar -cvf skate-$TARGET.tar.gz ../target/$TARGET/release/skate
-          tar -cvf skatelet-$TARGET.tar.gz ../target/$TARGET/release/skate ../target/$TARGET/release/skatelet-netavark
+          tar -cvf skatelet-$TARGET.tar.gz ../target/$TARGET/release/skatelet ../target/$TARGET/release/skatelet-netavark
