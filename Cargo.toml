@@ -37,5 +37,5 @@ cron = "0.12.1"
 russh = "=0.43.0"
 env_logger = "0.11.5"
 syslog = "7.0.0"
-[target.'cfg(linux)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 netavark = "1.12.1"
