@@ -20,6 +20,9 @@ jobs:
         - target: x86_64-unknown-linux-gnu
           os: ubuntu-latest
     runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
     steps:
     - uses: actions/checkout@v4
     - uses: taiki-e/create-gh-release-action@v1
