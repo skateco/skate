@@ -7,6 +7,8 @@ use netavark::{
     plugin::{Info, Plugin, PluginExec, API_VERSION},
 };
 use crate::skatelet::dns;
+use log::info;
+
 
 pub fn netavark() {
     // change the version to the version of your plugin
@@ -22,6 +24,7 @@ impl Plugin for Exec {
         &self,
         network: types::Network,
     ) -> Result<types::Network, Box<dyn std::error::Error>> {
+        info!("create");
         // your logic here
         Ok(network)
     }
@@ -31,6 +34,7 @@ impl Plugin for Exec {
         netns: String,
         opts: types::NetworkPluginExec,
     ) -> Result<types::StatusBlock, Box<dyn std::error::Error>> {
+        info!("setup");
         // add dns entry
         // The fact that we don't have a `?` or `unrwap` here is intentional
         // This disowns the process, which is what we want.
@@ -43,11 +47,10 @@ impl Plugin for Exec {
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn();
-            },
+            }
             None => {}
-
         };
-        Ok(types::StatusBlock{
+        Ok(types::StatusBlock {
             dns_search_domains: None,
             dns_server_ips: None,
             interfaces: None,
@@ -59,6 +62,7 @@ impl Plugin for Exec {
         netns: String,
         opts: types::NetworkPluginExec,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        info!("teardown");
         // remove dns entry
         dns::remove(opts.container_id)?;
         Ok(())

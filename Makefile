@@ -3,7 +3,7 @@ default: aarch64
 
 .PHONY: aarch64
 aarch64:
-	TARGET_CC=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu
+	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu
 .PHONY: aarch64-cross
 aarch64-cross:
 	cross build  --target aarch64-unknown-linux-gnu

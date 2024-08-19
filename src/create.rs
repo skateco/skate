@@ -339,7 +339,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     // Netavark
     ///////////////////
     let netavark_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet netavark < /dev/stdin
+    exec /usr/local/bin/skatelet-netavark < /dev/stdin
     ");
 
     conn.execute("sudo mkdir -p /usr/lib/netavark").await?;
