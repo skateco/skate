@@ -18,7 +18,7 @@ use serde_json::Value::String as JsonString;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
 use crate::skatelet::dns;
-use crate::util::NamespacedName;
+use crate::util::{spawn_orphan_process, NamespacedName};
 
 
 fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
@@ -97,13 +97,7 @@ fn run() -> Result<String, Box<dyn Error>> {
 
             let ip = result.ips[0].address.ip().clone().to_string();
 
-            // The fact that we don't have a `?` or `unrwap` here is intentional
-            // This disowns the process, which is what we want.
-            let _ = Command::new("skatelet").args(&["dns", "add", &container_id, &ip])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
+            spawn_orphan_process("skatelet", &["dns", "add", &container_id, &ip]);
 
             serde_json::to_writer(io::stdout(), &json)?;
         }

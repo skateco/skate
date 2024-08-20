@@ -19,6 +19,7 @@ mod describe;
 mod filestore;
 mod cron;
 mod logs;
+mod oci;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

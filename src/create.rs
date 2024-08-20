@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::error::Error;
+use std::ffi::CString;
 use std::fs::File;
 use std::io::Write;
 use std::net::ToSocketAddrs;
@@ -12,6 +14,7 @@ use semver::{Version, VersionReq};
 
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
+use crate::oci;
 use crate::refresh::refreshed_state;
 use crate::skate::{ConfigFileArgs, Distribution};
 
@@ -202,7 +205,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
             let installed = match info.platform.distribution {
                 Distribution::Unknown => false,
                 Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
-                    let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman containernetworking-plugins'";
+                    let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'";
                     println!("installing podman with command {}", command);
                     let result = conn.client.execute(command).await?;
                     if result.exit_status > 0 {
@@ -286,28 +289,27 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 
 // TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+    let network_backend = "netavark";
 
     if conn.execute("test -f /etc/containers/containers.conf").await.is_err() {
-
         let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
         conn.execute(cmd).await?;
 
         let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
         conn.execute(&cmd).await?;
 
-        let cmd = "sudo sed -i 's&#network_backend[ =].*&network_backend = \"netavark\"&' /etc/containers/containers.conf";
+        let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
         conn.execute(&cmd).await?;
 
         let current_backend = conn.execute("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
-        if current_backend.trim() != "netavark" {
+        if current_backend.trim() != network_backend {
             // Since we've changed the network backend we need to reset
             conn.execute("sudo podman system reset -f").await?;
         }
 
         // TODO - especially don't do this unless needed
-        let cmd = "sudo ip link del cni-podman0|| exit 0";
-        conn.execute(&cmd).await?;
-
+        // let cmd = "sudo ip link del cni-podman0|| exit 0";
+        // conn.execute(&cmd).await?;
     } else {
         println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
     }
@@ -315,46 +317,21 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
     // only allocate from ip 10 onwards, reserves 1-9 for other stuff
 
-    ///////////////////
-    // CNI Network
-    // TODO - remove once netavark works
-    /////////////////
+    match network_backend {
+        "cni" => {
+            println!("WARNING: cni is deprecated, use netavark");
+            install_cni_plugin(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
+        }
+        "netavark" => {
+            install_netavark(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
+        }
+        _ => {
+            return Err(anyhow!("unknown network backend {}", network_backend).into());
+        }
+    }
 
-    let cni = include_str!("./resources/podman-network.json").replace("%%subnet%%", &node.subnet_cidr)
-        .replace("%%gateway%%", &gateway);
 
-    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    conn.execute(&cmd).await?;
-
-    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet cni < /dev/stdin
-    ");
-
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
-    conn.execute(&cmd).await?;
-
-    ////////////////////
-    // Netavark
-    ///////////////////
-    let netavark_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet-netavark < /dev/stdin
-    ");
-
-    conn.execute("sudo mkdir -p /usr/lib/netavark").await?;
-
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/netavark/skatelet; chmod +x /usr/lib/netavark/skatelet'", netavark_script);
-    conn.execute(&cmd).await?;
-    // check it's ok
-
-    let netavark_config = include_str!("./resources/podman-network-netavark.json").replace("%%subnet%%", &node.subnet_cidr)
-        .replace("%%gateway%%", &gateway);
-
-    let netvark_config = general_purpose::STANDARD.encode(netavark_config.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/containers/networks/skate.json\"", netvark_config);
-    conn.execute(&cmd).await?;
+    install_oci_hooks(conn).await?;
 
     let cmd = "sudo podman run --rm -it busybox echo 1";
     conn.execute(cmd).await?;
@@ -403,6 +380,95 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
     conn.execute(cmd).await?;
 
+    Ok(())
+}
+
+async fn install_cni_plugin(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+    conn.execute("sudo apt-get install -y containernetworking-plugins").await?;
+
+    let cni = include_str!("./resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
+        .replace("%%gateway%%", &gateway);
+
+    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
+
+    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
+    conn.execute(&cmd).await?;
+
+    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
+    exec /usr/local/bin/skatelet cni < /dev/stdin
+    ");
+
+    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
+    conn.execute(&cmd).await?;
+    Ok(())
+}
+
+async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
+    conn.execute("sudo mkdir -p /usr/share/containers/oci/hooks.d").await?;
+
+    let oci_poststart_hook = oci::HookConfig {
+        version: "1.0.0".to_string(),
+        hook: oci::Command {
+            path: "/usr/local/bin/skatelet".to_string(),
+            args: ["skatelet", "oci", "poststart"].into_iter().map(|s| s.to_string()).collect(),
+        },
+        when: oci::When {
+            has_bind_mounts: None,
+            annotations: Some(HashMap::from([("io.container.manager".to_string(), "libpod".to_string())])),
+            always: None,
+            commands: None,
+        },
+        stages: vec![oci::Stage::PostStart],
+    };
+    // serialize to /usr/share/containers/oci/hooks.d/skatelet-poststart.json
+    let serialized = serde_json::to_string(&oci_poststart_hook).unwrap();
+
+    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
+    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
+    conn.execute(&cmd).await?;
+
+
+    let oci_poststop = oci::HookConfig {
+        version: "1.0.0".to_string(),
+        hook: oci::Command {
+            path: "/usr/local/bin/skatelet".to_string(),
+            args: ["skatelet", "oci", "poststop"].into_iter().map(|s| s.to_string()).collect(),
+        },
+        when: oci::When {
+            has_bind_mounts: None,
+            annotations: Some(HashMap::from([("io.container.manager".to_string(), "libpod".to_string())])),
+            always: None,
+            commands: None,
+        },
+        stages: vec![oci::Stage::PostStop],
+    };
+    let serialized = serde_json::to_string(&oci_poststop).unwrap();
+    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
+    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
+    conn.execute(&cmd).await?;
+    Ok(())
+}
+
+async fn install_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+    // // The netavark plugin isn't actually used right now but we'll put it there just in case.
+    // // We'll use an oci hook instead.
+    // let netavark_script = general_purpose::STANDARD.encode("#!/bin/sh
+    // exec /usr/local/bin/skatelet-netavark < /dev/stdin
+    // ");
+    //
+    // conn.execute("sudo mkdir -p /usr/lib/netavark").await?;
+    //
+    // let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/netavark/skatelet; chmod +x /usr/lib/netavark/skatelet'", netavark_script);
+    // conn.execute(&cmd).await?;
+    // // check it's ok
+
+    let netavark_config = include_str!("./resources/podman-network-netavark.json").replace("%%subnet%%", &subnet_cidr)
+        .replace("%%gateway%%", &gateway);
+
+    let netvark_config = general_purpose::STANDARD.encode(netavark_config.as_bytes());
+
+    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/containers/networks/skate.json\"", netvark_config);
+    conn.execute(&cmd).await?;
     Ok(())
 }
 

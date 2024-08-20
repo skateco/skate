@@ -189,6 +189,11 @@ impl SupportedResources {
             _ => {}
         };
         meta.labels = Some(labels);
+
+        let mut annotations = meta.annotations.unwrap_or_default();
+        annotations.insert("io.skate".to_string(), "true".to_string());
+        meta.annotations = Some(annotations);
+
         Ok(meta)
     }
 
@@ -490,7 +495,7 @@ impl From<&str> for Distribution {
 pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
     let output = process::Command::new(command)
         .args(args)
-        .output().map_err(|e| anyhow!("failed to run command").context(e))?;
+        .output().map_err(|e| anyhow!(e).context("failed to run command"))?;
     if !output.status.success() {
         return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).context(format!("{} {} failed", command, args.join(" "))).into());
     }

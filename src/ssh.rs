@@ -282,9 +282,9 @@ echo ovs=$(cat /tmp/ovs-$$);
     pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
         cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
         let result = self.client.execute(cmd).await.
-            map_err(|e| anyhow!("{} failed", cmd).context(e))?;
+            map_err(|e| anyhow!(e).context(format!("{} failed", cmd)))?;
         if result.exit_status > 0 {
-            return Err(anyhow!("{} failed", cmd).context(result.stderr).into());
+            return Err(anyhow!(result.stderr).context(format!("{} failed", cmd)).into());
         }
         if result.stdout.len() > 0 {
             result.stdout.lines().for_each(|l| println!("{} |   {}", self.node_name, l));

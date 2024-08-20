@@ -8,12 +8,11 @@ use netavark::{
 };
 use crate::skatelet::dns;
 use log::info;
-
+use crate::util::spawn_orphan_process;
 
 pub fn netavark() {
     // change the version to the version of your plugin
     let info = Info::new("0.1.0".to_owned(), API_VERSION.to_owned(), None);
-    std::env::args();
     PluginExec::new(Exec {}, info).exec();
 }
 
@@ -42,11 +41,7 @@ impl Plugin for Exec {
             Some(ips) => {
                 // // TODO what if there's multiple ??? I guess find the one on our subnet
                 let ip = ips.first().unwrap().to_string();
-                let _ = Command::new("skatelet").args(&["dns", "add", &opts.container_id, &ip])
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn();
+                spawn_orphan_process("skatelet", &["dns", "add", &opts.container_id, &ip]);
             }
             None => {}
         };

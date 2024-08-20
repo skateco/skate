@@ -7,9 +7,10 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use fs2::FileExt;
 use log::{debug, info, warn, LevelFilter};
-use crate::util::NamespacedName;
+use crate::util::{spawn_orphan_process, NamespacedName};
 use std::io::prelude::*;
 use std::process::Stdio;
+use serde_json::Value;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
 
@@ -63,44 +64,72 @@ fn ensure_skatelet_dns_conf_dir() {
 #[derive(Debug, Args)]
 pub struct AddArgs {
     container_id: String,
-    ip: String,
+    ip: Option<String>,
 }
 
-fn retry<T>(retries: u32, f: impl Fn() -> Result<T, Box<dyn Error>>) -> Result<T, Box<dyn Error>> {
+fn retry<T>(retries: u32, f: impl Fn() -> Result<T, (bool, Box<dyn Error>)>) -> Result<T, Box<dyn Error>> {
     for _ in 0..(retries - 1) {
         let result = f();
-        if result.is_ok() {
-            return result;
-        } else {
-            warn!("retrying due to {}", result.err().unwrap());
+        match result {
+            Ok(ok) => return Ok(ok),
+            Err((cont, err)) => {
+                if !cont {
+                    return Err(err);
+                }
+
+                warn!("retrying due to {}", err)
+            }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    f()
+    match f() {
+        Ok(ok) => Ok(ok),
+        Err((_, err)) => Err(err)
+    }
 }
 
-pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
+pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<dyn Error>> {
     ensure_skatelet_dns_conf_dir();
     let log_tag = format!("{}::add", container_id);
 
-    info!("{} dns add for {} {}", log_tag, container_id, ip);
+    info!("{} dns add for {} {:?}", log_tag, container_id, supplied_ip);
 
     // TODO - store pod info in store, if no info, break retry loop
-    let json = retry(10, || {
+    let (extracted_ip, json) = retry(10, || {
         debug!("{} inspecting container {}",log_tag, container_id);
-        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
-        let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
-        let pod = json[0]["Pod"].as_str();
-        if pod.is_none() {
-            warn!("{} no pod found", log_tag);
-            return Err("no pod found".into());
+        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()]).map_err(|e| (true, e.into()))?;
+        let container_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e)).map_err(|e| (false, e.into()))?;
+        let is_infra = container_json[0]["IsInfra"].as_bool().unwrap();
+        if !is_infra {
+            warn!("{} not infra container", log_tag);
+            return Err((false, "not infra container".into()));
         }
 
+        let ip = extract_skate_ip(container_json[0].clone());
+
+        let pod = container_json[0]["Pod"].as_str();
+        if pod.is_none() {
+            warn!("{} no pod found", log_tag);
+            return Err((false, "no pod found".into()));
+        }
+
+
         debug!("{} inspecting pod", log_tag);
-        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
-        let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
-        Ok(pod_json)
+        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()]).map_err(|e| (true, e.into()))?;
+        let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e)).map_err(|e| (false, e.into()))?;
+        Ok((ip, pod_json))
     })?;
+
+    let ip = match supplied_ip {
+        Some(ip) => Some(ip),
+        None => extracted_ip
+    };
+
+    if ip.is_none() {
+        warn!("{} no ip supplied or found for network 'skate'", log_tag);
+        return Ok(());
+    }
+    let ip = ip.unwrap();
 
 
     let labels = json["Labels"].as_object().unwrap();
@@ -114,6 +143,7 @@ pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
     } else if labels.contains_key("skate.io/deployment") {
         parent_resource = "deployment";
     } else {
+        info!("not a daemonset or deployment, skipping");
         return Ok(())
     }
 
@@ -146,13 +176,7 @@ pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
     }));
 
     if result.is_ok() {
-        // The fact that we don't have a `?` or `unrwap` here is intentional
-        // This disowns the process, which is what we want.
-        let _ = process::Command::new("skatelet").args(&["dns", "enable", &container_id])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+        spawn_orphan_process("skatelet", &["dns", "enable", &container_id]);
     }
     result
 }
@@ -160,6 +184,22 @@ pub fn add(container_id: String, ip: String) -> Result<(), Box<dyn Error>> {
 #[derive(Debug, Args)]
 pub struct EnableArgs {
     container_id: String,
+}
+
+fn extract_skate_ip(json: Value) -> Option<String> {
+    json["NetworkSettings"]["Networks"].as_object().unwrap().iter().filter_map(|(k, v)| {
+        if k.eq("skate") {
+            match v["IPAddress"].as_str() {
+                Some(ip) => match ip {
+                    "" => None,
+                    _ => Some(ip.to_string())
+                }
+                None => None
+            }
+        } else {
+            None
+        }
+    }).collect::<Vec<String>>().first().and_then(|s| Some(s.clone()))
 }
 
 pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error>> {
@@ -185,7 +225,6 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
 
     let mut healthy = false;
     for _ in 0..60 {
-
         debug!("{} inspecting all pod containers",log_tag);
         let output = exec_cmd("timeout", &args)?;
         let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;

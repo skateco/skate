@@ -254,7 +254,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Install
     - Supported distros/arch
         - [x] Ubuntu 24.04 amd64/aarch64
-        - [ ] Raspbian armv7
     - [ ] Idempotent install
 
 - Scheduling
@@ -310,6 +309,8 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - ClusterIssuer
         - [ ] Lets encrypt api endpoint
         - [ ] email
+    - Volumes
+        - [ ] Create path on host if it doesn't exist like docker (maybe there's a flag for that).
 
 - Networking
     - [x] multi-host container network (currently static routes)

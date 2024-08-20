@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use chrono::{DateTime, Local};
@@ -74,8 +75,8 @@ fn _slugify(s: &str) -> String {
 }
 
 pub fn hash_string<T>(obj: T) -> String
-    where
-        T: Hash,
+where
+    T: Hash,
 {
     let mut hasher = DefaultHasher::new();
     obj.hash(&mut hasher);
@@ -86,9 +87,9 @@ pub fn hash_string<T>(obj: T) -> String
 // use with #[serde(deserialize_with = "deserialize_null_default")]
 // null or nonexistant values will be deserialized as T::default(
 fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-    where
-        T: Default + Deserialize<'de>,
-        D: Deserializer<'de>,
+where
+    T: Default + Deserialize<'de>,
+    D: Deserializer<'de>,
 {
     let opt = Option::deserialize(deserializer)?;
     Ok(opt.unwrap_or_default())
@@ -197,4 +198,20 @@ pub fn age(date_time: DateTime<Local>) -> String {
         }
         Err(_) => "".to_string()
     }
+}
+
+pub fn spawn_orphan_process<I, S>(cmd: &str, args: I)
+where
+    I: IntoIterator<Item=S>,
+    S: AsRef<OsStr>,
+{
+
+    // The fact that we don't have a `?` or `unrwap` here is intentional
+    // This disowns the process, which is what we want.
+    let _ = std::process::Command::new(cmd)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
