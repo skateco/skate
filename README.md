@@ -320,7 +320,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - DNS
     - [x] multi host dns
     - [x] ingress
-    - [ ] modded fanout to wait for all and round robin all
+    - [x] modded fanout to wait for all and round robin all
     - [ ] something more barebones than coredns??
 - Ingress
     - [x] Openresty config template from ingress resources
