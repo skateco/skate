@@ -331,3 +331,11 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - CNI
     - [ ] Get pod config from store and not podman
 
+
+### DNS Improvements
+
+1. Mod coredns to fanout to all nodes and wait for all responses, and round robin the responses.
+2. Make these dns records available as <name>.<namespace>.pod.cluster.skate
+3. Mod ingress to apply Service resources, making them available as <name>.<namespace>.svc.cluster.skate, proxying to the
+   pod domains.
+4. Make nginx proxy to next healthy upstream upon connection failure.
