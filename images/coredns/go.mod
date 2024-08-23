@@ -145,4 +145,4 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace github.com/networkservicemesh/fanout => github.com/skateco/fanout v0.0.0-20240821130608-7538dbcf5f9e
+replace github.com/networkservicemesh/fanout => github.com/skateco/fanout v0.0.0-20240821133121-12157fa01a4d

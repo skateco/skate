@@ -36,7 +36,15 @@ spec:
                 hosts /var/lib/skate/dns/addnhosts
             }
             
-            cluster.skate:53 {
+            svc.cluster.skate:53 {
+                
+                    bind lo
+                
+                    hosts /var/lib/skate/dns/addnhosts
+                
+            }
+            
+            pod.cluster.skate:53 {
             
                 bind lo
             

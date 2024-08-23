@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::{panic, process, thread};
+use std::panic::PanicInfo;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use strum::AsStaticRef;
@@ -10,6 +11,7 @@ use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::dns::{dns, DnsArgs};
+use crate::skatelet::ipvsmon::{ipvsmon, IpvsmonArgs};
 use crate::skatelet::oci::{oci, OciArgs};
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
@@ -33,6 +35,39 @@ enum Commands {
     Dns(DnsArgs),
     Cni,
     Oci(OciArgs),
+    Ipvsmon(IpvsmonArgs)
+}
+
+pub fn log_panic(info: &PanicInfo) {
+
+    let thread = thread::current();
+    let thread = thread.name().unwrap_or("<unnamed>");
+
+    let msg = match info.payload().downcast_ref::<&'static str>() {
+        Some(s) => *s,
+        None => match info.payload().downcast_ref::<String>() {
+            Some(s) => &**s,
+            None => "Box<Any>",
+        },
+    };
+
+    match info.location() {
+        Some(location) => {
+            error!(
+                        target: "panic", "thread '{}' panicked at '{}': {}:{}",
+                        thread,
+                        msg,
+                        location.file(),
+                        location.line(),
+                    );
+        }
+        None => error!(
+                    target: "panic",
+                    "thread '{}' panicked at '{}'",
+                    thread,
+                    msg,
+                ),
+    }
 }
 
 pub async fn skatelet() -> Result<(), Box<dyn Error>> {
@@ -53,37 +88,6 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
         .map(|()| log::set_max_level(LevelFilter::Debug))?;
 
-    panic::set_hook(Box::new(move |info| {
-
-        let thread = thread::current();
-        let thread = thread.name().unwrap_or("<unnamed>");
-
-        let msg = match info.payload().downcast_ref::<&'static str>() {
-            Some(s) => *s,
-            None => match info.payload().downcast_ref::<String>() {
-                Some(s) => &**s,
-                None => "Box<Any>",
-            },
-        };
-
-        match info.location() {
-            Some(location) => {
-                error!(
-                        target: "panic", "thread '{}' panicked at '{}': {}:{}",
-                        thread,
-                        msg,
-                        location.file(),
-                        location.line(),
-                    );
-            }
-            None => error!(
-                    target: "panic",
-                    "thread '{}' panicked at '{}'",
-                    thread,
-                    msg,
-                ),
-        }
-    }));
 
     let result = match args.command {
         Commands::Apply(args) => apply::apply(args),
@@ -96,6 +100,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
         },
         Commands::Dns(args) => dns(args),
         Commands::Oci(args) => oci(args),
+        Commands::Ipvsmon(args) => ipvsmon(args),
         // _ => Ok(())
     };
     match result {

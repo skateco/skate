@@ -1,9 +1,11 @@
 use std::error::Error;
+use std::panic;
 use std::process::{exit, Command, Stdio};
 use clap::{Args, Subcommand};
 use log::{error, info};
 use strum_macros::EnumString;
 use crate::skatelet::dns;
+use crate::skatelet::skatelet::log_panic;
 use crate::util::spawn_orphan_process;
 
 #[derive(EnumString, Debug, Subcommand)]
@@ -18,6 +20,10 @@ pub struct OciArgs {
 }
 
 pub(crate) fn oci(args: OciArgs) -> Result<(), Box<dyn Error>> {
+
+    panic::set_hook(Box::new(move |info| {
+        log_panic(info)
+    }));
     let result = match args.commands {
         Commands::Poststart => post_start(),
         Commands::Poststop => post_stop(),

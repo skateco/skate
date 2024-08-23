@@ -179,6 +179,8 @@ impl ClusterState {
             SupportedResources::Ingress(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
             SupportedResources::CronJob(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
             SupportedResources::Secret(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
+            SupportedResources::Secret(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
+            SupportedResources::Service(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
             _ => todo!("reconcile not supported")
         }
     }
@@ -312,6 +314,21 @@ impl ClusterState {
             })
         });
 
+        res
+    }
+
+    pub fn locate_service(&self, node:&str, name: &str, namespace: &str) -> Option<(ObjectListItem, &NodeState)> {
+        let res = self.nodes.iter().find(|n| n.node_name == node).and_then(|n| {
+            n.host_info.as_ref().and_then(|h| {
+                h.system_info.clone().and_then(|i| {
+                    i.services.and_then(|p| {
+                        p.clone().into_iter().find(|p| {
+                            p.name.name == name && p.name.namespace == namespace
+                        }).map(|p| (p, n))
+                    })
+                })
+            })
+        });
         res
     }
 

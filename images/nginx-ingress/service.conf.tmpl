@@ -64,7 +64,7 @@
 {{/inline}}
 
 {{#*inline "proxyPassLocation"}}
-    set $upstream http://{{backend.service.name}}.cluster.skate:{{backend.service.port.number}};
+    set $upstream http://{{backend.service.name}}.svc.cluster.skate:{{backend.service.port.number}};
     proxy_pass $upstream;
 {{/inline}}
 

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, DeploymentSpec};
-use k8s_openapi::api::core::v1::{Container, Pod, PodTemplateSpec, Secret};
+use k8s_openapi::api::core::v1::{Container, Pod, PodTemplateSpec, Secret, Service};
 use serde_yaml;
 use serde::{Deserialize, Serialize};
 use tokio;
@@ -31,6 +31,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::config;
 use crate::config::{cache_dir, Config, Node};
+use crate::config_cmd::ConfigArgs;
 use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
@@ -59,6 +60,7 @@ enum Commands {
     Get(GetArgs),
     Describe(DescribeArgs),
     Logs(LogArgs),
+    Config(ConfigArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -81,6 +83,7 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Get(args) => get(args).await,
         Commands::Describe(args) => describe(args).await,
         Commands::Logs(args) => logs(args).await,
+        Commands::Config(args) => crate::config_cmd::config(args),
         _ => Ok(())
     }
 }
@@ -93,6 +96,7 @@ pub enum ResourceType {
     Ingress,
     CronJob,
     Secret,
+    Service
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -109,6 +113,8 @@ pub enum SupportedResources {
     CronJob(CronJob),
     #[strum(serialize = "Secret")]
     Secret(Secret),
+    #[strum(serialize = "Service")]
+    Service(Service),
 }
 
 
@@ -121,6 +127,7 @@ impl SupportedResources {
             SupportedResources::Ingress(r) => metadata_name(r),
             SupportedResources::CronJob(r) => metadata_name(r),
             SupportedResources::Secret(s) => metadata_name(s),
+            SupportedResources::Service(s) => metadata_name(s),
         }
     }
 
@@ -133,6 +140,7 @@ impl SupportedResources {
             SupportedResources::Ingress(_) => false,
             SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
             SupportedResources::Secret(_) => false,
+            SupportedResources::Service(_) => false,
         }
     }
     fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
@@ -352,6 +360,22 @@ impl SupportedResources {
                 };
                 resource
             }
+            SupportedResources::Service(ref mut s) => {
+                let original_name = s.metadata.name.clone().unwrap_or("".to_string());
+                if s.metadata.name.is_none() {
+                    return Err(anyhow!("metadata.name is empty").into());
+                }
+                if s.metadata.namespace.is_none() {
+                    return Err(anyhow!("metadata.namespace is empty").into());
+                }
+
+                let mut extra_labels = HashMap::from([]);
+
+                s.metadata = Self::fixup_metadata(s.metadata.clone(), Some(extra_labels))?;
+                // set name to be name.namespace
+                s.metadata.name = Some(format!("{}", metadata_name(s)));
+                resource
+            }
         };
         Ok(resource)
     }
@@ -417,7 +441,13 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                             {
                                 let secret: Secret = serde::Deserialize::deserialize(value)?;
                                 result.push(SupportedResources::Secret(secret))
-                            }
+                            } else if
+                            api_version == Service::API_VERSION &&
+                                kind == Service::KIND
+                                {
+                                    let service: Service = serde::Deserialize::deserialize(value)?;
+                                    result.push(SupportedResources::Service(service))
+                                }
                         }
                         _ => {
                             return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());

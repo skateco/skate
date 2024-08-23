@@ -204,7 +204,7 @@ echo ovs=$(cat /tmp/ovs-$$);
             _ => {
                 let message = match result.stderr.len() {
                     0 => result.stdout,
-                    _ => result.stderr
+                    _ => result.stderr,
                 };
                 Err(anyhow!("failed to apply resource: exit code {}, {}", result.exit_status, message).into())
             }

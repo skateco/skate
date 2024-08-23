@@ -119,7 +119,8 @@ Dns is coredns with fanout between all nodes along with serving from file.
 
 Hosts are maintained via a CNI plugin that adds/removes the ip to the hosts file.
 
-Pods get a hostname of `<labels.app>.<metadata.namespace>.cluster.skate.`
+Pods get a hostname of `<name>.<namespace>.pod.cluster.skate.`
+Services get `<name>.<namespace>.svc.cluster.skate.`
 
 ### Ingress
 
@@ -141,13 +142,10 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: mypod.myns.cluster.skate
+            name: mypod.myns # routes to mypod.myns.svc.cluster.skate
             port:
               number: 80
 ```
-
-Service resources are ignored and it's implicit that a pod has a service with
-url: `<labels.name>.<metadata.namespace>.cluster.skate`
 
 Currently only Prefix pathType is supported.
 
@@ -332,10 +330,20 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Get pod config from store and not podman
 
 
-### DNS Improvements
+### Service Improvements
 
-1. Mod coredns to fanout to all nodes and wait for all responses, and round robin the responses.
-2. Make these dns records available as <name>.<namespace>.pod.cluster.skate
-3. Mod ingress to apply Service resources, making them available as <name>.<namespace>.svc.cluster.skate, proxying to the
-   pod domains.
-4. Make nginx proxy to next healthy upstream upon connection failure.
+#### Pre work
+1. Deploy keepalived on allnodes
+2. Apply static ips to pods.
+
+#### Deploying service
+
+1. Modify keepalived.conf on all nodes to have service ips
+2. Assign ip to keepalive2 service.
+2. Create a dns entry for <name>.<ns>.svc.cluster.skate that points to keepalived
+
+Or
+
+1. Assign ip to keepalive2 service.
+2. Cron that queries dns for all services every n seconds and updates keepalived.conf and reloads it.
+3. Create a dns entry for <name>.<ns>.svc.cluster.skate that points to keepalived

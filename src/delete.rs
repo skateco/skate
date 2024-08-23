@@ -24,6 +24,7 @@ pub enum DeleteCommands {
     Secret(DeleteResourceArgs),
     Deployment(DeleteResourceArgs),
     Daemonset(DeleteResourceArgs),
+    Service(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -45,6 +46,7 @@ pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
         DeleteCommands::Ingress(args) => delete_resource(ResourceType::Ingress, args).await?,
         DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
         DeleteCommands::Secret(args) => delete_resource(ResourceType::Secret, args).await?,
+        DeleteCommands::Service(args) => delete_resource(ResourceType::Service, args).await?,
     }
     Ok(())
 }

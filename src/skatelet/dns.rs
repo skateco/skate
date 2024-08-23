@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::{fs, process};
+use std::{fs, panic, process};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::Path;
@@ -7,12 +7,13 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use fs2::FileExt;
 use log::{debug, info, warn, LevelFilter};
-use crate::util::{spawn_orphan_process, NamespacedName};
+use crate::util::{lock_file, spawn_orphan_process, NamespacedName};
 use std::io::prelude::*;
 use std::process::Stdio;
 use serde_json::Value;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
+use crate::skatelet::skatelet::log_panic;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -27,6 +28,9 @@ pub struct DnsArgs {
 }
 
 pub fn dns(args: DnsArgs) -> Result<(), Box<dyn Error>> {
+    panic::set_hook(Box::new(move |info| {
+        log_panic(info)
+    }));
     match args.command {
         Command::Add(add_args) => add(add_args.container_id, add_args.ip),
         Command::Remove(remove_args) => remove(remove_args.container_id),
@@ -39,18 +43,7 @@ fn conf_path_str() -> String {
 }
 
 fn lock<T>(cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
-    let lock_path = Path::new(&conf_path_str()).join("lock");
-    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
-    info!("waiting for lock on {}", lock_path.display());
-    lock_file.lock_exclusive()?;
-    info!("locked {}", lock_path.display());
-
-    let result = cb();
-
-    lock_file.unlock()?;
-    info!("unlocked {}", lock_path.display());
-
-    result
+    lock_file(&format!("{}/lock", conf_path_str()), cb)
 }
 
 fn ensure_skatelet_dns_conf_dir() {
@@ -86,6 +79,34 @@ fn retry<T>(retries: u32, f: impl Fn() -> Result<T, (bool, Box<dyn Error>)>) -> 
         Ok(ok) => Ok(ok),
         Err((_, err)) => Err(err)
     }
+}
+
+pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), Box<dyn Error>> {
+    ensure_skatelet_dns_conf_dir();
+    let log_tag = "add_misc_host";
+
+    info!("{} dns add for {} {} # {}", log_tag, domain, ip, tag);
+
+    let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
+
+    lock(Box::new(move || {
+
+        // scope to make sure files closed after
+        {
+            debug!("{} updating hosts file", log_tag);
+            // create or open
+            let mut addhosts_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
+
+            // write with comment for now
+            writeln!(addhosts_file, "{} {} # {}", ip, domain, tag).map_err(|e| anyhow!("failed to write host to file: {}", e))?;
+        }
+
+        Ok(())
+    }))
 }
 
 pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -144,14 +165,14 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<
         parent_resource = "deployment";
     } else {
         info!("not a daemonset or deployment, skipping");
-        return Ok(())
+        return Ok(());
     }
 
     let parent_identifer_label = format!("skate.io/{}", parent_resource);
 
     let app = labels.get(&parent_identifer_label).unwrap().as_str().unwrap();
 
-    let domain = format!("{}.{}.cluster.skate", app, ns);
+    let domain = format!("{}.{}.pod.cluster.skate", app, ns);
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
 
     let container_id_cpy = container_id.clone();
@@ -301,9 +322,9 @@ pub struct RemoveArgs {
     container_id: String,
 }
 
-pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
-    let log_tag = format!("{}::remove", container_id);
-    info!("{} removing dns entry for {}", log_tag, container_id);
+pub fn remove(tag: String) -> Result<(), Box<dyn Error>> {
+    let log_tag = format!("{}::remove", tag);
+    info!("{} removing dns entry for {}", log_tag, tag);
     ensure_skatelet_dns_conf_dir();
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
     let newaddnhosts_path = Path::new(&conf_path_str()).join("addnhosts-new");
@@ -333,7 +354,7 @@ pub fn remove(container_id: String) -> Result<(), Box<dyn Error>> {
 
             for (_index, line) in reader.lines().enumerate() {
                 let line = line?;
-                if !line.ends_with(&container_id) {
+                if !line.ends_with(&tag) {
                     writeln!(writer, "{}", line)?;
                 }
             }

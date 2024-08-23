@@ -1,0 +1,11 @@
+[Unit]
+Description=Skate IPVS Manger for {{svc_name}}
+Requires=network-online.target
+
+[Timer]
+OnCalendar=*-*-* *:*:0/2
+Unit=skate-ipvsmon-{{svc_name}}.service
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

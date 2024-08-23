@@ -7,6 +7,7 @@ mod template;
 mod delete;
 pub(crate) mod dns;
 mod oci;
+mod ipvsmon;
 
 pub use skatelet::skatelet;
 pub use system::SystemInfo;

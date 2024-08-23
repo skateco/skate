@@ -1,22 +1,25 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{Write};
-use std::process;
+use std::io::{read_to_string, BufRead, Read, Seek, SeekFrom, Write};
+use std::net::{IpAddr, Ipv4Addr};
+use std::{fs, process};
 use std::process::Stdio;
-
+use std::str::FromStr;
 use anyhow::anyhow;
 use handlebars::Handlebars;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Pod, Secret};
+use k8s_openapi::api::core::v1::{Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
+use log::info;
 use serde_json::{json, Value};
 
 use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
-use crate::util::{hash_string, metadata_name};
+use crate::skatelet::dns;
+use crate::util::{hash_string, lock_file, metadata_name};
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;
@@ -128,10 +131,11 @@ impl DefaultExecutor {
         let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
         file.write_all(output.as_bytes())?;
 
+        let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
 
-        // systemctl daemon-reload
         exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["enable", "--now", &format!("skate-cronjob-{}", &ns_name.to_string())])?;
+        exec_cmd("systemctl", &["enable", "--now", &unit_name])?;
+        exec_cmd("systemctl", &["reset-failed", &unit_name]);
 
         Ok(())
     }
@@ -287,6 +291,107 @@ impl DefaultExecutor {
         Ok(())
     }
 
+    fn apply_service(&self, service: Service) -> Result<(), Box<dyn Error>> {
+        let manifest_string = serde_yaml::to_string(&service).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(&service).to_string();
+
+        // manifest goes into store
+        let yaml_path = self.store.write_file("service", name, "manifest.yaml", manifest_string.as_bytes())?;
+
+        let hash = service.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+
+        if !hash.is_empty() {
+            self.store.write_file("service", &name, "hash", &hash.as_bytes())?;
+        }
+
+        // install systemd service and timer
+        let mut handlebars = Handlebars::new();
+        handlebars.set_strict_mode(true);
+        ////////////////////////////////////////////////////
+        // template cron-pod.service to /var/lib/state/store/cronjob/<name>/systemd.service
+        ////////////////////////////////////////////////////
+
+        handlebars.register_template_string("unit", include_str!("./resources/skate-ipvsmon.service")).map_err(|e| anyhow!(e).context("failed to load service template file"))?;
+
+
+        // cidr is 10.30.0.0/16
+        // we just keep incrementing
+        let service_subnet_start = "10.30.0.0";
+
+        let ip = lock_file("/var/lib/skate/keepalived/service-ips.lock", Box::new(move || {
+            info!("reading ip file");
+
+
+            let last_ip = fs::read_to_string("/var/lib/skate/keepalived/service-ips").unwrap_or_default();
+            info!("converting {} to Ipv4Addr", last_ip);
+            let mut last_ip = Ipv4Addr::from_str(&last_ip).unwrap_or_else(|_| Ipv4Addr::from_str(service_subnet_start).unwrap());
+
+            info!("last ip: {}", last_ip);
+
+            let mut octets = last_ip.octets();
+
+            if octets[3] == 255 {
+                if octets[2] == 255 {
+                    return Err(anyhow!("no more ips available on subnet {}/16", service_subnet_start).into());
+                }
+                octets[2] += 1;
+                octets[3] = 0;
+            } else {
+                octets[3] += 1;
+            }
+
+            let ip = Ipv4Addr::from(octets);
+
+            fs::write("/var/lib/skate/keepalived/service-ips", ip.to_string())?;
+
+            Ok(ip.to_string())
+        }))?;
+
+        let json: Value = json!({
+            "svc_name":name,
+            "ip": ip,
+            "yaml_path": yaml_path,
+        });
+
+        let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &name))?;
+        handlebars.render_to_write("unit", &json, file)?;
+
+        handlebars.register_template_string("timer", include_str!("./resources/skate-ipvsmon.timer")).map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
+        let json: Value = json!({
+            "svc_name":name,
+        });
+        let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &name))?;
+        handlebars.render_to_write("timer", &json, file)?;
+        let unit_name = format!("skate-ipvsmon-{}", &name);
+
+        exec_cmd("systemctl", &["daemon-reload"])?;
+        exec_cmd("systemctl", &["enable", "--now", &unit_name])?;
+        exec_cmd("systemctl", &["reset-failed", &unit_name])?;
+
+        let domain = format!("{}.svc.cluster.skate", name);
+        dns::add_misc_host(ip, domain.clone(), domain)?;
+
+        Ok(())
+    }
+
+    fn remove_service(&self, service: Service) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(&service);
+
+        let _ = exec_cmd("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
+
+        let _ = exec_cmd("systemctl", &["disable", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
+        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &ns_name.to_string())]);
+        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &ns_name.to_string())]);
+        let _ = exec_cmd("rm", &[&format!("/var/lib/skate/keepalived/{}.conf", &ns_name.to_string())]);
+        let _ = exec_cmd("systemctl", &["daemon-reload"])?;
+        let _ = exec_cmd("systemctl", &["reset-failed"])?;
+
+        let _ = self.store.remove_object("service", &ns_name.to_string())?;
+
+        Ok(())
+    }
+
+
     fn remove_deployment(&self, deployment: Deployment, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         // find all pod ids for the deployment
         let name = deployment.metadata.name.unwrap();
@@ -369,7 +474,10 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
-            SupportedResources::Pod(_) | SupportedResources::Secret(_) | SupportedResources::Deployment(_) | SupportedResources::DaemonSet(_) => {
+            SupportedResources::Pod(_)
+            | SupportedResources::Secret(_)
+            | SupportedResources::Deployment(_)
+            | SupportedResources::DaemonSet(_) => {
                 self.apply_play(object)
             }
             SupportedResources::Ingress(ingress) => {
@@ -377,6 +485,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::CronJob(cron) => {
                 self.apply_cronjob(cron)
+            }
+            SupportedResources::Service(service) => {
+                self.apply_service(service)
             }
         }
     }
@@ -402,6 +513,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::Secret(secret) => {
                 self.remove_secret(secret)
+            }
+            SupportedResources::Service(service) => {
+                self.remove_service(service)
             }
         }
     }

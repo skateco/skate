@@ -7,7 +7,7 @@ use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret};
+use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
@@ -330,7 +330,6 @@ impl DefaultScheduler {
     }
 
     fn plan_cronjob(state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
-
         let name = metadata_name(cron);
 
         let mut new_cron = cron.clone();
@@ -348,7 +347,6 @@ impl DefaultScheduler {
         match existing_cron {
             Some(c) => {
                 if c.0.manifest_hash == new_hash {
-
                     actions.push(ScheduledOperation {
                         resource: SupportedResources::CronJob(new_cron),
                         error: None,
@@ -357,7 +355,6 @@ impl DefaultScheduler {
                     });
                     // nothing to do
                 } else {
-
                     actions.push(ScheduledOperation {
                         resource: SupportedResources::CronJob(new_cron.clone()),
                         error: None,
@@ -371,26 +368,21 @@ impl DefaultScheduler {
                         operation: OpType::Create,
                         node: None,
                     });
-
-
                 }
             }
             None => {
-
                 actions.push(ScheduledOperation {
                     resource: SupportedResources::CronJob(new_cron),
                     error: None,
                     operation: OpType::Create,
                     node: None,
                 });
-
             }
         }
 
 
         // check if we have an existing cronjob for this
         // if so compare hashes, if differ then create, otherwise no change
-
 
 
         Ok(ApplyPlan {
@@ -400,19 +392,72 @@ impl DefaultScheduler {
 
     // just apply on all nodes
     fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
-
         let mut actions = vec!();
 
         for node in state.nodes.iter() {
-
             actions.extend([
-                ScheduledOperation{
+                ScheduledOperation {
                     resource: SupportedResources::Secret(secret.clone()),
                     error: None,
                     operation: OpType::Create,
                     node: Some(node.clone()),
                 }
             ]);
+        }
+
+
+        Ok(ApplyPlan {
+            actions,
+        })
+    }
+    fn plan_service(state: &ClusterState, service: &Service) -> Result<ApplyPlan, Box<dyn Error>> {
+        let name = metadata_name(service);
+
+        let mut actions = vec!();
+
+
+        let mut new_service = service.clone();
+
+        let new_hash = hash_k8s_resource(&mut new_service);
+
+
+        for node in state.nodes.iter() {
+            let existing_service = state.locate_service(&node.node_name, &name.name, &name.namespace);
+            match existing_service {
+                Some(c) => {
+                    if c.0.manifest_hash == new_hash {
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Service(new_service.clone()),
+                            error: None,
+                            operation: OpType::Unchanged,
+                            node: Some(node.clone()),
+                        });
+                        // nothing to do
+                    } else {
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Service(new_service.clone()),
+                            error: None,
+                            operation: OpType::Delete,
+                            node: Some(node.clone()),
+                        });
+
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::Service(new_service.clone()),
+                            error: None,
+                            operation: OpType::Create,
+                            node: Some(node.clone()),
+                        });
+                    }
+                }
+                None => {
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::Service(new_service.clone()),
+                        error: None,
+                        operation: OpType::Create,
+                        node: Some(node.clone()),
+                    });
+                }
+            }
         }
 
 
@@ -438,7 +483,6 @@ impl DefaultScheduler {
             match existing_ingress {
                 Some(c) => {
                     if c.0.manifest_hash == new_hash {
-
                         actions.push(ScheduledOperation {
                             resource: SupportedResources::Ingress(new_ingress.clone()),
                             error: None,
@@ -447,7 +491,6 @@ impl DefaultScheduler {
                         });
                         // nothing to do
                     } else {
-
                         actions.push(ScheduledOperation {
                             resource: SupportedResources::Ingress(new_ingress.clone()),
                             error: None,
@@ -461,23 +504,17 @@ impl DefaultScheduler {
                             operation: OpType::Create,
                             node: Some(node.clone()),
                         });
-
-
                     }
                 }
                 None => {
-
                     actions.push(ScheduledOperation {
                         resource: SupportedResources::Ingress(new_ingress.clone()),
                         error: None,
                         operation: OpType::Create,
                         node: Some(node.clone()),
                     });
-
                 }
             }
-
-
         }
 
         Ok(ApplyPlan {
@@ -493,10 +530,11 @@ impl DefaultScheduler {
             SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress),
             SupportedResources::CronJob(cron) => Self::plan_cronjob(state, cron),
             SupportedResources::Secret(secret) => Self::plan_secret(state, secret),
+            SupportedResources::Service(service) => Self::plan_service(state, service),
         }
     }
 
-    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(String,String), Box<dyn Error>> {
+    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(String, String), Box<dyn Error>> {
         let conn = conns.find(&resource.node.unwrap().node_name).ok_or("failed to find connection to host")?;
 
         let manifest = serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");

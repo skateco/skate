@@ -1,12 +1,18 @@
 use std::collections::hash_map::DefaultHasher;
+use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
+use std::fs::File;
 use std::hash::{Hash, Hasher};
+use std::path::Path;
+use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use deunicode::deunicode_char;
+use fs2::FileExt;
 use itertools::Itertools;
 use k8s_openapi::{Metadata, NamespaceResourceScope};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use log::info;
 use serde::{Deserialize, Deserializer, Serialize};
 
 pub const CHECKBOX_EMOJI: char = '✔';
@@ -214,4 +220,15 @@ where
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
+}
+pub fn lock_file<T>(file: &str, cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
+    let lock_path = Path::new(file);
+    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
+    info!("waiting for lock on {}", lock_path.display());
+    lock_file.lock_exclusive()?;
+    info!("locked {}", lock_path.display());
+    let result = cb();
+    lock_file.unlock()?;
+    info!("unlocked {}", lock_path.display());
+    result
 }

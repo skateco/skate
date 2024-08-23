@@ -231,8 +231,13 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let (all_conns, _) = cluster_connections(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
+    let skate_dirs = [
+        "ingress",
+        "ingress/letsencrypt_storage",
+        "dns",
+        "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
 
-    _ = conn.execute("sudo mkdir -p /var/lib/skate/ingress /var/lib/skate/ingress/letsencrypt_storage /var/lib/skate/dns").await?;
+    _ = conn.execute(&format!("sudo mkdir -p {}", skate_dirs.join(" "))).await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
@@ -290,6 +295,12 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 // TODO don't run things unless they need to be
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
+
+    conn.execute("sudo apt-get install -y keepalived").await?;
+    conn.execute(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("./resources/keepalived.conf")))).await?;
+    conn.execute("sudo systemctl enable keepalived").await?;
+    conn.execute("sudo systemctl start keepalived").await?;
+
 
     if conn.execute("test -f /etc/containers/containers.conf").await.is_err() {
         let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";

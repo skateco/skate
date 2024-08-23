@@ -20,6 +20,7 @@ mod filestore;
 mod cron;
 mod logs;
 mod oci;
+mod config_cmd;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

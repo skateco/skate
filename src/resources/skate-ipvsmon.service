@@ -1,0 +1,15 @@
+[Unit]
+Description=Update keepalived config for service {{svc_name}}
+Requires=network-online.target
+After=network-online.target
+Wants=skate-ipvsmon-{{svc_name}}.timer
+
+[Service]
+Restart=no
+ExecStart=/usr/local/bin/skatelet ipvsmon {{ip}} {{yaml_path}} --out /var/lib/skate/keepalived/{{svc_name}}.conf
+User=root
+Group=root
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target
