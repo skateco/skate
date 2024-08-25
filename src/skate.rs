@@ -323,8 +323,6 @@ impl SupportedResources {
                     }
                     None => None
                 };
-                let s: String = serde_yaml::to_string(&resource)?;
-                println!("{}", s);
                 resource
             }
             SupportedResources::DaemonSet(ref mut ds) => {
