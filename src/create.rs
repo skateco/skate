@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::CString;
 use std::fs::File;
 use std::io::Write;
 use std::net::ToSocketAddrs;
@@ -8,7 +7,6 @@ use anyhow::anyhow;
 use base64::Engine;
 use base64::engine::general_purpose;
 use clap::{Args, Subcommand};
-use cni_plugin::logger::install;
 use itertools::Itertools;
 use semver::{Version, VersionReq};
 
@@ -110,7 +108,7 @@ async fn create_cluster(args: CreateClusterArgs) -> Result<(), Box<dyn Error>> {
 }
 
 async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<(), Box<dyn Error>> {
-    let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
+    let config = Config::load(Some(args.config.skateconfig.clone()))?;
 
     let context = match args.config.context {
         None => match config.current_context {

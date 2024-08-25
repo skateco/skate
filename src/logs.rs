@@ -1,12 +1,8 @@
 use std::error::Error;
-use std::process;
-use std::process::Stdio;
-use std::str::FromStr;
 use anyhow::anyhow;
 use clap::Args;
 use futures::stream::FuturesUnordered;
 use crate::config::Config;
-use crate::create::CreateCommands;
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
 use futures::StreamExt;

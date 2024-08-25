@@ -1,24 +1,19 @@
 use crate::skate::exec_cmd;
-use crate::util::{spawn_orphan_process, NamespacedName};
+use crate::util::NamespacedName;
 use anyhow::anyhow;
-use clap::{Args, Subcommand};
-use fs2::FileExt;
+use clap::Args;
 use handlebars::Handlebars;
 use k8s_openapi::api::core::v1::Service;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
-use log::{debug, info, warn, LevelFilter};
-use serde_json::{json, Value};
+use log::info;
+use serde_json::json;
 use std::error::Error;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::prelude::*;
-use std::io::{BufRead, BufReader, BufWriter};
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::ToSocketAddrs;
 use std::path::Path;
-use std::process::Stdio;
-use std::{fs, process};
+use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use itertools::Itertools;
-use syslog::{BasicLogger, Facility, Formatter3164};
 
 #[derive(Debug, Args)]
 pub struct IpvsmonArgs {
@@ -44,7 +39,7 @@ pub fn ipvsmon(args: IpvsmonArgs) -> Result<(), Box<dyn Error>> {
     let domain = format!("{}.pod.cluster.skate:80", fqn);
     // get all pod ips from dns <args.service_name>.cluster.skate
     info!("looking up ips for {}", &domain);
-    let mut addrs: Vec<_> = domain.to_socket_addrs().unwrap_or_default()
+    let addrs: Vec<_> = domain.to_socket_addrs().unwrap_or_default()
         .map(|addr| addr.ip().to_string()).sorted().collect();
 
 

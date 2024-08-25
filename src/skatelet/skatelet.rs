@@ -1,10 +1,10 @@
 use std::error::Error;
-use std::{panic, process, thread};
+use std::{process, thread};
 use std::panic::PanicInfo;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use strum::AsStaticRef;
-use strum_macros::{AsStaticStr, EnumString};
+use strum_macros::AsStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs};

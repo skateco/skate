@@ -1,24 +1,17 @@
 use std::collections::HashMap;
 use std::env::var;
 use std::error::Error;
-use std::{fs, io};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter};
-use std::path::Path;
+use std::io;
+use std::io::BufRead;
 
 use cni_plugin::reply::{SuccessReply, VersionReply};
-use fs2::FileExt;
-use log::{debug, info, error, LevelFilter};
-use std::io::prelude::*;
-use std::process::{Command, Stdio};
+use log::{info, error};
 use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
-use syslog::{BasicLogger, Facility, Formatter3164};
-use crate::skate::exec_cmd;
 use crate::skatelet::dns;
-use crate::util::{spawn_orphan_process, NamespacedName};
+use crate::util::spawn_orphan_process;
 
 
 fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {

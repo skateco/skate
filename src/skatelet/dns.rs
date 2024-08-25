@@ -1,17 +1,14 @@
 use std::error::Error;
-use std::{fs, panic, process};
-use std::fs::{File, OpenOptions};
+use std::{fs, panic};
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::path::Path;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use fs2::FileExt;
-use log::{debug, info, warn, LevelFilter};
-use crate::util::{lock_file, spawn_orphan_process, NamespacedName};
+use log::{debug, info, warn};
+use crate::util::{lock_file, spawn_orphan_process};
 use std::io::prelude::*;
-use std::process::Stdio;
 use serde_json::Value;
-use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skate::exec_cmd;
 use crate::skatelet::skatelet::log_panic;
 
@@ -255,7 +252,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
             c["State"]["Health"]["Status"].as_str().unwrap()
         ).collect();
 
-        if containers.iter().any(|c| c.clone() == "unhealthy") {
+        if containers.iter().any(|c| *c == "unhealthy") {
             debug!("{} at least one container unhealthy",log_tag);
             // do nothing
             return Ok(());

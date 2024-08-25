@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fs::File;
-use std::io::{read_to_string, BufRead, Read, Seek, SeekFrom, Write};
-use std::net::{IpAddr, Ipv4Addr};
+use std::io::{BufRead, Write};
+use std::net::Ipv4Addr;
 use std::{fs, process};
 use std::process::Stdio;
 use std::str::FromStr;
@@ -324,7 +324,7 @@ impl DefaultExecutor {
 
             let last_ip = fs::read_to_string("/var/lib/skate/keepalived/service-ips").unwrap_or_default();
             info!("converting {} to Ipv4Addr", last_ip);
-            let mut last_ip = Ipv4Addr::from_str(&last_ip).unwrap_or_else(|_| Ipv4Addr::from_str(service_subnet_start).unwrap());
+            let last_ip = Ipv4Addr::from_str(&last_ip).unwrap_or_else(|_| Ipv4Addr::from_str(service_subnet_start).unwrap());
 
             info!("last ip: {}", last_ip);
 

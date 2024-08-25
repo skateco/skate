@@ -223,7 +223,7 @@ where
 }
 pub fn lock_file<T>(file: &str, cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
     let lock_path = Path::new(file);
-    let lock_file = File::create(lock_path.clone()).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
+    let lock_file = File::create(lock_path).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
     info!("waiting for lock on {}", lock_path.display());
     lock_file.lock_exclusive()?;
     info!("locked {}", lock_path.display());

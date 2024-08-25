@@ -2,7 +2,6 @@ use std::error::Error;
 use russh;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use std::process::Stdio;
 use std::time::Duration;
 use anyhow::anyhow;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
