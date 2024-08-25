@@ -331,19 +331,4 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 
 
 ### Service Improvements
-
-#### Pre work
-1. Deploy keepalived on allnodes
-2. Apply static ips to pods.
-
-#### Deploying service
-
-1. Modify keepalived.conf on all nodes to have service ips
-2. Assign ip to keepalive2 service.
-2. Create a dns entry for <name>.<ns>.svc.cluster.skate that points to keepalived
-
-Or
-
-1. Assign ip to keepalive2 service.
-2. Cron that queries dns for all services every n seconds and updates keepalived.conf and reloads it.
-3. Create a dns entry for <name>.<ns>.svc.cluster.skate that points to keepalived
+1. Apply static ips to pods.

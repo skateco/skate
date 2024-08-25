@@ -226,7 +226,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     // seems to be missing when using kube play
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
-    conn.execute(cmd).await?;
+    conn.execute(cmd).await;
 
     let (all_conns, _) = cluster_connections(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
@@ -461,6 +461,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
 }
 
 async fn install_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+    println!("installing netavark");
     // // The netavark plugin isn't actually used right now but we'll put it there just in case.
     // // We'll use an oci hook instead.
     // let netavark_script = general_purpose::STANDARD.encode("#!/bin/sh

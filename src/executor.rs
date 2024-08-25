@@ -376,6 +376,7 @@ impl DefaultExecutor {
 
     fn remove_service(&self, service: Service) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&service);
+        dns::remove(format!("{}.svc.cluster.skate", ns_name))?;
 
         let _ = exec_cmd("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
 
