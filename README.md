@@ -111,41 +111,24 @@ skate get deployment -n my-app
 ### Networking
 
 Static routes between hosts, maintained by a systemd unit file.
-All containers attached to the default `podman` network which we modify.
+All containers attached to a default `skate` network which we modify.
+Each node gets its own container ip subnet.
 
 ### DNS
 
 Dns is coredns with fanout between all nodes along with serving from file.
 
-Hosts are maintained via a CNI plugin that adds/removes the ip to the hosts file.
+Hosts are maintained via an OCI hook that adds/removes the ip to the hosts file.
 
 Pods get a hostname of `<name>.<namespace>.pod.cluster.skate.`
 Services get `<name>.<namespace>.svc.cluster.skate.`
 
+Only pods where all the containers are either without healthcheck or healthy get a dns entry.
+
 ### Ingress
 
-Nginx container listening on port 80 and 443
-
-Use an Ingress resource to route traffic to a pod.
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: foo-external
-spec:
-  rules:
-  - host: foo.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: mypod.myns # routes to mypod.myns.svc.cluster.skate
-            port:
-              number: 80
-```
+Openresty container listening on port 80 and 443.
+Automatic SSL via LetsEncrypt.
 
 Currently only Prefix pathType is supported.
 
@@ -177,31 +160,11 @@ I 'think' systemd will just spawn a new job if they overlap.
 Secrets are scheduled to all nodes for simplicity.
 Any references to secrets in a pod manifest are automatically looked up in the same namespace as the pods.
 
-## Registering nodes
+### Services
 
-```shell
-# subnet-cidr has to be unique per node
-skate create node --name node-1 --host 192.168.0.62 --subnet-cidr 20.1.0.0/16
-skate create node --name node-2 --host 192.168.0.72 --subnet-cidr 20.2.0.0/16
-```
-
-This will ensure all hosts are provisioned with `skatelet`, the agent
-
-## Viewing objects
-
-```shell
-skate get pods -n <namespace>
-skate get deployments -n <namespace>
-skate get cronjobs -n <namespace>
-skate get ingress -n <namespace>
-skate get secrets -n <namespace>
-```
-
-## Deploying manifests
-
-```shell
-skate apply -f manifest.yaml
-```
+Each service is a LVS(Linux Virtual Service) pointing towards the pods in the service.
+Keepalived is used to manage the target ips, disabling any that fail it's healthcheck.
+A systemd timer syncs the realservers via dns.
 
 ## Developing
 
@@ -250,85 +213,48 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 ### TODO
 
 - Install
-    - Supported distros/arch
-        - [x] Ubuntu 24.04 amd64/aarch64
-    - [ ] Idempotent install
-
+    - [ ] More idempotent install
 - Scheduling
-    - Strategies
-        - [x] Recreate
-        - [ ] Rolling Deployments
-    - Pods
-        - [x] Apply
-        - [ ] Remove
-        - [x] List
-        - [ ] Store manifest in store so CNI plugin can get access
-        - [x] Fix pod naming to avoid collisions
-        - [x] Logs
-    - Deployments
-        - [x] Apply
-        - [x] Remove
-        - [x] List
-        - [x] Logs
-        - [x] Output matches kubectl
-    - Daemonsets
-        - [x] Apply
-        - [x] Remove
-        - [x] List
-        - [x] Logs
-        - [x] Output matches kubectl
-    - Ingress
-        - [x] Apply
-        - [x] Remove
-        - [x] List
-        - [x] Output matches kubectl
-        - [x] Https redirect
-            - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
-    - Cron
-        - [x] Apply
-        - [x] Remove
-        - [x] Hash checking
-        - [x] List
-        - [x] Output matches kubectl
-        - [x] Logs
-        - [ ] ForbidConcurrent
-        - [ ] Create the pod when creating the cronjob to check it's legit
-    - Secret
-        - [x] Apply
-        - [x] Remove
-        - [x] List
-        - [x] Output matches kubectl
-        - [ ] Support private registry secrets
-            - WONTFIX: This is done in k8s by attaching the secret to the default service account, or by adding the
-              secret
-              to the pod manifest. Since we don't want to have to deal with creating service accounts, and since podman
-              kube play doesn't support imagePullSecrets, one has to login to the registry manually per node.
-        -
-    - ClusterIssuer
-        - [ ] Lets encrypt api endpoint
-        - [ ] email
-    - Volumes
-        - [ ] Create path on host if it doesn't exist like docker (maybe there's a flag for that).
+    - [ ] Rolling Deployments
+    - [ ] Remove vip realserver from all nodes before removing pod.
+    - [ ] Respect terminationGracePeriodSeconds when killing pods.
+- Pods
+    - [ ] Remove
+    - [ ] Store manifest in store so CNI plugin can get access
+- Deployments
+- Daemonsets
+- Ingress
+    - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
+- Cron
+    - [ ] ForbidConcurrent
+    - [ ] Create the pod when creating the cronjob to check it's legit
+- Secret
+    - [ ] Support private registry secrets
+        - WONTFIX: This is done in k8s by attaching the secret to the default service account, or by adding the
+          secret
+          to the pod manifest. Since we don't want to have to deal with creating service accounts, and since podman
+          kube play doesn't support imagePullSecrets, one has to login to the registry manually per node.
+    -
+- ClusterIssuer
+    - [ ] Lets encrypt api endpoint
+    - [ ] email
+- Volumes
+    - [ ] Create path on host if it doesn't exist like docker (maybe there's a flag for that).
 
 - Networking
-    - [x] multi-host container network (currently static routes)
     - [ ] Debug why setting up routes again breaks existing container -> route
         - Most likely to do with force deleting the podman network
     - [ ] Use something fancier like vxlan, tailscale etc
 - DNS
-    - [x] multi host dns
-    - [x] ingress
-    - [x] modded fanout to wait for all and round robin all
     - [ ] something more barebones than coredns??
 - Ingress
-    - [x] Openresty config template from ingress resources
-    - [x] letsencrypt
-        - [ ] Cluster Issuer to set letsencrypt url
+    - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
     - [ ] Recreate & fix whatever breaks the sighup reload.
-- CNI
+- OCI
     - [ ] Get pod config from store and not podman
 
-
-### Service Improvements
-1. Apply static ips to pods.
+- Service
+  - [ ] maybe static ips?
+  - [ ] use quorum_up and quorum_down in keepalived to toggle a 503 in ingress. 
+  - [ ] remove ip from the pool before a pod in a service is removed

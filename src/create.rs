@@ -497,9 +497,20 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
         route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }
 
+
+
     route_file = route_file + "[ $(sysctl net.ipv4.ip_forward -b) -eq 1 ] || sysctl -w net.ipv4.ip_forward=1\n";
     route_file = route_file + "[ $(sysctl fs.inotify.max_user_instances) -eq 1280 ] || sysctl fs.inotify.max_user_instances=1280\n";
     route_file = route_file + "[ $(sysctl fs.inotify.max_user_watches) -eq 655360 ] || sysctl fs.inotify.max_user_watches=655360\n";
+
+    // Virtual Server stuff
+    // Schedule non-SYN packets
+    route_file = route_file + "[ $(sysctl net.ipv4.vs.sloppy_tcp -b) -eq 1 ] || sysctl -w net.ipv4.vs.sloppy_tcp=1\n";
+    // Do NOT reschedule a connection when destination
+    // doesn't exist anymore
+    route_file = route_file + "[ $(sysctl net.ipv4.vs.expire_nodest_conn -b) -eq 0 ] || sysctl -w net.ipv4.vs.expire_nodest_conn=0\n";
+    route_file = route_file + "[ $(sysctl net.ipv4.vs.expire_quiescent_template -b) -eq 0 ] || sysctl -w net.ipv4.vs.expire_quiescent_template=0\n";
+
     route_file = route_file + "sysctl -p\n";
 
 
