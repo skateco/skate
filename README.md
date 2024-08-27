@@ -25,7 +25,7 @@ Lets-encrypt provides the certificates.
 
 ## Getting Started
 
-To play around I suggest using [mulitpass](https://multipass.run/) to create a few Ubuntu VMs.
+To play around I suggest using [multipass](https://multipass.run/) to create a few Ubuntu VMs.
 You can use [./hack/clusterplz](./hack/clusterplz) to create a cluster of 2 nodes easily using multipass.
 Skate only supports private key authentication for now, so make sure your nodes are set up to allow you key.
 
