@@ -535,13 +535,19 @@ impl DefaultScheduler {
     }
 
     async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(String, String), Box<dyn Error>> {
+        let hook_result = resource.resource.pre_remove_hook(resource.node.as_ref().unwrap(), conns).await;
+
+
         let conn = conns.find(&resource.node.unwrap().node_name).ok_or("failed to find connection to host")?;
 
         let manifest = serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");
-        match conn.remove_resource_by_manifest(&manifest).await {
-            Ok((stdout, stderr)) => Ok((stdout, stderr)),
-            Err(err) => Err(err)
+        let remove_result = conn.remove_resource_by_manifest(&manifest).await;
+
+        if hook_result.is_err() {
+            return Err(hook_result.err().unwrap())
         }
+
+        remove_result
     }
 
     async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
@@ -565,7 +571,7 @@ impl DefaultScheduler {
                             if !stderr.is_empty() {
                                 eprintln!("{}", stderr)
                             }
-                            println!("{} deleted {} on node {} ", CHECKBOX_EMOJI, action.resource.name(), node_name);
+                            println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
                             result.push(action.clone());
                         }
                         Err(err) => {

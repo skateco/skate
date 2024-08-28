@@ -3,6 +3,7 @@ Description=Update keepalived config for service {{svc_name}}
 Requires=network-online.target
 After=network-online.target
 Wants=skate-ipvsmon-{{svc_name}}.timer
+StartLimitBurst=20
 
 [Service]
 Restart=no

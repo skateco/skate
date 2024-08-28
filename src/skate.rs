@@ -21,6 +21,7 @@ use std::env::var;
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir, File, metadata};
 use std::io::Read;
+use std::ops::Deref;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use path_absolutize::*;
@@ -39,7 +40,8 @@ use crate::describe::{DescribeArgs, describe};
 use crate::logs::{LogArgs, logs};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
-use crate::ssh::SshClient;
+use crate::ssh::{SshClient, SshClients};
+use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName, slugify, TARGET};
 
 
@@ -60,7 +62,7 @@ enum Commands {
     Get(GetArgs),
     Describe(DescribeArgs),
     Logs(LogArgs),
-    Config(ConfigArgs)
+    Config(ConfigArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -96,7 +98,7 @@ pub enum ResourceType {
     Ingress,
     CronJob,
     Secret,
-    Service
+    Service,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -128,6 +130,36 @@ impl SupportedResources {
             SupportedResources::CronJob(r) => metadata_name(r),
             SupportedResources::Secret(s) => metadata_name(s),
             SupportedResources::Service(s) => metadata_name(s),
+        }
+    }
+
+    pub async fn pre_remove_hook(&self, node: &NodeState, conns: &SshClients) -> Result<(), Box<dyn Error>> {
+        match self {
+            SupportedResources::Pod(pod) => {
+                let mut errs = vec!();
+                // remove the pod ip from dns on deployed node
+                let res = conns.find(&node.node_name).unwrap()
+                    .execute(&format!("sudo skatelet dns remove --pod-id {} && sudo skatelet dns reload", &pod.metadata.name.clone().unwrap())).await;
+                if res.is_err() {
+                    let err = res.err().unwrap();
+                    errs.push(err);
+                }
+                // run ipvsmon on all nodes
+                let res = conns.execute("sudo", &["systemctl", "start", &format!("skate-ipvsmon-{}.service", &self.name().to_string())]).await;
+                res.into_iter().for_each(|(node, result)| {
+                    if result.is_err() {
+                        let err = result.err().unwrap();
+                        errs.push(err);
+                    }
+                });
+
+                if ! errs.is_empty() {
+                    return Err(anyhow!(errs.iter().map(|e|e.to_string()).collect::<Vec<String>>().join(". ")).context("failed to run pre-remove hook").into());
+                }
+
+                Ok(())
+            }
+            _ => Ok(())
         }
     }
 
@@ -442,10 +474,10 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                             } else if
                             api_version == Service::API_VERSION &&
                                 kind == Service::KIND
-                                {
-                                    let service: Service = serde::Deserialize::deserialize(value)?;
-                                    result.push(SupportedResources::Service(service))
-                                }
+                            {
+                                let service: Service = serde::Deserialize::deserialize(value)?;
+                                result.push(SupportedResources::Service(service))
+                            }
                         }
                         _ => {
                             return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());

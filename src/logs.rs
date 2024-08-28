@@ -91,7 +91,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
 
     let cmd = cmd.join(" ");
 
-    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
+    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
 
     let result: Vec<_> = fut.collect().await;
 
@@ -117,7 +117,7 @@ pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType
 
     let cmd = cmd.join(" ");
 
-    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd)).collect();
+    let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
 
     let result: Vec<_> = fut.collect().await;
 

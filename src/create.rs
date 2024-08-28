@@ -224,7 +224,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     // seems to be missing when using kube play
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
-    conn.execute(cmd).await;
+    conn.execute_stdout(cmd, true, true).await;
 
     let (all_conns, _) = cluster_connections(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
@@ -235,7 +235,7 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         "dns",
         "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
 
-    _ = conn.execute(&format!("sudo mkdir -p {}", skate_dirs.join(" "))).await?;
+    _ = conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, &all_conns, &cluster, &node).await?;
@@ -294,26 +294,26 @@ async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> R
 async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
-    conn.execute("sudo apt-get install -y keepalived").await?;
-    conn.execute(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("./resources/keepalived.conf")))).await?;
-    conn.execute("sudo systemctl enable keepalived").await?;
-    conn.execute("sudo systemctl start keepalived").await?;
+    conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
+    conn.execute_stdout(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("./resources/keepalived.conf"))), true, true).await?;
+    conn.execute_stdout("sudo systemctl enable keepalived", true, true).await?;
+    conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
 
 
-    if conn.execute("test -f /etc/containers/containers.conf").await.is_err() {
+    if conn.execute_stdout("test -f /etc/containers/containers.conf", true, true).await.is_err() {
         let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-        conn.execute(cmd).await?;
+        conn.execute_stdout(cmd, true, true).await?;
 
         let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-        conn.execute(&cmd).await?;
+        conn.execute_stdout(&cmd, true, true).await?;
 
         let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-        conn.execute(&cmd).await?;
+        conn.execute_stdout(&cmd, true, true).await?;
 
-        let current_backend = conn.execute("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
+        let current_backend = conn.execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
         if current_backend.trim() != network_backend {
             // Since we've changed the network backend we need to reset
-            conn.execute("sudo podman system reset -f").await?;
+            conn.execute_stdout("sudo podman system reset -f", true, true).await?;
         }
 
         // TODO - especially don't do this unless needed
@@ -342,16 +342,16 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
 
     install_oci_hooks(conn).await?;
 
-    let cmd = "sudo podman run --rm -it busybox echo 1";
-    conn.execute(cmd).await?;
+    let cmd = "sudo podman run --rm busybox echo 1";
+    conn.execute_stdout(cmd, true, true).await?;
 
 
     let cmd = "sudo mkdir -p /etc/skate";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
 
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
 
     for conn in &all_conns.clients {
@@ -359,41 +359,41 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     }
 
     let cmd = "sudo podman image exists ghcr.io/skateco/coredns || sudo podman pull ghcr.io/skateco/coredns";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
 
     // In ubuntu 24.04 there's an issue with apparmor and podman
     // https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2040483
 
     let cmd = "sudo systemctl list-unit-files apparmor.service";
-    let apparmor_unit_exists = conn.execute(cmd).await;
+    let apparmor_unit_exists = conn.execute_stdout(cmd, true, true).await;
 
     if apparmor_unit_exists.is_ok() {
         let cmd = "sudo systemctl disable apparmor.service --now";
-        conn.execute(cmd).await?;
+        conn.execute_stdout(cmd, true, true).await?;
     }
     let cmd = "sudo aa-teardown";
-    _ = conn.execute(cmd).await;
+    _ = conn.execute_stdout(cmd, true, true).await;
     let cmd = "sudo apt purge -y apparmor";
-    _ = conn.execute(cmd).await;
+    _ = conn.execute_stdout(cmd, true, true).await;
 
 
     // disable systemd-resolved if exists
     let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
     // changed /etc/resolv.conf to be 127.0.0.1
     // neeed to use a symlink so that it's respected and not overridden by systemd
     let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
     let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
     Ok(())
 }
 
 async fn install_cni_plugin(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
-    conn.execute("sudo apt-get install -y containernetworking-plugins").await?;
+    conn.execute_stdout("sudo apt-get install -y containernetworking-plugins", true, true).await?;
 
     let cni = include_str!("./resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
         .replace("%%gateway%%", &gateway);
@@ -401,19 +401,19 @@ async fn install_cni_plugin(conn: &SshClient, gateway: String, subnet_cidr: Stri
     let cni = general_purpose::STANDARD.encode(cni.as_bytes());
 
     let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
 
     let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
     exec /usr/local/bin/skatelet cni < /dev/stdin
     ");
 
     let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
     Ok(())
 }
 
 async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
-    conn.execute("sudo mkdir -p /usr/share/containers/oci/hooks.d").await?;
+    conn.execute_stdout("sudo mkdir -p /usr/share/containers/oci/hooks.d", true, true).await?;
 
     let oci_poststart_hook = oci::HookConfig {
         version: "1.0.0".to_string(),
@@ -434,7 +434,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
 
     let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
     let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
 
 
     let oci_poststop = oci::HookConfig {
@@ -454,7 +454,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
     let serialized = serde_json::to_string(&oci_poststop).unwrap();
     let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
     let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
     Ok(())
 }
 
@@ -478,13 +478,13 @@ async fn install_netavark(conn: &SshClient, gateway: String, subnet_cidr: String
     let netvark_config = general_purpose::STANDARD.encode(netavark_config.as_bytes());
 
     let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/containers/networks/skate.json\"", netvark_config);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
     Ok(())
 }
 
 async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo mkdir -p /etc/skate";
-    conn.execute(cmd).await?;
+    conn.execute_stdout(cmd, true, true).await?;
 
     let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name).collect();
 
@@ -499,24 +499,24 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
 
 
-    route_file = route_file + "[ $(sysctl net.ipv4.ip_forward -b) -eq 1 ] || sysctl -w net.ipv4.ip_forward=1\n";
-    route_file = route_file + "[ $(sysctl fs.inotify.max_user_instances) -eq 1280 ] || sysctl fs.inotify.max_user_instances=1280\n";
-    route_file = route_file + "[ $(sysctl fs.inotify.max_user_watches) -eq 655360 ] || sysctl fs.inotify.max_user_watches=655360\n";
+    route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
+    route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
+    route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
 
     // Virtual Server stuff
     // Schedule non-SYN packets
-    route_file = route_file + "[ $(sysctl net.ipv4.vs.sloppy_tcp -b) -eq 1 ] || sysctl -w net.ipv4.vs.sloppy_tcp=1\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.sloppy_tcp=1\n";
     // Do NOT reschedule a connection when destination
     // doesn't exist anymore
-    route_file = route_file + "[ $(sysctl net.ipv4.vs.expire_nodest_conn -b) -eq 0 ] || sysctl -w net.ipv4.vs.expire_nodest_conn=0\n";
-    route_file = route_file + "[ $(sysctl net.ipv4.vs.expire_quiescent_template -b) -eq 0 ] || sysctl -w net.ipv4.vs.expire_quiescent_template=0\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.expire_nodest_conn=0\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.expire_quiescent_template=0\n";
 
     route_file = route_file + "sysctl -p\n";
 
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
     let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
 
 
     // Create systemd unit file to call the skate routes file on startup after internet
@@ -526,11 +526,11 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
     let unit_file = general_purpose::STANDARD.encode(unit_file.as_bytes());
 
     let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", unit_file, path);
-    conn.execute(&cmd).await?;
+    conn.execute_stdout(&cmd, true, true).await?;
 
-    conn.execute("sudo systemctl daemon-reload").await?;
-    conn.execute("sudo systemctl enable skate-routes.service").await?;
-    _ = conn.execute("sudo systemctl start skate-routes.service").await?;
+    conn.execute_stdout("sudo systemctl daemon-reload", true, true).await?;
+    conn.execute_stdout("sudo systemctl enable skate-routes.service", true, true).await?;
+    _ = conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;
 
     Ok(())
 }

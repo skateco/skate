@@ -11,6 +11,7 @@ use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
 use serde_json::Value::String as JsonString;
 use crate::skatelet::dns;
+use crate::skatelet::dns::RemoveArgs;
 use crate::util::spawn_orphan_process;
 
 
@@ -100,7 +101,7 @@ fn run() -> Result<String, Box<dyn Error>> {
             let container_id = var("CNI_CONTAINERID")?;
 
             // Do stuff
-            dns::remove(container_id)?;
+            dns::remove(RemoveArgs{container_id: Some(container_id), pod_id: None})?;
             serde_json::to_writer(io::stdout(), &json)?;
         }
         "CHECK" => {

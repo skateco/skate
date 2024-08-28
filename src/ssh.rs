@@ -183,12 +183,12 @@ echo ovs=$(cat /tmp/ovs-$$);
 ";
 
 
-        let result = self.execute(cmd).await?;
+        let result = self.execute_noisy(cmd).await?;
         // find filename withing result.stdout
         let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
 
         let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && sudo mv skatelet skatelet-netavark /usr/local/bin ", url);
-        let _ = self.execute(&cmd).await?;
+        let _ = self.execute_stdout(&cmd, true, true).await?;
 
 
         Ok(())
@@ -243,7 +243,11 @@ echo ovs=$(cat /tmp/ovs-$$);
         }
     }
 
-    pub async fn execute_stdout(self: &SshClient, cmd: &str) -> Result<(), Box<dyn Error>> {
+    pub async fn execute_stdout(self: &SshClient, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>> {
+        if print_command {
+            cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
+        }
+
         let mut ch = self.client.get_channel().await?;
         let _ = ch.exec(true, cmd).await?;
 
@@ -253,10 +257,20 @@ echo ovs=$(cat /tmp/ovs-$$);
             //dbg!(&msg);
             match msg {
                 // If we get data, add it to the buffer
-                russh::ChannelMsg::Data { ref data } => print!("{}", &String::from_utf8_lossy(&data.to_vec())),
+                russh::ChannelMsg::Data { ref data } => {
+                    if prefix_output {
+                        print!("{} | {}", self.node_name, &String::from_utf8_lossy(&data.to_vec()))
+                    } else {
+                        print!("{}", &String::from_utf8_lossy(&data.to_vec()))
+                    }
+                },
                 russh::ChannelMsg::ExtendedData { ref data, ext } => {
                     if ext == 1 {
-                        eprint!("{}", &String::from_utf8_lossy(&data.to_vec()))
+                        if prefix_output {
+                            print!("{} | {}", self.node_name, &String::from_utf8_lossy(&data.to_vec()))
+                        } else {
+                            print!("{}", &String::from_utf8_lossy(&data.to_vec()))
+                        }
                     }
                 }
                 // If we get an exit code report, store it, but crucially don't
@@ -278,8 +292,14 @@ echo ovs=$(cat /tmp/ovs-$$);
         Err(anyhow!("exit status {}", result.unwrap()).into())
     }
 
-    pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+
+    // TODO-merge this into execute_stdout
+    pub async fn execute_noisy(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
         cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
+        self.execute(cmd).await
+    }
+
+    pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
         let result = self.client.execute(cmd).await.
             map_err(|e| anyhow!(e).context(format!("{} failed", cmd)))?;
         if result.exit_status > 0 {
@@ -391,10 +411,24 @@ impl SshClients {
     pub fn find(&self, node_name: &str) -> Option<&SshClient> {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
+
     pub async fn execute(&self, command: &str, args: &[&str]) -> Vec<(String, Result<String, Box<dyn Error>>)> {
         let concat_command = &format!("{} {}", &command, args.join(" "));
         let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
             c.execute(concat_command)
+        }).collect();
+        let result: Vec<Result<_, _>> = fut.collect().await;
+
+        result.into_iter().enumerate().map(|(i, r)| {
+            let node_name = self.clients[i].node_name.clone();
+            (node_name, r)
+        }).collect()
+    }
+
+    pub async fn execute_noisy(&self, command: &str, args: &[&str]) -> Vec<(String, Result<String, Box<dyn Error>>)> {
+        let concat_command = &format!("{} {}", &command, args.join(" "));
+        let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
+            c.execute_noisy(concat_command)
         }).collect();
         let result: Vec<Result<_, _>> = fut.collect().await;
 

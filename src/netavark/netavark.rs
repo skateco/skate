@@ -8,6 +8,7 @@ use netavark::{
 };
 use crate::skatelet::dns;
 use log::info;
+use crate::skatelet::dns::RemoveArgs;
 use crate::util::spawn_orphan_process;
 
 pub fn netavark() {
@@ -59,7 +60,7 @@ impl Plugin for Exec {
     ) -> Result<(), Box<dyn std::error::Error>> {
         info!("teardown");
         // remove dns entry
-        dns::remove(opts.container_id)?;
+        dns::remove(RemoveArgs{container_id: Some(opts.container_id), pod_id: None})?;
         Ok(())
     }
 }

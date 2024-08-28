@@ -17,7 +17,9 @@ pub enum Command {
     Add(AddArgs),
     Remove(RemoveArgs),
     Enable(EnableArgs),
+    Reload,
 }
+
 #[derive(Debug, Args)]
 pub struct DnsArgs {
     #[command(subcommand)]
@@ -30,8 +32,9 @@ pub fn dns(args: DnsArgs) -> Result<(), Box<dyn Error>> {
     }));
     match args.command {
         Command::Add(add_args) => add(add_args.container_id, add_args.ip),
-        Command::Remove(remove_args) => remove(remove_args.container_id),
+        Command::Remove(remove_args) => remove(remove_args),
         Command::Enable(enable_args) => wait_and_enable_healthy(enable_args.container_id),
+        Command::Reload => reload()
     }
 }
 
@@ -316,10 +319,28 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
 
 #[derive(Debug, Args)]
 pub struct RemoveArgs {
-    container_id: String,
+    #[arg(long, long_help = "The container to remove dns entry for")]
+    pub container_id: Option<String>,
+    #[arg(long, long_help = "The pod to remove dns entry for")]
+    pub pod_id: Option<String>,
 }
 
-pub fn remove(tag: String) -> Result<(), Box<dyn Error>> {
+pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
+    let tag = {
+        if args.container_id.is_some() {
+            args.container_id.unwrap()
+        } else if args.pod_id.is_some() {
+            // get infra container
+            let output = exec_cmd("podman", &["pod", "inspect", &args.pod_id.unwrap()])?;
+            let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
+            let infra_container_id = json["InfraContainerID"].as_str().ok_or_else(|| anyhow!("no infra container found"))?;
+            infra_container_id.to_string()
+        } else {
+            return Err(anyhow!("no container or pod id supplied").into());
+        }
+    };
+
+
     let log_tag = format!("{}::remove", tag);
     info!("{} removing dns entry for {}", log_tag, tag);
     ensure_skatelet_dns_conf_dir();
@@ -360,4 +381,15 @@ pub fn remove(tag: String) -> Result<(), Box<dyn Error>> {
         fs::rename(&newaddnhosts_path, &addnhosts_path)?;
         Ok(())
     }))
+}
+
+pub fn reload() -> Result<(), Box<dyn Error>> {
+    let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=coredns", "-q"])?;
+
+    if id.is_empty() {
+        return Err(anyhow!("no coredns container found").into());
+    }
+
+    let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &id])?;
+    Ok(())
 }

@@ -4,6 +4,7 @@ use clap::{Args, Subcommand};
 use log::{error, info};
 use strum_macros::EnumString;
 use crate::skatelet::dns;
+use crate::skatelet::dns::RemoveArgs;
 use crate::skatelet::skatelet::log_panic;
 use crate::util::spawn_orphan_process;
 
@@ -19,7 +20,6 @@ pub struct OciArgs {
 }
 
 pub(crate) fn oci(args: OciArgs) -> Result<(), Box<dyn Error>> {
-
     panic::set_hook(Box::new(move |info| {
         log_panic(info)
     }));
@@ -50,7 +50,7 @@ fn post_start() -> Result<(), Box<dyn Error>> {
 fn post_stop() -> Result<(), Box<dyn Error>> {
     info!("poststop");
     let id = container_id()?;
-    dns::remove(id)
+    dns::remove(RemoveArgs { container_id: Some(id), pod_id: None })
 }
 
 fn container_id() -> Result<String, Box<dyn Error>> {

@@ -216,7 +216,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] More idempotent install
 - Scheduling
     - [ ] Rolling Deployments
-    - [ ] Remove vip realserver from all nodes before removing pod.
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
 - Pods
     - [ ] Remove
@@ -247,6 +246,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Use something fancier like vxlan, tailscale etc
 - DNS
     - [ ] something more barebones than coredns??
+    - [ ] Leave resolvd in place: dns should fallback to host dns
 - Ingress
     - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
@@ -257,4 +257,3 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Service
   - [ ] maybe static ips?
   - [ ] use quorum_up and quorum_down in keepalived to toggle a 503 in ingress. 
-  - [ ] remove ip from the pool before a pod in a service is removed

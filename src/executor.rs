@@ -19,6 +19,7 @@ use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::skatelet::dns;
+use crate::skatelet::dns::RemoveArgs;
 use crate::util::{hash_string, lock_file, metadata_name};
 
 pub trait Executor {
@@ -376,7 +377,7 @@ impl DefaultExecutor {
 
     fn remove_service(&self, service: Service) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&service);
-        dns::remove(format!("{}.svc.cluster.skate", ns_name))?;
+        dns::remove(RemoveArgs { container_id: Some(format!("{}.svc.cluster.skate", ns_name)), pod_id: None })?;
 
         let _ = exec_cmd("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
 
