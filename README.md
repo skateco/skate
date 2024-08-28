@@ -108,6 +108,14 @@ Check the deployment
 skate get deployment -n my-app
 ```
 
+### Built on
+- Podman
+- Openresty
+- Coredns
+- LVS
+- Keepalived
+- Systemd
+
 ### Networking
 
 Static routes between hosts, maintained by a systemd unit file.
