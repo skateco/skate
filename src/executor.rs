@@ -443,12 +443,15 @@ impl DefaultExecutor {
 
         let grace_str = format!("{}", grace);
         println!("gracefully stopping {}", id);
-        let stop_cmd = [
-            vec!("pod", "stop", "-t", &grace_str),
-            vec!(&id),
-        ].concat();
 
-        let result = exec_cmd("podman", &stop_cmd);
+        let containers = exec_cmd("podman", &["pod", "inspect", &id, "--format={{range.Containers}}{{.Id}} {{end}}"])?;
+        let containers = containers.split_ascii_whitespace().collect();
+
+        let _ = exec_cmd("podman", &["pod", "kill", "--signal", "SIGTERM", &id]);
+
+
+        let args = [vec!(&grace_str, "podman", "wait"), containers].concat();
+        let result = exec_cmd("timeout", &args);
 
         if result.is_err() {
             eprintln!("failed to stop {}: {}", id, result.unwrap_err());

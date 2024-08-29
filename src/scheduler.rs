@@ -565,11 +565,9 @@ impl DefaultScheduler {
 
                     match Self::remove_existing(conns, action.clone()).await {
                         Ok((stdout, stderr)) => {
-                            if !stdout.is_empty() {
-                                println!("{}", stdout);
-                            }
+                            println!("{}", stdout.trim());
                             if !stderr.is_empty() {
-                                eprintln!("{}", stderr)
+                                eprintln!("{}", stderr.trim())
                             }
                             println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
                             result.push(action.clone());
@@ -599,10 +597,10 @@ impl DefaultScheduler {
                     let serialized = serde_yaml::to_string(&action.resource).expect("failed to serialize object");
 
                     match client.apply_resource(&serialized).await {
-                        Ok((stdout, stderr)) => {
-                            if !stdout.trim().is_empty() {
-                                stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
-                            }
+                        Ok((_, stderr)) => {
+                            // if !stdout.trim().is_empty() {
+                            //     stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
+                            // }
                             if !stderr.is_empty() {
                                 stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
                             }

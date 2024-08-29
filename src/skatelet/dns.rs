@@ -8,6 +8,7 @@ use clap::{Args, Subcommand};
 use log::{debug, info, warn};
 use crate::util::{lock_file, spawn_orphan_process};
 use std::io::prelude::*;
+use std::thread::sleep;
 use serde_json::Value;
 use crate::skate::exec_cmd;
 use crate::skatelet::skatelet::log_panic;
@@ -390,6 +391,7 @@ pub fn reload() -> Result<(), Box<dyn Error>> {
         return Err(anyhow!("no coredns container found").into());
     }
 
+    // doesn't seem to work
     let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &id])?;
     Ok(())
 }

@@ -252,6 +252,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Debug why setting up routes again breaks existing container -> route
         - Most likely to do with force deleting the podman network
     - [ ] Use something fancier like vxlan, tailscale etc
+    - [ ] Keep a ttld termination list in /var/lib/skate/keepalived  (dns name -> ip) and set weight to 0 for those in keepalived
 - DNS
     - [ ] something more barebones than coredns??
     - [ ] Leave resolvd in place: dns should fallback to host dns

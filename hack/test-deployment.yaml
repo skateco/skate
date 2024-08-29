@@ -10,7 +10,7 @@ spec:
   template:
     spec:
       containers:
-      - name: nginx1
+      - name: echo
         image: nginx:1.14.2
         env:
         - name: TEST_SECRET
