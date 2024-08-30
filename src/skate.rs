@@ -124,6 +124,7 @@ impl SupportedResources {
     pub fn name(&self) -> NamespacedName {
         match self {
             SupportedResources::Pod(r) => metadata_name(r),
+            //SupportedResources::Pod(r) => NamespacedName{name: r.metadata.name.clone().unwrap_or_default(), namespace: r.metadata.labels.clone().unwrap_or_default().get("skate.io/namespace").unwrap_or(&"default".to_string())},
             SupportedResources::Deployment(r) => metadata_name(r),
             SupportedResources::DaemonSet(r) => metadata_name(r),
             SupportedResources::Ingress(r) => metadata_name(r),

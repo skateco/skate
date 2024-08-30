@@ -68,7 +68,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     let ns = manifest.metadata.namespace.unwrap_or("default".to_string());
     let fqn = NamespacedName { name, namespace: ns.clone() };
 
-    cleanup(&fqn.to_string());
+    let cleanup_changed_things = cleanup(&fqn.to_string());
 
     manifest.metadata.namespace = Some(ns);
 
@@ -81,7 +81,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
 
 
     // hashes match and output file exists
-    if !hash_changed(&addrs, &fqn.to_string())? && Path::new(&args.out).exists() {
+    if !hash_changed(&addrs, &fqn.to_string())? && Path::new(&args.out).exists() && !cleanup_changed_things {
         info!("ips haven't changed: {:?}", &addrs);
         return Ok(());
     }
@@ -152,12 +152,21 @@ fn cleanup(service_name: &str) -> bool {
     let cleanup_file = cleanup_last_run_file_name(service_name);
     let now = chrono::Utc::now().timestamp();
     let last_run = fs::read_to_string(&cleanup_file).unwrap_or_default().parse::<i64>().unwrap_or_default();
-    if now - last_run > 300 {
-        let _ = cleanup_terminated_list(service_name);
-        fs::write(cleanup_file, format!("{}", now)).is_ok()
-    } else {
-        false
+    if now - last_run > 30 {
+        let changed = cleanup_terminated_list(service_name).unwrap_or_else(|e| {
+            info!("failed to clean up terminated list: {}", e);
+            false
+        });
+
+        match fs::write(cleanup_file, format!("{}", now)) {
+            Err(e) => {
+                info!("failed to write cleanup file: {}", e);
+            }
+            Ok(_) => {}
+        };
+        return changed;
     }
+    false
 }
 
 fn terminated_list_file_name(service_name: &str) -> String {
@@ -222,18 +231,22 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
 
     Ok(deleted)
 }
-
-fn cleanup_terminated_list(service_name: &str) -> Result<(), Box<dyn Error>> {
+// TODO - remove straight away if ipvs active + inactive conns = 0
+fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
     info!("cleaning up terminated list for {}", service_name);
-    let mut file = OpenOptions::new().write(true).append(true).create(true).open(terminated_list_file_name(service_name))?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+    let mut contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
+        Ok(contents) => contents,
+        Err(_) => return Ok(false)
+    };
+
     let mut new_contents = String::new();
     // want DEL lines first
 
     let now = chrono::Utc::now().timestamp();
 
-    let mut ip_set = HashSet::new();
+    let mut keep_set = HashSet::new();
+
+    let mut changed = false;
 
     for line in contents.lines().sorted().rev() {
         let parts: Vec<_> = line.split_whitespace().collect();
@@ -243,18 +256,25 @@ fn cleanup_terminated_list(service_name: &str) -> Result<(), Box<dyn Error>> {
         let ip = parts[0];
         let ts = parts[1].parse::<i64>()?;
 
-        if ip_set.contains(ip) {
+        if keep_set.contains(ip) {
+            changed = true;
             continue;
         }
-        if now - ts > 300 {
-            ip_set.insert(ip);
+        // terminated less than 5 minutes ago
+        if now - ts < 300 {
+            info!("keeping {} since it was terminated less than 5 minutes ago ({} seconds ago)", ip, now-ts);
+            keep_set.insert(ip);
+            new_contents.push_str(line);
+            new_contents.push_str("\n");
             continue;
         }
-        new_contents.push_str(line);
-        new_contents.push_str("\n");
+
+        changed = true
     }
 
-    file.seek(std::io::SeekFrom::Start(0))?;
-    file.write_all(new_contents.as_bytes())?;
-    Ok(())
+    if changed {
+        fs::write(terminated_list_file_name(service_name), new_contents)?;
+    }
+
+    Ok(changed)
 }
