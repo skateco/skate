@@ -68,7 +68,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     let ns = manifest.metadata.namespace.unwrap_or("default".to_string());
     let fqn = NamespacedName { name, namespace: ns.clone() };
 
-    let cleanup_changed_things = cleanup(&fqn.to_string());
+    cleanup(&fqn.to_string());
 
     manifest.metadata.namespace = Some(ns);
 
@@ -79,20 +79,23 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     let addrs: HashSet<_> = domain.to_socket_addrs().unwrap_or_default()
         .map(|addr| addr.ip().to_string()).collect();
 
+    let terminating = terminated_list(&fqn.to_string())?;
 
+
+    let something_changed = hash_changed(&addrs, &terminating, &fqn.to_string())?
+        || !Path::new(&args.out).exists();
     // hashes match and output file exists
-    if !hash_changed(&addrs, &fqn.to_string())? && Path::new(&args.out).exists() && !cleanup_changed_things {
-        info!("ips haven't changed: {:?}", &addrs);
+    if !something_changed {
+        info!("no changes detected: {:?}", &addrs);
         return Ok(());
     }
 
-    info!("ips changed, rewriting keepalived config for {} -> {:?}", &args.host, &addrs);
+    info!("changes detected, rewriting keepalived config for {} -> {:?}", &args.host, &addrs);
     // check the old ADD ips in the cache file (remove those with a DEL line)
-    let deleted = terminated_list(&fqn.to_string())?;
     let last_result = lastresult_list(&fqn.to_string())?;
     let _ = lastresult_save(&fqn.to_string(), &addrs.iter().map(|i| i.clone()).collect())?;
     // remove deleted items that are in the latest result
-    let deleted = deleted.iter().map(|i| i.clone()).filter(|i| !addrs.contains(i)).collect::<Vec<String>>();
+    let deleted = terminating.iter().map(|i| i.clone()).filter(|i| !addrs.contains(i)).collect::<Vec<String>>();
 
     // find those that are now missing, add those to the cache file under DEL
     let missing_now: Vec<_> = last_result.difference(&addrs).map(|i| i.clone()).collect();
@@ -132,11 +135,16 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn hash_changed(addrs: &HashSet<String>, service_name: &str) -> Result<bool, Box<dyn Error>> {
-    let mut hasher = DefaultHasher::new();
+fn hash_changed(addrs: &HashSet<String>, terminating: &HashSet<String>, service_name: &str) -> Result<bool, Box<dyn Error>> {
+    let mut addrs_hasher = DefaultHasher::new();
     let addrs: Vec<_> = addrs.iter().map(|i| i.clone()).sorted().collect();
-    addrs.hash(&mut hasher);
-    let new_hash = format!("{:x}", hasher.finish());
+    addrs.hash(&mut addrs_hasher);
+
+    let mut terminating_hasher = DefaultHasher::new();
+    let deleted: Vec<_> = terminating.iter().map(|i| i.clone()).sorted().collect();
+    deleted.hash(&mut terminating_hasher);
+
+    let new_hash = format!("{:x}|{:x}", addrs_hasher.finish(), terminating_hasher.finish());
     let hash_file_name = format!("/run/skatelet-ipvsmon-{}.hash", service_name);
 
     let old_hash = fs::read_to_string(&hash_file_name).unwrap_or_default();
