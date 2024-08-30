@@ -126,10 +126,6 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
         }), file)?;
     }
 
-    // TODO move this to service creation
-    // need to do this here since
-    let _ = exec_cmd("systemctl", &["start", "keepalived"])?;
-
     // reload keepalived
     let _ = exec_cmd("systemctl", &["reload", "keepalived"])?;
     Ok(())

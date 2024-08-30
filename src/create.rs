@@ -177,6 +177,8 @@ async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     println!("{:}", &info.platform);
 
+    conn.execute_stdout("sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade", true, true).await?;
+
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
@@ -297,8 +299,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
     conn.execute_stdout(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("./resources/keepalived.conf"))), true, true).await?;
     conn.execute_stdout("sudo systemctl enable keepalived", true, true).await?;
-    // can't start now since we need some vips for it to stay running
-    //conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
+    conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
 
 
     if conn.execute_stdout("test -f /etc/containers/containers.conf", true, true).await.is_err() {
@@ -370,8 +371,8 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     let apparmor_unit_exists = conn.execute_stdout(cmd, true, true).await;
 
     if apparmor_unit_exists.is_ok() {
-        let cmd = "sudo systemctl disable apparmor.service --now";
-        conn.execute_stdout(cmd, true, true).await?;
+        conn.execute_stdout("sudo systemctl stop apparmor.service", true, true).await?;
+        conn.execute_stdout("sudo systemctl disable apparmor.service --now", true, true).await?;
     }
     let cmd = "sudo aa-teardown";
     _ = conn.execute_stdout(cmd, true, true).await;
