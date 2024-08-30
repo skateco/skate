@@ -564,8 +564,8 @@ impl DefaultScheduler {
                     let node_name = action.node.clone().unwrap().node_name;
 
                     match Self::remove_existing(conns, action.clone()).await {
-                        Ok((stdout, stderr)) => {
-                            println!("{}", stdout.trim());
+                        Ok((_, stderr)) => {
+                            // println!("{}", stdout.trim());
                             if !stderr.is_empty() {
                                 eprintln!("{}", stderr.trim())
                             }
