@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
 use colored::Colorize;
+use russh::CryptoVec;
 
 pub struct SshClient {
     pub node_name: String,
@@ -243,6 +244,21 @@ echo ovs=$(cat /tmp/ovs-$$);
         }
     }
 
+    fn print_crypto_vec(self: &SshClient, data: &CryptoVec, prefix_output: bool, prev_last_char: char) -> char {
+        let binding = data.to_vec();
+        let s = String::from_utf8_lossy(&binding);
+        if prefix_output && prev_last_char == '\n' {
+            print!("{} | {}", self.node_name, s);
+        } else {
+            print!("{}", s);
+        }
+        if s.len() > 0 {
+            s.chars().last().unwrap()
+        } else {
+            prev_last_char
+        }
+    }
+
     pub async fn execute_stdout(self: &SshClient, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>> {
         if print_command {
             cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
@@ -252,25 +268,18 @@ echo ovs=$(cat /tmp/ovs-$$);
         let _ = ch.exec(true, cmd).await?;
 
         let mut result: Option<_> = None;
+        let mut last_char = '\n';
 
         while let Some(msg) = ch.wait().await {
             //dbg!(&msg);
             match msg {
                 // If we get data, add it to the buffer
                 russh::ChannelMsg::Data { ref data } => {
-                    if prefix_output {
-                        print!("{} | {}", self.node_name, &String::from_utf8_lossy(&data.to_vec()))
-                    } else {
-                        print!("{}", &String::from_utf8_lossy(&data.to_vec()))
-                    }
-                },
+                    last_char = self.print_crypto_vec(data, prefix_output, last_char);
+                }
                 russh::ChannelMsg::ExtendedData { ref data, ext } => {
                     if ext == 1 {
-                        if prefix_output {
-                            print!("{} | {}", self.node_name, &String::from_utf8_lossy(&data.to_vec()))
-                        } else {
-                            print!("{}", &String::from_utf8_lossy(&data.to_vec()))
-                        }
+                        last_char = self.print_crypto_vec(data, prefix_output, last_char);
                     }
                 }
                 // If we get an exit code report, store it, but crucially don't
@@ -306,7 +315,7 @@ echo ovs=$(cat /tmp/ovs-$$);
             return Err(anyhow!(result.stderr).context(format!("{} failed", cmd)).into());
         }
         if result.stdout.len() > 0 {
-            result.stdout.lines().for_each(|l| println!("{} |   {}", self.node_name, l));
+            // result.stdout.lines().for_each(|l| println!("{} |   {}", self.node_name, l));
         }
         Ok(result.stdout)
     }
@@ -412,10 +421,9 @@ impl SshClients {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
 
-    pub async fn execute(&self, command: &str, args: &[&str]) -> Vec<(String, Result<String, Box<dyn Error>>)> {
-        let concat_command = &format!("{} {}", &command, args.join(" "));
+    pub async fn execute(&self, command: &str) -> Vec<(String, Result<String, Box<dyn Error>>)> {
         let fut: FuturesUnordered<_> = self.clients.iter().map(|c| {
-            c.execute(concat_command)
+            c.execute(command)
         }).collect();
         let result: Vec<Result<_, _>> = fut.collect().await;
 

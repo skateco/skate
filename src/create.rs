@@ -297,7 +297,8 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
     conn.execute_stdout(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("./resources/keepalived.conf"))), true, true).await?;
     conn.execute_stdout("sudo systemctl enable keepalived", true, true).await?;
-    conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
+    // can't start now since we need some vips for it to stay running
+    //conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
 
 
     if conn.execute_stdout("test -f /etc/containers/containers.conf", true, true).await.is_err() {
@@ -497,25 +498,30 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
         route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }
 
-
+    // load kernel modules
+    route_file = route_file + "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
 
     route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
     route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
     route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
 
     // Virtual Server stuff
-    // Schedule non-SYN packets
-    route_file = route_file + "sysctl -w net.ipv4.vs.sloppy_tcp=1\n";
-    // Do NOT reschedule a connection when destination
-    // doesn't exist anymore
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_nodest_conn=0\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_quiescent_template=0\n";
+    // taken from https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/proxier.go#L295
+    route_file = route_file + "sysctl -w net.ipv4.vs.conntrack=1\n";
+    // since we're using conntrac we need to increase the max so we dont exhaust it
+    route_file = route_file + "sysctl net.nf_conntrack_max=512000\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
+    route_file = route_file + "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
+    // configurable in kube-proxy
+    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_ignore=1\n";
+    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_announce=2\n";
 
     route_file = route_file + "sysctl -p\n";
 
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
-    let cmd = format!("sudo bash -c -eu \"echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh\"", route_file);
+    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh'", route_file);
     conn.execute_stdout(&cmd, true, true).await?;
 
 

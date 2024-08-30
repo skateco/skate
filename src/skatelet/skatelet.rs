@@ -11,7 +11,7 @@ use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
 use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::dns::{dns, DnsArgs};
-use crate::skatelet::ipvsmon::{ipvsmon, IpvsmonArgs};
+use crate::skatelet::ipvs::{ipvs, IpvsArgs};
 use crate::skatelet::oci::{oci, OciArgs};
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
@@ -35,7 +35,7 @@ enum Commands {
     Dns(DnsArgs),
     Cni,
     Oci(OciArgs),
-    Ipvsmon(IpvsmonArgs)
+    Ipvs(IpvsArgs)
 }
 
 pub fn log_panic(info: &PanicInfo) {
@@ -100,7 +100,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
         },
         Commands::Dns(args) => dns(args),
         Commands::Oci(args) => oci(args),
-        Commands::Ipvsmon(args) => ipvsmon(args),
+        Commands::Ipvs(args) => ipvs(args),
         // _ => Ok(())
     };
     match result {

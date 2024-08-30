@@ -326,6 +326,7 @@ pub struct RemoveArgs {
     pub pod_id: Option<String>,
 }
 
+// remove prints the ip of any dns entry that the container or pod had
 pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
     let tag = {
         if args.container_id.is_some() {
@@ -347,6 +348,7 @@ pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
     ensure_skatelet_dns_conf_dir();
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");
     let newaddnhosts_path = Path::new(&conf_path_str()).join("addnhosts-new");
+
     // Do stuff
     lock(Box::new(move || {
         // scope to make sure files closed after
@@ -375,6 +377,10 @@ pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
                 let line = line?;
                 if !line.ends_with(&tag) {
                     writeln!(writer, "{}", line)?;
+                } else {
+                    // ip is first column
+                    let ip = line.split_whitespace().nth(0).unwrap();
+                    println!("{}", ip);
                 }
             }
         }

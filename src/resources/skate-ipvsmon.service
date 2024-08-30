@@ -7,7 +7,7 @@ StartLimitBurst=20
 
 [Service]
 Restart=no
-ExecStart=/usr/local/bin/skatelet ipvsmon {{ip}} {{yaml_path}} --out /var/lib/skate/keepalived/{{svc_name}}.conf
+ExecStart=/usr/local/bin/skatelet ipvs sync {{ip}} {{yaml_path}} --out /var/lib/skate/keepalived/{{svc_name}}.conf
 User=root
 Group=root
 Type=oneshot

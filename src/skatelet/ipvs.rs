@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use crate::skate::exec_cmd;
 use crate::util::NamespacedName;
 use anyhow::anyhow;
-use clap::Args;
+use clap::{Args, Subcommand};
 use handlebars::Handlebars;
 use k8s_openapi::api::core::v1::Service;
 use log::info;
@@ -16,25 +16,48 @@ use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use itertools::Itertools;
 
+
+#[derive(Clone, Debug, Subcommand)]
+pub enum Commands {
+    #[command(about = "synchronise a service's ips")]
+    Sync(SyncArgs),
+    #[command(about = "disable a service's target ips")]
+    DisableIp(DisableIpArgs),
+}
+
 #[derive(Debug, Args)]
-pub struct IpvsmonArgs {
+pub struct IpvsArgs {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+
+pub fn ipvs(args: IpvsArgs) -> Result<(), Box<dyn Error>> {
+    match args.command {
+        Commands::Sync(args) => sync(args),
+        Commands::DisableIp(args) => disable_ips(args),
+    }
+}
+
+#[derive(Clone, Debug, Args)]
+pub struct DisableIpArgs {
+    host: String,
+    ips: Vec<String>,
+}
+
+fn disable_ips(args: DisableIpArgs) -> Result<(), Box<dyn Error>> {
+    terminated_add(&args.host, &args.ips)
+}
+
+#[derive(Clone, Debug, Args)]
+pub struct SyncArgs {
     #[arg(long, long_help = "Name of the file to write keepalived config to.")]
     out: String,
     host: String,
     file: String,
 }
 
-// for each dns we get we add it to /run/skate-ipvsmon-<service>.cache
-// <op> <ip> <timestamp>
-// ADD 10.0.0.99 1724929735
-// when the ip disappears, we add the following in the file
-// DEL <ip> <newtimestamp>
-// DEL 10.0.0.99 1724929767
-// periodically we clean the file from entries older than 5 minutes
-// ipvsmon reads the ips from the file, adding any DEL's with weight 0
-
-
-pub fn ipvsmon(args: IpvsmonArgs) -> Result<(), Box<dyn Error>> {
+pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     // args.service_name is fqn like foo.bar
     let mut manifest: Service = serde_yaml::from_str(&fs::read_to_string(args.file)?)?;
     let spec = manifest.spec.clone().unwrap_or_default();
@@ -44,6 +67,9 @@ pub fn ipvsmon(args: IpvsmonArgs) -> Result<(), Box<dyn Error>> {
     }
     let ns = manifest.metadata.namespace.unwrap_or("default".to_string());
     let fqn = NamespacedName { name, namespace: ns.clone() };
+
+    cleanup(&fqn.to_string());
+
     manifest.metadata.namespace = Some(ns);
 
 
@@ -64,7 +90,7 @@ pub fn ipvsmon(args: IpvsmonArgs) -> Result<(), Box<dyn Error>> {
     // check the old ADD ips in the cache file (remove those with a DEL line)
     let deleted = terminated_list(&fqn.to_string())?;
     let last_result = lastresult_list(&fqn.to_string())?;
-    let _ = lastresult_save(&fqn.to_string(), &addrs.iter().map(|i|i.clone()).collect())?;
+    let _ = lastresult_save(&fqn.to_string(), &addrs.iter().map(|i| i.clone()).collect())?;
     // remove deleted items that are in the latest result
     let deleted = deleted.iter().map(|i| i.clone()).filter(|i| !addrs.contains(i)).collect::<Vec<String>>();
 
@@ -97,6 +123,9 @@ pub fn ipvsmon(args: IpvsmonArgs) -> Result<(), Box<dyn Error>> {
         }), file)?;
     }
 
+    // TODO move this to service creation
+    // need to do this here since
+    let _ = exec_cmd("systemctl", &["start", "keepalived"])?;
 
     // reload keepalived
     let _ = exec_cmd("systemctl", &["reload", "keepalived"])?;
@@ -119,12 +148,27 @@ fn hash_changed(addrs: &HashSet<String>, service_name: &str) -> Result<bool, Box
     Ok(changed)
 }
 
+fn cleanup(service_name: &str) -> bool {
+    let cleanup_file = cleanup_last_run_file_name(service_name);
+    let now = chrono::Utc::now().timestamp();
+    let last_run = fs::read_to_string(&cleanup_file).unwrap_or_default().parse::<i64>().unwrap_or_default();
+    if now - last_run > 300 {
+        let _ = cleanup_terminated_list(service_name);
+        fs::write(cleanup_file, format!("{}", now)).is_ok()
+    } else {
+        false
+    }
+}
+
 fn terminated_list_file_name(service_name: &str) -> String {
     format!("/run/skatelet-ipvsmon-{}.terminated", service_name)
 }
 
 fn last_result_file_name(service_name: &str) -> String {
     format!("/run/skatelet-ipvsmon-{}.lastresult", service_name)
+}
+fn cleanup_last_run_file_name(service_name: &str) -> String {
+    format!("/run/skatelet-ipvsmon-{}.cleanup", service_name)
 }
 
 fn lastresult_save(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn Error>> {
@@ -149,6 +193,8 @@ fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn E
 }
 
 fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>> {
+    let now = chrono::Utc::now().timestamp();
+
     let mut contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
         Ok(contents) => contents,
         Err(_) => return Ok(HashSet::new())
@@ -158,11 +204,15 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
 
     for line in contents.lines().sorted().rev() {
         let parts: Vec<_> = line.split_whitespace().collect();
-        if parts.len() != 3 {
+        if parts.len() != 2 {
             continue;
         }
-        let op = parts[0];
-        let ip = parts[1];
+        let ip = parts[0];
+        let ts = parts[1];
+
+        if now - ts.parse::<i64>()? > 300 {
+            continue;
+        }
 
         if deleted.contains(ip) {
             continue;
@@ -174,6 +224,7 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
 }
 
 fn cleanup_terminated_list(service_name: &str) -> Result<(), Box<dyn Error>> {
+    info!("cleaning up terminated list for {}", service_name);
     let mut file = OpenOptions::new().write(true).append(true).create(true).open(terminated_list_file_name(service_name))?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -186,17 +237,16 @@ fn cleanup_terminated_list(service_name: &str) -> Result<(), Box<dyn Error>> {
 
     for line in contents.lines().sorted().rev() {
         let parts: Vec<_> = line.split_whitespace().collect();
-        if parts.len() != 3 {
+        if parts.len() != 2 {
             continue;
         }
-        let op = parts[0];
-        let ip = parts[1];
-        let ts = parts[2].parse::<i64>()?;
+        let ip = parts[0];
+        let ts = parts[1].parse::<i64>()?;
 
         if ip_set.contains(ip) {
             continue;
         }
-        if op == "DEL" && now - ts > 300 {
+        if now - ts > 300 {
             ip_set.insert(ip);
             continue;
         }

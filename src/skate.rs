@@ -138,14 +138,24 @@ impl SupportedResources {
             SupportedResources::Pod(pod) => {
                 let mut errs = vec!();
                 // remove the pod ip from dns on deployed node
-                let res = conns.find(&node.node_name).unwrap()
-                    .execute(&format!("sudo skatelet dns remove --pod-id {} && sudo skatelet dns reload", &pod.metadata.name.clone().unwrap())).await;
-                if res.is_err() {
-                    let err = res.err().unwrap();
-                    errs.push(err);
-                }
-                // run ipvsmon on all nodes
-                let res = conns.execute("sudo", &["systemctl", "start", &format!("skate-ipvsmon-{}.service", &self.name().to_string())]).await;
+                let ips: Vec<_> = match conns.find(&node.node_name).unwrap()
+                    .execute(&format!("sudo skatelet dns remove --pod-id {}", &pod.metadata.name.clone().unwrap())).await {
+                    Ok((ips)) => {
+                        let ips: Vec<_> = ips.lines().map(|l| l.to_string()).collect();
+                        ips
+                    }
+                    Err(e) => {
+                        errs.push(e);
+                        vec!()
+                    }
+                };
+
+                let now = chrono::Utc::now().timestamp();
+
+                let name = self.name().to_string();
+
+                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#,&name, ips.join(" "), &name);
+                let res = conns.execute(&cmd).await;
                 res.into_iter().for_each(|(node, result)| {
                     if result.is_err() {
                         let err = result.err().unwrap();
@@ -153,7 +163,7 @@ impl SupportedResources {
                     }
                 });
 
-                if ! errs.is_empty() {
+                if !errs.is_empty() {
                     return Err(anyhow!(errs.iter().map(|e|e.to_string()).collect::<Vec<String>>().join(". ")).context("failed to run pre-remove hook").into());
                 }
 
