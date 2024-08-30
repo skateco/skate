@@ -17,6 +17,9 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use itertools::Itertools;
 
 
+const TERMINATED_MAX_AGE: i64 = 300; // seconds
+const CLEANUP_INTERVAL: i64 = 30;//seconds
+
 #[derive(Clone, Debug, Subcommand)]
 pub enum Commands {
     #[command(about = "synchronise a service's ips")]
@@ -73,6 +76,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     manifest.metadata.namespace = Some(ns);
 
 
+    // 80 is just to have a port, could be anything
     let domain = format!("{}.pod.cluster.skate:80", fqn);
     // get all pod ips from dns <args.service_name>.cluster.skate
     info!("looking up ips for {}", &domain);
@@ -156,7 +160,7 @@ fn cleanup(service_name: &str) -> bool {
     let cleanup_file = cleanup_last_run_file_name(service_name);
     let now = chrono::Utc::now().timestamp();
     let last_run = fs::read_to_string(&cleanup_file).unwrap_or_default().parse::<i64>().unwrap_or_default();
-    if now - last_run > 30 {
+    if now - last_run > CLEANUP_INTERVAL {
         let changed = cleanup_terminated_list(service_name).unwrap_or_else(|e| {
             info!("failed to clean up terminated list: {}", e);
             false
@@ -223,7 +227,7 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
         let ip = parts[0];
         let ts = parts[1];
 
-        if now - ts.parse::<i64>()? > 300 {
+        if now - ts.parse::<i64>()? > TERMINATED_MAX_AGE {
             continue;
         }
 
@@ -265,8 +269,8 @@ fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
             continue;
         }
         // terminated less than 5 minutes ago
-        if now - ts < 300 {
-            info!("keeping {} since it was terminated less than 5 minutes ago ({} seconds ago)", ip, now-ts);
+        if now - ts < TERMINATED_MAX_AGE {
+            info!("keeping {} since it was terminated {} seconds ago ( < {} seconds ago )", TERMINATED_MAX_AGE,  ip, now-ts);
             keep_set.insert(ip);
             new_contents.push_str(line);
             new_contents.push_str("\n");
