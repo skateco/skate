@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 
-use crate::skate::ConfigFileArgs;
+use crate::skate::{ConfigFileArgs, SupportedResources};
 use crate::ssh;
 
 
@@ -24,7 +24,11 @@ immediate shutdown.")]
 
 pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig)).expect("failed to load skate config");
-    let objects = crate::skate::read_manifests(args.filename).unwrap(); // huge
+    let objects = crate::skate::read_manifests(args.filename)?;
+    apply_supported_resources(&config, objects).await
+}
+
+pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), Box<dyn Error>> {
     let cluster = config.current_cluster()?;
     let (conns, errors) = ssh::cluster_connections(cluster).await;
     match errors {
@@ -43,7 +47,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         _ => {}
     };
 
-    let objects: Vec<Result<_, _>> = objects.into_iter().map(|sr| sr.fixup()).collect();
+    let objects: Vec<Result<_, _>> = resources.into_iter().map(|sr| sr.fixup()).collect();
     let objects: Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
 
     let conns = conns.ok_or("no clients")?;

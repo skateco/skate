@@ -119,6 +119,64 @@ pub enum SupportedResources {
     Service(Service),
 }
 
+impl TryFrom<Value> for SupportedResources {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let api_version_key = Value::String("apiVersion".to_owned());
+        let kind_key = Value::String("kind".to_owned());
+
+        let api_version = value.get(&api_version_key).and_then(Value::as_str);
+        let kind = value.get(&kind_key).and_then(Value::as_str);
+        match (api_version, kind) {
+            (Some(api_version), Some(kind)) => {
+                if api_version == Pod::API_VERSION &&
+                    kind == Pod::KIND
+                {
+                    let pod: Pod = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::Pod(pod))
+                } else if api_version == Deployment::API_VERSION &&
+                    kind == Deployment::KIND
+                {
+                    let deployment: Deployment = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::Deployment(deployment))
+                } else if api_version == DaemonSet::API_VERSION &&
+                    kind == DaemonSet::KIND
+                {
+                    let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::DaemonSet(daemonset))
+                } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND
+                {
+                    let ingress: Ingress = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::Ingress(ingress))
+                } else if
+                api_version == CronJob::API_VERSION &&
+                    kind == CronJob::KIND
+                {
+                    let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::CronJob(cronjob))
+                } else if
+                api_version == Secret::API_VERSION &&
+                    kind == Secret::KIND
+                {
+                    let secret: Secret = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::Secret(secret))
+                } else if
+                api_version == Service::API_VERSION &&
+                    kind == Service::KIND
+                {
+                    let service: Service = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::Service(service))
+                } else {
+                    Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into())
+                }
+            }
+            _ => {
+                Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into())
+            }
+        }
+    }
+}
 
 impl SupportedResources {
     pub fn name(&self) -> NamespacedName {
@@ -155,7 +213,7 @@ impl SupportedResources {
 
                 let name = self.name().to_string();
 
-                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#,&name, ips.join(" "), &name);
+                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &name, ips.join(" "), &name);
                 let res = conns.execute(&cmd).await;
                 res.into_iter().for_each(|(node, result)| {
                     if result.is_err() {
@@ -447,53 +505,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
             for document in serde_yaml::Deserializer::from_str(&str_file) {
                 let value = Value::deserialize(document).expect("failed to read document");
                 if let Value::Mapping(mapping) = &value {
-                    let api_version = mapping.get(&api_version_key).and_then(Value::as_str);
-                    let kind = mapping.get(&kind_key).and_then(Value::as_str);
-                    match (api_version, kind) {
-                        (Some(api_version), Some(kind)) => {
-                            if api_version == Pod::API_VERSION &&
-                                kind == Pod::KIND
-                            {
-                                let pod: Pod = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::Pod(pod))
-                            } else if api_version == Deployment::API_VERSION &&
-                                kind == Deployment::KIND
-                            {
-                                let deployment: Deployment = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::Deployment(deployment))
-                            } else if api_version == DaemonSet::API_VERSION &&
-                                kind == DaemonSet::KIND
-                            {
-                                let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::DaemonSet(daemonset))
-                            } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND
-                            {
-                                let ingress: Ingress = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::Ingress(ingress))
-                            } else if
-                            api_version == CronJob::API_VERSION &&
-                                kind == CronJob::KIND
-                            {
-                                let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::CronJob(cronjob))
-                            } else if
-                            api_version == Secret::API_VERSION &&
-                                kind == Secret::KIND
-                            {
-                                let secret: Secret = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::Secret(secret))
-                            } else if
-                            api_version == Service::API_VERSION &&
-                                kind == Service::KIND
-                            {
-                                let service: Service = serde::Deserialize::deserialize(value)?;
-                                result.push(SupportedResources::Service(service))
-                            }
-                        }
-                        _ => {
-                            return Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into());
-                        }
-                    };
+                    result.push(SupportedResources::try_from(value)?)
                 }
             }
         };
