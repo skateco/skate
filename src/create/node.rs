@@ -5,7 +5,7 @@ use std::fs::File;
 use base64::engine::general_purpose;
 use std::collections::HashMap;
 use clap::Args;
-use itertools::Itertools;
+use itertools::{all, Itertools};
 use std::io::Write;
 use base64::Engine;
 use std::net::ToSocketAddrs;
@@ -13,6 +13,7 @@ use crate::apply::{apply, apply_supported_resources, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::oci;
 use crate::refresh::refreshed_state;
+use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution, SupportedResources};
 use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
 use crate::state::state::ClusterState;
@@ -160,12 +161,12 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     // Refresh state so that we can apply coredns later
-    let state = refreshed_state(&cluster.name, &all_conns, &config).await?;
+    let mut state = refreshed_state(&cluster.name, &all_conns, &config).await?;
     state.persist()?;
 
     install_cluster_manifests(&args.config, &cluster).await?;
 
-    propagate_exsting_resources(&config, &node, &state).await?;
+    propagate_exsting_resources(&config, &all_conns, &node, &mut state).await?;
 
     Ok(())
 }
@@ -173,7 +174,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // propagate existing resources to new node, such as secrets, ingress, services
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
-async fn propagate_exsting_resources(conf: &Config,  node: &Node, state: &ClusterState) -> Result<(), Box<dyn Error>> {
+async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
     let donor_state = match state.nodes.iter().find(|n| n.node_name != node.name && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
         Some(n) => n,
         None => return Ok(())
@@ -191,7 +192,8 @@ async fn propagate_exsting_resources(conf: &Config,  node: &Node, state: &Cluste
     let all_manifests: Vec<_> = [ing_iter, svc_iter].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
     println!("reapplying {} resources", all_manifests.len());
     // TODO - need to get access to scheduler to force only on new node
-    apply_supported_resources(conf, all_manifests).await?;
+    let scheduler = DefaultScheduler {};
+    scheduler.schedule(all_conns, state, all_manifests).await?;
 
     Ok(())
 }
