@@ -317,7 +317,7 @@ impl DefaultExecutor {
 
         // cidr is 10.30.0.0/16
         // we just keep incrementing
-        // reserve 10.30.0.1 for dummy to keep keepalived running
+        // reserve 10.30.0.1 for the empty lvs we have in the root keepalived conf to make it start
         let service_subnet_start = "10.30.0.1";
 
         let ip = lock_file("/var/lib/skate/keepalived/service-ips.lock", Box::new(move || {

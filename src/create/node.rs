@@ -173,6 +173,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // propagate existing resources to new node, such as secrets, ingress, services
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
+// could be to take only resources that are the same on all nodes, log others
 async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
     let donor_state = match state.nodes.iter().find(|n| n.node_name != node.name && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
         Some(n) => n,
@@ -182,15 +183,13 @@ async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node
 
     let donor_sys_info = donor_state.host_info.as_ref().and_then(|h| h.system_info.as_ref()).unwrap();
 
-    let ing_iter: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let svc_iter: Vec<_> = donor_sys_info.services.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
+    let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
+    let services: Vec<_> = donor_sys_info.services.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
+    let secrets: Vec<_> = donor_sys_info.secrets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
 
-    // TODO - need to bypass the hiding of secret values before we can do this
-    // let sec_iter = donor_sys_info.secrets.unwrap_or_default().iter().filter_map(|i| i.manifest);
-
-    let all_manifests: Vec<_> = [ing_iter, svc_iter].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
+    let all_manifests: Vec<_> = [ingresses, services, secrets].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
     println!("reapplying {} resources", all_manifests.len());
-    // TODO - need to get access to scheduler to force only on new node
+
     let scheduler = DefaultScheduler {};
     scheduler.schedule(all_conns, state, all_manifests).await?;
 
@@ -199,6 +198,7 @@ async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node
 
 pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
 
+    println!("applying cluster manifests");
     // COREDNS
     // coredns listens on port 53 and 5533
     // port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553

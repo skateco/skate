@@ -174,16 +174,19 @@ async fn info() -> Result<(), Box<dyn Error>> {
             return None;
         }
 
-        let mut k8s_secret = manifest_result.unwrap();
-        k8s_secret.data = k8s_secret.data.clone().and_then(|data| {
-            Some(data.into_iter().map(|(k, _)| (k, ByteString{ 0: vec![] })).collect())
-        });
+        // if we want to redact the secret values.
+        // removing for now since we don't store the state anyway.
 
-        k8s_secret.string_data = k8s_secret.string_data.clone().and_then(|data| {
-            Some(data.into_iter().map(|(k, _)| (k, "".to_string())).collect())
-        });
+        // let mut k8s_secret = manifest_result.unwrap();
+        // k8s_secret.data = k8s_secret.data.clone().and_then(|data| {
+        //     Some(data.into_iter().map(|(k, _)| (k, ByteString{ 0: vec![] })).collect())
+        // });
+        //
+        // k8s_secret.string_data = k8s_secret.string_data.clone().and_then(|data| {
+        //     Some(data.into_iter().map(|(k, _)| (k, "".to_string())).collect())
+        // });
 
-        let yaml = serde_yaml::to_value(&k8s_secret).unwrap();
+        let yaml = serde_yaml::to_value(manifest_result.as_ref().unwrap()).unwrap();
 
 
         Some(ObjectListItem {
