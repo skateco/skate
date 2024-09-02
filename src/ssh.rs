@@ -20,6 +20,7 @@ use crate::state::state::{NodeState, NodeStatus};
 use colored::Colorize;
 use russh::CryptoVec;
 
+#[derive(Clone)]
 pub struct SshClient {
     pub node_name: String,
     pub client: Client,

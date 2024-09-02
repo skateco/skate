@@ -188,16 +188,21 @@ async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node
     let secrets: Vec<_> = donor_sys_info.secrets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
 
     let all_manifests: Vec<_> = [ingresses, services, secrets].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
-    println!("reapplying {} resources", all_manifests.len());
+    println!("propagating {} resources", all_manifests.len());
+
+
+    let mut filtered_state = state.clone();
+    filtered_state.nodes = vec!(state.nodes.iter().filter(|n| n.node_name == node.name).cloned().next().unwrap());
+
 
     let scheduler = DefaultScheduler {};
-    scheduler.schedule(all_conns, state, all_manifests).await?;
+
+    scheduler.schedule(all_conns, &mut filtered_state, all_manifests).await?;
 
     Ok(())
 }
 
 pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
-
     println!("applying cluster manifests");
     // COREDNS
     // coredns listens on port 53 and 5533
