@@ -1,4 +1,5 @@
 use std::error::Error;
+use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use k8s_openapi::api::core::v1::Node as K8sNode;
 use crate::config::Config;
@@ -84,18 +85,14 @@ async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> R
 async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let cluster = config.current_cluster()?;
-    let conns = ssh::cluster_connections(&cluster).await;
-    if conns.1.is_some() {
-        eprintln!("{}", conns.1.unwrap());
-        eprintln!("using last known cluster state");
+    let (conns, errs) = ssh::cluster_connections(&cluster).await;
+    if errs.is_some() {
+        if conns.as_ref().and_then(|c| Some(c.clients.len())).unwrap_or(0) == 0 {
+            return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());
+        }
     }
 
-    let state = match conns.0 {
-        Some(clients) => refreshed_state(&cluster.name, &clients, &config).await,
-        None => {
-            ClusterState::load(&cluster.name)
-        }
-    }?;
+    let state = refreshed_state(&cluster.name, &conns.unwrap(), &config).await?;
 
     let node = inspector.find(&args, &state);
 
@@ -104,5 +101,8 @@ async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs
         None => {}
     };
 
-    state.persist()
+    if errs.is_some() {
+        return Err(anyhow!("failed to connect to some hosts: {}", errs.as_ref().unwrap()).into());
+    }
+    Ok(())
 }

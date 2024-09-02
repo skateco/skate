@@ -52,7 +52,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
         println!("node {} {} - {} ", node.node_name, node.status, emoji)
     }
 
-    state.persist()
+    Ok(())
 }
 
 

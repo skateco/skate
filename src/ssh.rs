@@ -339,6 +339,8 @@ pub struct SshErrors {
     pub errors: Vec<SshError>,
 }
 
+impl Error for SshErrors {}
+
 impl fmt::Display for SshErrors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let strs: Vec<String> = self.errors.iter().map(|ce| format!("{}", ce)).collect();
@@ -381,7 +383,7 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
     });
 
 
-    return (
+    (
         match clients.len() {
             0 => None,
             _ => Some(SshClients { clients })
@@ -389,7 +391,8 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
         match errs.len() {
             0 => None,
             _ => Some(SshErrors { errors: errs })
-        });
+        }
+    )
 }
 
 async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {

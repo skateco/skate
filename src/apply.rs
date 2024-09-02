@@ -63,7 +63,5 @@ pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<Su
         }
     }
 
-    state.persist()?;
-
     Ok(())
 }

@@ -162,7 +162,6 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     // Refresh state so that we can apply coredns later
     let mut state = refreshed_state(&cluster.name, &all_conns, &config).await?;
-    state.persist()?;
 
     install_cluster_manifests(&args.config, &cluster).await?;
 

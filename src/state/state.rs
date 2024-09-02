@@ -142,7 +142,6 @@ impl ClusterState {
                     hash: "".to_string(),
                     nodes: vec![],
                 };
-                state.persist()?;
                 Ok(state)
             }
         }
