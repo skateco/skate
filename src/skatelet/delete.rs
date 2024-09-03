@@ -5,7 +5,7 @@ use std::io::Read;
 use clap::{Args, Subcommand};
 use crate::executor::{DefaultExecutor, Executor};
 use crate::skate::SupportedResources;
-use crate::skate::SupportedResources::{CronJob, Ingress, Service};
+use crate::skate::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use crate::skatelet::apply::StdinCommand;
 
 use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;
@@ -14,6 +14,8 @@ use k8s_openapi::api::core::v1::Secret;
 use k8s_openapi::api::networking::v1::Ingress as K8sIngress;
 use k8s_openapi::api::core::v1::Service as K8sService;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use crate::create::CreateCommands::Cluster;
+use crate::spec;
 
 #[derive(Debug, Args, Clone)]
 pub struct DeleteResourceArgs {
@@ -33,6 +35,7 @@ pub enum DeleteResourceCommands {
     Deployment(DeleteResourceArgs),
     Daemonset(DeleteResourceArgs),
     Service(DeleteResourceArgs),
+    Clusterissuer(DeleteResourceArgs)
 }
 
 
@@ -52,7 +55,8 @@ pub fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
         DeleteResourceCommands::Secret(resource_args) => delete_secret(args.clone(), resource_args.clone()),
         DeleteResourceCommands::Daemonset(resource_args) => delete_daemonset(args.clone(), resource_args.clone()),
         DeleteResourceCommands::Deployment(resource_args) => delete_deployment(args.clone(), resource_args.clone()),
-        DeleteResourceCommands::Service(resource_args) => delete_service(args.clone(), resource_args.clone())
+        DeleteResourceCommands::Service(resource_args) => delete_service(args.clone(), resource_args.clone()),
+        DeleteResourceCommands::Clusterissuer(resource_args) => delete_cluster_issuer(args.clone(), resource_args.clone())
     }
 }
 
@@ -88,6 +92,22 @@ pub fn delete_service(delete_args: DeleteArgs, resource_args: DeleteResourceArgs
         metadata: meta,
         spec: None,
         status: None,
+    }), delete_args.termination_grace_period)
+}
+
+pub fn delete_cluster_issuer(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+    let executor = DefaultExecutor::new();
+    let mut meta = ObjectMeta::default();
+    meta.name = Some(resource_args.name.clone());
+    meta.namespace = Some(resource_args.namespace.clone());
+    meta.labels = Some(BTreeMap::from([
+        ("skate.io/name".to_string(), resource_args.name),
+        ("skate.io/namespace".to_string(), resource_args.namespace),
+    ]));
+
+    executor.manifest_delete(ClusterIssuer(spec::cert::ClusterIssuer{
+        metadata: meta,
+        spec: None,
     }), delete_args.termination_grace_period)
 }
 

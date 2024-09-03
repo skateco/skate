@@ -21,6 +21,8 @@ mod cron;
 mod logs;
 mod oci;
 mod config_cmd;
+mod spec;
+mod template;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

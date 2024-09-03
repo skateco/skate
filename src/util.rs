@@ -101,7 +101,7 @@ where
     Ok(opt.unwrap_or_default())
 }
 
-pub fn calc_k8s_resource_hash(obj: (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String
+pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String
 {
     let mut obj = obj.clone();
 
@@ -153,7 +153,7 @@ impl NamespacedName {
 }
 
 // returns name, namespace
-pub fn metadata_name(obj: &impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta>) -> NamespacedName
+pub fn metadata_name(obj: &impl Metadata<Ty=ObjectMeta>) -> NamespacedName
 {
     let m = obj.metadata();
 
@@ -172,7 +172,7 @@ pub fn metadata_name(obj: &impl Metadata<Scope=NamespaceResourceScope, Ty=Object
 }
 
 // hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it
-pub fn hash_k8s_resource(obj: &mut (impl Metadata<Scope=NamespaceResourceScope, Ty=ObjectMeta> + Serialize + Clone)) -> String
+pub fn hash_k8s_resource(obj: &mut (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String
 
 {
     let hash = calc_k8s_resource_hash(obj.clone());

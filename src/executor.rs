@@ -20,6 +20,8 @@ use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::skatelet::dns;
 use crate::skatelet::dns::RemoveArgs;
+use crate::spec::cert::ClusterIssuer;
+use crate::template;
 use crate::util::{hash_string, lock_file, metadata_name};
 
 pub trait Executor {
@@ -30,6 +32,7 @@ pub trait Executor {
 pub struct DefaultExecutor {
     store: FileStore,
 }
+
 
 impl DefaultExecutor {
     pub fn new() -> Self {
@@ -111,7 +114,7 @@ impl DefaultExecutor {
         let output = handlebars.render("unit", &json)?;
         // /etc/systemd/system/skate-cronjob-{}.service
 
-        let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
         file.write_all(output.as_bytes())?;
 
 
@@ -129,14 +132,14 @@ impl DefaultExecutor {
 
         let output = handlebars.render("timer", &json)?;
         // /etc/systemd/system/skate-cronjob-{}.timer
-        let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
         file.write_all(output.as_bytes())?;
 
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
 
         exec_cmd("systemctl", &["daemon-reload"])?;
         exec_cmd("systemctl", &["enable", "--now", &unit_name])?;
-        exec_cmd("systemctl", &["reset-failed", &unit_name]);
+        let _ = exec_cmd("systemctl", &["reset-failed", &unit_name]);
 
         Ok(())
     }
@@ -161,23 +164,7 @@ impl DefaultExecutor {
         Ok(())
     }
 
-
-    fn apply_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(&ingress).to_string();
-
-        exec_cmd("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
-
-        // manifest goes into store
-        self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
-
-        let hash = ingress.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
-
-        if !hash.is_empty() {
-            self.store.write_file("ingress", &name, "hash", &hash.as_bytes())?;
-        }
-
-
+    fn render_nginx_conf(&self) -> Result<(), Box<dyn Error>> {
         let le_allow_domains: Vec<_> = self.store.list_objects("ingress")?.into_iter().filter_map(|i| {
             match i.manifest {
                 Some(m) => {
@@ -193,9 +180,29 @@ impl DefaultExecutor {
         // Template main nginx conf
         ////////////////////////////////////////////////////
 
+        let issuer = self.store.list_objects("clusterissuer").ok().and_then(|list| list.first().and_then(|c| Some(c.clone())));
+
+        let (endpoint, email) = match issuer {
+            Some(issuer) => {
+                match serde_yaml::from_value::<ClusterIssuer>(issuer.manifest.clone().unwrap()).ok() {
+                    Some(issuer) => Some((issuer.spec.clone().unwrap_or_default().acme.server.clone(), issuer.spec.unwrap_or_default().acme.email)),
+                    None => None,
+                }
+            }
+            None => None
+        }.unwrap_or_default();
+
+        let endpoint = if endpoint == "" {
+            // default to staging
+            "https://acme-staging-v02.api.letsencrypt.org/directory".to_string()
+        } else {
+            endpoint
+        };
+
         let main_template_data = json!({
             "letsEncrypt": {
-                "endpoint": "", //"https://acme-staging-v02.api.letsencrypt.org/directory",
+                "endpoint": endpoint, //
+                "email": email,
                 "allowDomains": le_allow_domains
             },
         });
@@ -214,6 +221,26 @@ impl DefaultExecutor {
         if !output.status.success() {
             return Err(anyhow!("exit code {}, stderr: {}", output.status.code().unwrap(), String::from_utf8_lossy(&output.stderr).to_string()).into());
         }
+        Ok(())
+    }
+
+
+    fn apply_ingress(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
+        let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(&ingress).to_string();
+
+        exec_cmd("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
+
+        // manifest goes into store
+        self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
+
+        let hash = ingress.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+
+        if !hash.is_empty() {
+            self.store.write_file("ingress", &name, "hash", &hash.as_bytes())?;
+        }
+
+        self.render_nginx_conf()?;
 
         let _ns_name = metadata_name(&ingress);
 
@@ -254,7 +281,7 @@ impl DefaultExecutor {
         let ns_name = metadata_name(&ingress);
         let _ = self.store.remove_object("ingress", &ns_name.to_string())?;
         let dir = format!("/var/lib/skate/ingress/services/{}", ns_name.to_string());
-        let result = std::fs::remove_dir_all(&dir);
+        let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
             return Err(anyhow!(result.unwrap_err()).context(format!("failed to remove directory {}", dir)).into());
         }
@@ -355,14 +382,14 @@ impl DefaultExecutor {
             "yaml_path": yaml_path,
         });
 
-        let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &name))?;
+        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &name))?;
         handlebars.render_to_write("unit", &json, file)?;
 
         handlebars.register_template_string("timer", include_str!("./resources/skate-ipvsmon.timer")).map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
         let json: Value = json!({
             "svc_name":name,
         });
-        let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &name))?;
+        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &name))?;
         handlebars.render_to_write("timer", &json, file)?;
         let unit_name = format!("skate-ipvsmon-{}", &name);
 
@@ -473,6 +500,40 @@ impl DefaultExecutor {
 
         Ok(())
     }
+
+    pub(crate) fn apply_cluster_issuer(&self, cluster_issuer: ClusterIssuer) -> Result<(), Box<dyn Error>> {
+        // only thing special about this is must only have namespace 'skate'
+        // and name 'default'
+        let ingress_string = serde_yaml::to_string(&cluster_issuer).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+
+        let ns_name = metadata_name(&cluster_issuer);
+        // manifest goes into store
+        self.store.write_file("clusterissuer", &ns_name.to_string(), "manifest.yaml", ingress_string.as_bytes())?;
+
+        let hash = cluster_issuer.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+
+        if !hash.is_empty() {
+            self.store.write_file("clusterissuer", &ns_name.to_string(), "hash", &hash.as_bytes())?;
+        }
+        // need to retemplate nginx.conf
+        self.render_nginx_conf()?;
+
+        self.reload_ingress()?;
+
+        Ok(())
+    }
+    pub(crate) fn remove_cluster_issuer(&self, cluster_issuer: ClusterIssuer) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(&cluster_issuer);
+
+
+        let _ = self.store.remove_object("clusterissuer", &ns_name.to_string())?;
+
+        // need to retemplate nginx.conf
+        self.render_nginx_conf()?;
+        self.reload_ingress()?;
+
+        Ok(())
+    }
 }
 
 impl Executor for DefaultExecutor {
@@ -494,6 +555,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::Service(service) => {
                 self.apply_service(service)
+            }
+            SupportedResources::ClusterIssuer(issuer) => {
+                self.apply_cluster_issuer(issuer)
             }
         }
     }
@@ -522,6 +586,9 @@ impl Executor for DefaultExecutor {
             }
             SupportedResources::Service(service) => {
                 self.remove_service(service)
+            }
+            SupportedResources::ClusterIssuer(issuer) => {
+                self.remove_cluster_issuer(issuer)
             }
         }
     }

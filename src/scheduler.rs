@@ -14,6 +14,8 @@ use k8s_openapi::Metadata;
 
 use crate::skate::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
+use crate::skatelet::SystemInfo;
+use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name};
@@ -341,7 +343,10 @@ impl DefaultScheduler {
         let new_hash = hash_k8s_resource(&mut new_cron);
 
 
-        let existing_cron = state.locate_cronjob(&name.name, &name.namespace);
+
+        let existing_cron = state.locate_objects(None, |si| {
+            si.clone().cronjobs
+        }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
 
 
         match existing_cron {
@@ -422,7 +427,10 @@ impl DefaultScheduler {
 
 
         for node in state.nodes.iter() {
-            let existing_service = state.locate_service(&node.node_name, &name.name, &name.namespace);
+            let existing_service = state.locate_objects(Some(&node.node_name), |si| {
+                si.clone().services
+            }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
+
             match existing_service {
                 Some(c) => {
                     if c.0.manifest_hash == new_hash {
@@ -478,7 +486,9 @@ impl DefaultScheduler {
         let name = metadata_name(ingress);
 
         for node in state.nodes.iter() {
-            let existing_ingress = state.locate_ingress(&node.node_name, &name.name, &name.namespace);
+            let existing_ingress = state.locate_objects(Some(&node.node_name), |si| {
+                si.clone().ingresses
+            }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
 
             match existing_ingress {
                 Some(c) => {
@@ -521,6 +531,65 @@ impl DefaultScheduler {
             actions,
         })
     }
+
+    fn plan_cluster_issuer(state: &mut ClusterState, cluster_issuer: &ClusterIssuer) -> Result<ApplyPlan, Box<dyn Error>> {
+        let name = cluster_issuer.metadata.name.clone().unwrap_or_default();
+
+        let mut actions = vec!();
+
+
+        let mut new_cluster_issuer = cluster_issuer.clone();
+
+        let new_hash = hash_k8s_resource(&mut new_cluster_issuer);
+
+
+        for node in state.nodes.iter() {
+            let existing = state.locate_objects(Some(&node.node_name), |si| {
+                si.clone().cluster_issuers
+            }, &name, "skate").first().and_then(|f|Some(f.clone()));
+
+            match existing {
+                Some(c) => {
+                    if c.0.manifest_hash == new_hash {
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
+                            error: None,
+                            operation: OpType::Unchanged,
+                            node: Some(node.clone()),
+                        });
+                        // nothing to do
+                    } else {
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
+                            error: None,
+                            operation: OpType::Delete,
+                            node: Some(node.clone()),
+                        });
+
+                        actions.push(ScheduledOperation {
+                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
+                            error: None,
+                            operation: OpType::Create,
+                            node: Some(node.clone()),
+                        });
+                    }
+                }
+                None => {
+                    actions.push(ScheduledOperation {
+                        resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
+                        error: None,
+                        operation: OpType::Create,
+                        node: Some(node.clone()),
+                    });
+                }
+            }
+        }
+
+
+        Ok(ApplyPlan {
+            actions,
+        })
+    }
     // returns tuple of (Option(prev node), Option(new node))
     fn plan(state: &mut ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
         match object {
@@ -531,6 +600,7 @@ impl DefaultScheduler {
             SupportedResources::CronJob(cron) => Self::plan_cronjob(state, cron),
             SupportedResources::Secret(secret) => Self::plan_secret(state, secret),
             SupportedResources::Service(service) => Self::plan_service(state, service),
+            SupportedResources::ClusterIssuer(issuer) => Self::plan_cluster_issuer(state, issuer),
         }
     }
 
@@ -544,7 +614,7 @@ impl DefaultScheduler {
         let remove_result = conn.remove_resource_by_manifest(&manifest).await;
 
         if hook_result.is_err() {
-            return Err(hook_result.err().unwrap())
+            return Err(hook_result.err().unwrap());
         }
 
         remove_result

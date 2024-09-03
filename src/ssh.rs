@@ -200,12 +200,12 @@ echo ovs=$(cat /tmp/ovs-$$);
         let result = self.client.execute(&format!("echo '{}'| base64 --decode|sudo skatelet apply -", base64_manifest)).await?;
         match result.exit_status {
             0 => {
-                Ok((result.stdout, result.stderr))
+                Ok((result.stdout.trim().to_string(), result.stderr.trim().to_string()))
             }
             _ => {
                 let message = match result.stderr.len() {
-                    0 => result.stdout,
-                    _ => result.stderr,
+                    0 => result.stdout.trim(),
+                    _ => result.stderr.trim(),
                 };
                 Err(anyhow!("failed to apply resource: exit code {}, {}", result.exit_status, message).into())
             }

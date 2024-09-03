@@ -25,6 +25,7 @@ pub enum DeleteCommands {
     Deployment(DeleteResourceArgs),
     Daemonset(DeleteResourceArgs),
     Service(DeleteResourceArgs),
+    ClusterIssuer(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args)]
@@ -47,6 +48,7 @@ pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
         DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
         DeleteCommands::Secret(args) => delete_resource(ResourceType::Secret, args).await?,
         DeleteCommands::Service(args) => delete_resource(ResourceType::Service, args).await?,
+        DeleteCommands::ClusterIssuer(args) => delete_resource(ResourceType::ClusterIssuer, args).await?,
     }
     Ok(())
 }

@@ -61,6 +61,7 @@ pub struct SystemInfo {
     pub cronjobs: Option<Vec<ObjectListItem>>,
     pub secrets: Option<Vec<ObjectListItem>>,
     pub services: Option<Vec<ObjectListItem>>,
+    pub cluster_issuers: Option<Vec<ObjectListItem>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -138,10 +139,10 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
 
     let store = FileStore::new();
-    // list ingresses
     let ingresses = store.list_objects("ingress")?;
     let cronjobs = store.list_objects("cronjob")?;
     let services = store.list_objects("service")?;
+    let cluster_issuers = store.list_objects("clusterissuer")?;
 
 
     let secrets = exec_cmd("podman", &["secret", "ls", "--noheading"]).unwrap_or_else(|e| {
@@ -232,23 +233,12 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
-        ingresses: match ingresses.is_empty() {
-            true => None,
-            false => Some(ingresses),
-        },
-        cronjobs: match cronjobs.is_empty() {
-            true => None,
-            false => Some(cronjobs),
-        },
-        secrets: match secret_info.is_empty() {
-            true => None,
-            false => Some(secret_info),
-        },
-        services: match services.is_empty() {
-            true => None,
-            false => Some(services),
-        },
-        hostname: sysinfo::System::host_name().unwrap_or("".to_string()),
+        ingresses: (!ingresses.is_empty()).then(|| ingresses),
+        cronjobs: (!cronjobs.is_empty()).then(|| cronjobs),
+        secrets: (!secret_info.is_empty()).then(|| secret_info),
+        services: (!services.is_empty()).then(|| services),
+        cluster_issuers: (!cluster_issuers.is_empty()).then(|| cluster_issuers),
+        hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
     };
     let json = serde_json::to_string(&info)?;

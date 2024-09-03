@@ -30,7 +30,7 @@ use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde_yaml::{Error as SerdeYamlError, Value};
-use crate::config;
+use crate::{config, spec};
 use crate::config::{cache_dir, Config, Node};
 use crate::config_cmd::ConfigArgs;
 use crate::create::{create, CreateArgs};
@@ -40,6 +40,7 @@ use crate::describe::{DescribeArgs, describe};
 use crate::logs::{LogArgs, logs};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
+use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClient, SshClients};
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName, slugify, TARGET};
@@ -99,6 +100,7 @@ pub enum ResourceType {
     CronJob,
     Secret,
     Service,
+    ClusterIssuer
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -117,6 +119,9 @@ pub enum SupportedResources {
     Secret(Secret),
     #[strum(serialize = "Service")]
     Service(Service),
+    #[strum(serialize = "ClusterIssuer")]
+    ClusterIssuer(ClusterIssuer),
+
 }
 
 impl TryFrom<Value> for SupportedResources {
@@ -167,12 +172,19 @@ impl TryFrom<Value> for SupportedResources {
                 {
                     let service: Service = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Service(service))
-                } else {
-                    Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into())
+                } else if
+                api_version == ClusterIssuer::API_VERSION &&
+                    kind == ClusterIssuer::KIND {
+                    let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
+                    Ok(SupportedResources::ClusterIssuer(clusterissuer))
+                }
+
+                else {
+                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind)).context("unsupported resource type").into())
                 }
             }
             _ => {
-                Err(anyhow!(format!("kind {:?}", kind)).context("unsupported resource type").into())
+                Err(anyhow!("missing 'kind' and 'apiVersion' fields").context("unsupported resource type").into())
             }
         }
     }
@@ -189,6 +201,7 @@ impl SupportedResources {
             SupportedResources::CronJob(r) => metadata_name(r),
             SupportedResources::Secret(s) => metadata_name(s),
             SupportedResources::Service(s) => metadata_name(s),
+            SupportedResources::ClusterIssuer(c) => metadata_name(c),
         }
     }
 
@@ -242,6 +255,7 @@ impl SupportedResources {
             SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
             SupportedResources::Secret(_) => false,
             SupportedResources::Service(_) => false,
+            SupportedResources::ClusterIssuer(_) => false,
         }
     }
     fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
@@ -468,11 +482,17 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let mut extra_labels = HashMap::from([]);
 
-                s.metadata = Self::fixup_metadata(s.metadata.clone(), Some(extra_labels))?;
+                s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
                 // set name to be name.namespace
                 s.metadata.name = Some(format!("{}", metadata_name(s)));
+                resource
+            }
+            SupportedResources::ClusterIssuer(ref mut issuer) => {
+                let original_name = issuer.metadata.name.clone().unwrap_or("".to_string());
+
+                issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
+                issuer.metadata.name = Some(format!("{}", metadata_name(issuer)));
                 resource
             }
         };
