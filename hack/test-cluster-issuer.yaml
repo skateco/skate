@@ -6,4 +6,4 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory # production
-    email: 5528491+byrnedo@users.noreply.github.com
+    email: 5528491+byrnedo@users.noreply.github.com # not supported yet :(

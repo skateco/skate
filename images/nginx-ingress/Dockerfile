@@ -1,4 +1,4 @@
-FROM openresty/openresty:1.25.3.1-0-bookworm-fat
+FROM openresty/openresty:1.25.3.2-0-bookworm-fat
 
 MAINTAINER Donal Byrne <byrnedo@tcd.ie>
 
