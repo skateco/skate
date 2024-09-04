@@ -1,23 +1,16 @@
-use crate::controllers::ingress::IngressController;
-use crate::controllers::service::ServiceController;
-use crate::controllers::cronjob::CronjobController;
-use crate::filestore::FileStore;
-use crate::skate::{exec_cmd, SupportedResources};
-use crate::spec::cert::ClusterIssuer;
-use crate::util::{apply_play, hash_string, metadata_name};
-use anyhow::anyhow;
-use itertools::Itertools;
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
-use k8s_openapi::api::core::v1::Secret;
-use std::error::Error;
-use std::fs::File;
-use std::io::{BufRead, Write};
-use std::str::FromStr;
 use crate::controllers::clusterissuer::ClusterIssuerController;
+use crate::controllers::cronjob::CronjobController;
 use crate::controllers::daemonset::DaemonSetController;
 use crate::controllers::deployment::DeploymentController;
+use crate::controllers::ingress::IngressController;
 use crate::controllers::pod::PodController;
 use crate::controllers::secret::SecretController;
+use crate::controllers::service::ServiceController;
+use crate::filestore::FileStore;
+use crate::skate::SupportedResources;
+use anyhow::anyhow;
+use std::error::Error;
+use std::str::FromStr;
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;
