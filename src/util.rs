@@ -4,6 +4,7 @@ use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::path::Path;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
@@ -14,6 +15,7 @@ use k8s_openapi::{Metadata, NamespaceResourceScope};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use serde::{Deserialize, Deserializer, Serialize};
+use crate::skate::{exec_cmd, SupportedResources};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -231,4 +233,30 @@ pub fn lock_file<T>(file: &str, cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>
     lock_file.unlock()?;
     info!("unlocked {}", lock_path.display());
     result
+}
+
+fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
+    let file_path = format!("/tmp/skate-{}.yaml", hash_string(manifest));
+    let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");
+    file.write_all(manifest.as_ref()).expect("failed to write manifest to file");
+    Ok(file_path)
+}
+
+
+
+
+pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
+    let file_path = write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
+
+    let mut args = vec!["play", "kube", &file_path, "--start"];
+    if !object.host_network() {
+        args.push("--network=skate")
+    }
+
+    let result = exec_cmd("podman", &args)?;
+
+    if !result.is_empty() {
+        println!("{}", result);
+    }
+    Ok(())
 }
