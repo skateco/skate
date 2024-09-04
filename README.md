@@ -241,7 +241,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
           kube play doesn't support imagePullSecrets, one has to login to the registry manually per node.
     -
 - ClusterIssuer
-    - [ ] Lets encrypt api endpoint
     - [ ] email
 - Volumes
     - [ ] Create path on host if it doesn't exist like docker (maybe there's a flag for that).
@@ -249,12 +248,11 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Networking
     - [ ] Debug why setting up routes again breaks existing container -> route
         - Most likely to do with force deleting the podman network
-    - [ ] Use something fancier like vxlan, tailscale etc
+    - [ ] Vpn like wireguard etc
 - DNS
     - [ ] something more barebones than coredns??
     - [ ] Leave resolvd in place: dns should fallback to host dns
 - Ingress
-    - [ ] Cluster Issuer to set letsencrypt url
     - [ ] Support gateway api
     - [ ] Recreate & fix whatever breaks the sighup reload.
 - OCI
