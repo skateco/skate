@@ -14,6 +14,7 @@ use crate::util::NamespacedName;
 // directory structure example is
 // /var/lib/skate/store/ingress/ingress-name.namespace/80.conf
 // /var/lib/skate/store/ingress/ingress-name.namespace/443.conf
+#[derive(Clone)]
 pub struct FileStore {
     base_path: String,
 }

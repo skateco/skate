@@ -142,7 +142,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     // seems to be missing when using kube play
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
-    conn.execute_stdout(cmd, true, true).await;
+    let _ = conn.execute_stdout(cmd, true, true).await;
 
     let (all_conns, _) = cluster_connections(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
