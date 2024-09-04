@@ -14,7 +14,6 @@ use k8s_openapi::Metadata;
 
 use crate::skate::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
-use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};

@@ -11,7 +11,7 @@ use chrono::{DateTime, Local};
 use deunicode::deunicode_char;
 use fs2::FileExt;
 use itertools::Itertools;
-use k8s_openapi::{Metadata, NamespaceResourceScope};
+use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use serde::{Deserialize, Deserializer, Serialize};

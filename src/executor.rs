@@ -10,7 +10,6 @@ use crate::filestore::FileStore;
 use crate::skate::SupportedResources;
 use anyhow::anyhow;
 use std::error::Error;
-use std::str::FromStr;
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), Box<dyn Error>>;

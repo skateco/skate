@@ -1,6 +1,4 @@
 use std::error::Error;
-use std::io::Write;
-use std::net::ToSocketAddrs;
 use anyhow::anyhow;
 use base64::Engine;
 use clap::{Args, Subcommand};

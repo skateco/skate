@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use k8s_openapi::api::core::v1::Service;
-use k8s_openapi::api::networking::v1::Ingress;
 use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;

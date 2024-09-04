@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Service;
 use log::info;
 use serde_json::{json, Value};
-use crate::{filestore, template};
+use crate::template;
 use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
 use crate::skatelet::dns;

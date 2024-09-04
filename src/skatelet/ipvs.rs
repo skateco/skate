@@ -212,7 +212,7 @@ fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn E
 fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>> {
     let now = chrono::Utc::now().timestamp();
 
-    let mut contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
+    let contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
         Ok(contents) => contents,
         Err(_) => return Ok(HashSet::new())
     };
@@ -242,7 +242,7 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
 // TODO - remove straight away if ipvs active + inactive conns = 0
 fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
     info!("cleaning up terminated list for {}", service_name);
-    let mut contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
+    let contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
         Ok(contents) => contents,
         Err(_) => return Ok(false)
     };
