@@ -137,13 +137,28 @@ Only pods where all the containers are either without healthcheck or healthy get
 
 Openresty container listening on port 80 and 443.
 Automatic SSL via LetsEncrypt.
-
 Currently only Prefix pathType is supported.
-
 Supported annotations:
 
 - [ ] `nginx.ingress.kubernetes.io/ssl-redirect`
 - [x] `nginx.ingress.kubernetes.io/proxy-body-size`
+
+**By default, only letsencrypt's staging environment is enabled**
+To enable letsencrypt's production environment, apply a cluster-issuer manifest:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: default # can't be anything else
+  namespace: skate # can't be anything else
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: your@email.com # not actually supported yet
+```
+
+
 
 #### Healthchecks
 
