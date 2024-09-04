@@ -6,7 +6,7 @@ mod pod;
 mod lister;
 mod daemonset;
 mod secret;
-
+mod service;
 
 use std::error::Error;
 
@@ -30,7 +30,7 @@ use crate::get::lister::Lister;
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
 use crate::get::secret::SecretLister;
-
+use crate::get::service::ServiceLister;
 
 #[derive(Debug, Clone, Args)]
 pub struct GetArgs {
@@ -64,6 +64,8 @@ pub enum GetCommands {
     Cronjob(GetObjectArgs),
     #[command(alias("secrets"))]
     Secret(GetObjectArgs),
+    #[command(alias("services"))]
+    Service(GetObjectArgs),
 }
 
 pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
@@ -76,6 +78,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
         GetCommands::Ingress(args) => get_ingress(global_args, args).await,
         GetCommands::Cronjob(args) => get_cronjobs(global_args, args).await,
         GetCommands::Secret(args) => get_secrets(global_args, args).await,
+        GetCommands::Service(args) => get_services(global_args, args).await,
     }
 }
 
@@ -146,4 +149,10 @@ async fn get_secrets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Bo
     let lister = SecretLister{};
     get_objects(global_args, args, &lister).await
 }
+
+async fn get_services(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+    let lister = ServiceLister{};
+    get_objects(global_args, args, &lister).await
+}
+
 
