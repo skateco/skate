@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use chrono::Local;
 use itertools::Itertools;
 use crate::get::{GetObjectArgs, Lister};
+use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
-use crate::util::age;
+use crate::util::{age, NamespacedName};
 
 pub(crate) struct DaemonsetLister {}
 
@@ -16,24 +17,16 @@ impl Lister<(usize, String, PodmanPodInfo)> for DaemonsetLister {
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(usize, String, PodmanPodInfo)> {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
-                let ns = args.namespace.clone().unwrap_or("default".to_string());
-                let id = args.id.clone();
-                let daemonset = p.labels.get("skate.io/daemonset").and_then(|n| Some(n.clone())).unwrap_or_default();
+
+                let daemonset = p.labels.get("skate.io/daemonset").unwrap_or(&"".to_string()).clone();
                 if daemonset == "" {
                     return None;
                 }
-                let daemonset_ns = p.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone();
 
-
-                let match_ns = ns == daemonset_ns;
-
-                let match_id = match id.clone() {
-                    Some(id) => {
-                        id == daemonset
-                    }
-                    None => false
-                };
-                if match_ns || match_id || (id.is_none() && ns == "" && daemonset_ns != "skate" ) {
+                if {
+                    let filterable: Box<dyn NameFilters> = Box::new(&p);
+                    filterable.filter_names(&args.id.clone().unwrap_or_default(),&args.namespace.clone().unwrap_or_default())
+                } {
                     return Some((state.nodes.len(), daemonset, p));
                 }
                 None

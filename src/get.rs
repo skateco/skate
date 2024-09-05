@@ -101,7 +101,11 @@ async fn get_objects<T>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn
     let objects = lister.list(&args, &state);
 
     if objects.len() == 0 {
-        println!("No resources found for namespace {}", args.namespace.unwrap_or("default".to_string()));
+        if args.namespace.is_some() {
+            println!("No resources found for namespace {}", args.namespace.unwrap());
+        } else {
+            println!("No resources found");
+        }
         return Ok(());
     }
 

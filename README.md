@@ -277,3 +277,5 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 
 - Service
   - [ ] use quorum_up and quorum_down in keepalived to toggle a 503 in ingress. 
+
+- [ ] Skate in podman/docker SIND. Copy Kinder node.

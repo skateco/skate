@@ -9,7 +9,7 @@ pub(crate) trait NameFilters {
     fn namespace(&self) -> String;
     fn filter_names(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
-            true => &"default",
+            true => &"",
             false => ns
         };
 

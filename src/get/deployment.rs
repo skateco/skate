@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use chrono::Local;
 use itertools::Itertools;
 use crate::get::{GetObjectArgs, Lister};
+use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
@@ -16,31 +17,20 @@ impl Lister<(NamespacedName, PodmanPodInfo)> for DeploymentLister {
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<(NamespacedName, PodmanPodInfo)> {
         let pods: Vec<_> = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
-                let ns = args.namespace.clone();
-                let id = args.id.clone();
-                let deployment = p.labels.get("skate.io/deployment");
-                let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
-                match deployment {
-                    Some(deployment) => {
-                        let match_ns = match ns.clone() {
-                            Some(ns) => {
-                                ns == pod_ns
-                            }
-                            None => false
-                        };
-                        let match_id = match id.clone() {
-                            Some(id) => {
-                                id == deployment.clone()
-                            }
-                            None => false
-                        };
-                        if match_ns || match_id || (id.is_none() && ns.is_none() && pod_ns != "skate") {
-                            return Some((NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()), p));
-                        }
-                        None
-                    }
-                    None => None
+
+                let deployment = p.labels.get("skate.io/deployment").unwrap_or(&"".to_string()).clone();
+                if deployment == "" {
+                    return None;
                 }
+
+                if {
+                    let filterable: Box<dyn NameFilters> = Box::new(&p);
+                    filterable.filter_names(&args.id.clone().unwrap_or_default(),&args.namespace.clone().unwrap_or_default())
+                } {
+                    let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
+                    return Some((NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()), p));
+                }
+                None
             }).collect();
             match items.len() {
                 0 => None,
