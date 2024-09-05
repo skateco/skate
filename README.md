@@ -19,6 +19,7 @@ You can deploy:
 - CronJobs
 - Ingress
 - Secrets
+- Services
 
 An nginx ingress runs on port 80 and 443 on all nodes.
 Lets-encrypt provides the certificates.
@@ -275,5 +276,4 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Store on disk and load via kube play --configmap
 
 - Service
-  - [ ] maybe static ips?
   - [ ] use quorum_up and quorum_down in keepalived to toggle a 503 in ingress. 
