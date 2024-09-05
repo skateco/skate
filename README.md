@@ -244,8 +244,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Pods
     - [ ] Remove
     - [ ] Store manifest in store so CNI plugin can get access
-- Ingress
-    - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
 - Cron
     - [ ] `create job something --from=cronjob/foo`
     - [ ] ForbidConcurrent
