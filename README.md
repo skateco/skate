@@ -246,6 +246,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Ingress
     - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
 - Cron
+    - [ ] `create job something --from=cronjob/foo`
     - [ ] ForbidConcurrent
 - Secret
     - [ ] Support private registry secrets
