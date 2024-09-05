@@ -5,8 +5,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use handlebars::{Handlebars};
 use serde_json::Value;
-
-
+use crate::template;
 
 #[derive(Debug, Subcommand)]
 pub enum StdinJsonCommand {
@@ -24,8 +23,7 @@ pub struct TemplateArgs {
 
 pub fn template(template_args: TemplateArgs) -> Result<(), Box<dyn Error>> {
 
-    let mut handlebars = Handlebars::new();
-    handlebars.set_strict_mode(true);
+    let mut handlebars = template::new();
 
     handlebars.register_template_file(&template_args.file, &template_args.file).map_err(|e| anyhow!(e).context("failed to load template file"))?;
 

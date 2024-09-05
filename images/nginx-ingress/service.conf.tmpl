@@ -92,8 +92,8 @@ server {
     add_header Strict-Transport-Security "max-age=31536000";
     add_header X-Request-ID $request_id; # Return to client
 
-    {{#if (eq ../port 80)}}
-    # redirect to https if port 80 and not disabled
+    {{#if (and (eq ../port 80) (not (eq (default ../metadata.annotations.[nginx.ingress.kubernetes.io/ssl-redirect] "false") "false")))}}
+        # redirect to https if port 80 and not disabled
 
         location / {
             return 301 https://$host$request_uri;

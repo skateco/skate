@@ -5,7 +5,7 @@
   "metadata": {
     "name": "foo-external",
     "annotations": {
-      "nginx.ingress.kubernetes.io/ssl-redirect": ""
+      "nginx.ingress.kubernetes.io/ssl-redirect": "false"
     }
   },
   "spec": {
