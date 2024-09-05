@@ -247,7 +247,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Opt out with annotation: `nginx.ingress.kubernetes.io/ssl-redirect: "false"`
 - Cron
     - [ ] ForbidConcurrent
-    - [ ] Create the pod when creating the cronjob to check it's legit
 - Secret
     - [ ] Support private registry secrets
         - WONTFIX: This is done in k8s by attaching the secret to the default service account, or by adding the
@@ -272,6 +271,8 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] Recreate & fix whatever breaks the sighup reload.
 - OCI
     - [ ] Get pod config from store and not podman
+- ConfigMap
+    - [ ] Store on disk and load via kube play --configmap
 
 - Service
   - [ ] maybe static ips?

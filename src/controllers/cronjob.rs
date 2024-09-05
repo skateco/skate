@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
+use crate::template;
 use crate::util::metadata_name;
 
 pub struct CronjobController {
@@ -56,10 +57,12 @@ impl CronjobController {
         mut_spec.restart_policy = Some("Never".to_string());
 
         let pod_string = serde_yaml::to_string(&pod).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
+        let pod_yaml_path = self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
 
-        let mut handlebars = Handlebars::new();
-        handlebars.set_strict_mode(true);
+        // create the pod to test that it's valid
+        exec_cmd("podman", &["kube","play", "--start=false", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
+
+        let mut handlebars = template::new();
         ////////////////////////////////////////////////////
         // template cron-pod.service to /var/lib/state/store/cronjob/<name>/systemd.service
         ////////////////////////////////////////////////////
@@ -100,7 +103,7 @@ impl CronjobController {
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
 
         exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["enable", "--now", &unit_name])?;
+        exec_cmd("systemctl", &["enable", &unit_name])?;
         let _ = exec_cmd("systemctl", &["reset-failed", &unit_name]);
 
         Ok(())
