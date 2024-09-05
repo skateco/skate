@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fs;
 use std::io::Write;
 use anyhow::anyhow;
-use handlebars::Handlebars;
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::Pod;
 use serde_json::{json, Value};
