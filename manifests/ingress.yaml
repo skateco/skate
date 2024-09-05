@@ -25,7 +25,7 @@ spec:
           path: /var/lib/skate/ingress/letsencrypt_storage
       containers:
       - name: nginx
-        image: ghcr.io/skateco/nginx-ingress:latest@sha256:ad32fe746d5abd21ac6702791e38b243079de0faac2442de225f231cfada3359
+        image: ghcr.io/skateco/nginx-ingress:latest@sha256:3ec3c4703beb2f85527279cd5741b8731ff618bf21298b7af8803e82d2846a65
         volumeMounts:
         - mountPath: /var/lib/skate/ingress
           name: ingress

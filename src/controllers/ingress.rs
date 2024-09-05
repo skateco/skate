@@ -78,7 +78,7 @@ impl IngressController {
         let ns_name = metadata_name(&ingress);
         let _ = self.store.remove_object("ingress", &ns_name.to_string())?;
         let dir = format!("/var/lib/skate/ingress/services/{}", ns_name.to_string());
-        let result = fs::remove_file(&dir);
+        let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
             return Err(anyhow!(result.unwrap_err()).context(format!("failed to remove directory {}", dir)).into());
         }
