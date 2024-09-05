@@ -140,10 +140,11 @@ Automatic SSL via LetsEncrypt.
 Currently only Prefix pathType is supported.
 Supported annotations:
 
-- [ ] `nginx.ingress.kubernetes.io/ssl-redirect`
-- [x] `nginx.ingress.kubernetes.io/proxy-body-size`
+- `nginx.ingress.kubernetes.io/ssl-redirect`
+- `nginx.ingress.kubernetes.io/proxy-body-size`
 
 **By default, only letsencrypt's staging environment is enabled**
+
 To enable letsencrypt's production environment, apply a cluster-issuer manifest:
 
 ```yaml
