@@ -50,6 +50,8 @@ regex_escape_ip(){
   sed -e 's#\.#\\.#g' -e 's#\[#\\[#g' -e 's#\]#\\]#g' <<<"$1"
 }
 
+# we need a dns running for things to work, this will be replaced by skate's later
+
 #validate_userns() {
 #  if [[ -z "${userns}" ]]; then
 #    return
@@ -571,6 +573,7 @@ select_iptables
 #enable_network_magic
 
 systemctl enable ssh
+systemctl enable dnsmasq
 
 # we want the command (expected to be systemd) to be PID1, so exec to it
 log_info 'starting init'

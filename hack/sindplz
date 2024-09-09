@@ -1,0 +1,116 @@
+#!/bin/bash
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    #    -e|--extension)
+    #     EXTENSION="$2"
+    #      shift # past argument
+    #      shift # past value
+    #      ;;
+    -* | --*)
+        echo "Unknown option $1"
+        exit 1
+        ;;
+    *)
+        POSITIONAL_ARGS+=("$1") # save positional arg
+        shift                   # past argument
+        ;;
+    esac
+done
+
+nodes=2
+
+stop_nodes() {
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    multipass stop $node_names
+}
+
+start_nodes() {
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+
+    docker start start $node_names
+}
+
+snapshot_nodes() {
+    stop_nodes
+
+    for f in $(seq $nodes); do
+        multipass snapshot node-$f
+    done
+
+    start_nodes
+}
+
+# shellcheck disable=SC2128
+case "$POSITIONAL_ARGS" in
+create)
+
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    docker build -t sind $SCRIPT_DIR/../images/sind
+    docker rm -f $node_names
+    for f in $(seq $nodes); do
+        docker run -d --privileged -p 222$f:22 --dns 127.0.0.1 --cgroupns host --tmpfs /tmp --tmpfs /run --tmpfs /run/lock --name node-$f sind
+        auth_key=$(cat ~/.ssh/id_rsa.pub)
+        docker exec node-$f bash -c "echo  '$auth_key' > /home/skate/.ssh/authorized_keys"
+
+    done
+    ;;
+info)
+    for f in $(seq $nodes); do
+        multipass info node-$f
+    done
+    ;;
+snapshot)
+    snapshot_nodes
+    ;;
+ips)
+    for f in $(seq $nodes); do
+        multipass info node-$f | grep IPv4 | awk '{print $2}'
+    done
+    ;;
+restore)
+    stop_nodes
+    for f in $(seq $nodes); do
+        multipass restore -d "node-${f}.snapshot1"
+    done
+    start_nodes
+    ;;
+start)
+    start_nodes
+    ;;
+stop)
+    stop_nodes
+    ;;
+remove)
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    multipass delete --purge $node_names
+    ;;
+shell)
+    SESSION="clusterplz"
+    tmux kill-session -t $SESSION
+    tmux new-session -d -s $SESSION
+    # todo, split $nodes-1 times
+    for f in $(seq $nodes); do
+        tmux send-keys -t $SESSION "multipass shell node-$f" Enter
+        if [ $f -ne $nodes ]; then
+            tmux split-window -h -t $SESSION
+        fi
+    done
+    tmux attach-session -t $SESSION
+    ;;
+skatelet)
+    set -e
+    arch=$(multipass exec -n node-1 -- arch)
+    echo "copying skatelet binaries for ${arch}"
+    for f in $(seq $nodes); do
+        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:
+        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet-netavark node-$f:
+        multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
+        multipass exec -n node-$f -- sudo mv skatelet-netavark /usr/local/bin/skatelet-netavark
+    done
+    ;;
+esac

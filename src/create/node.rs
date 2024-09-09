@@ -288,7 +288,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
 
     install_oci_hooks(conn).await?;
 
-    let cmd = "sudo podman run --rm busybox echo 1";
+    let cmd = "sudo podman run --rm busybox echo '1'";
     conn.execute_stdout(cmd, true, true).await?;
 
 
@@ -324,16 +324,22 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     _ = conn.execute_stdout(cmd, true, true).await;
 
 
-    // disable systemd-resolved if exists
-    let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    conn.execute_stdout(cmd, true, true).await?;
+    // disable dns services if exists
+    for dns_service in ["dnsmasq", "systemd-resolved"] {
+        conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
+    }
 
     // changed /etc/resolv.conf to be 127.0.0.1
     // neeed to use a symlink so that it's respected and not overridden by systemd
     let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
     conn.execute_stdout(cmd, true, true).await?;
-    let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    conn.execute_stdout(cmd, true, true).await?;
+    let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
+    match conn.execute_stdout(cmd, true, true).await {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("failed to change resolv.conf, we're probably inside a container: {}", e);
+        }
+    }
 
     Ok(())
 }
