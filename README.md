@@ -265,7 +265,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Install
     - [ ] More idempotent install
 - Scheduling
-    - [ ] Rolling Deployments
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
     - [ ] Deployment, Daemonset labels arent respsected, need to somehow be added to pods, perhaps prefixed
 - Pods
