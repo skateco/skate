@@ -39,9 +39,6 @@ impl NameFilters for DaemonsetListItem {
 }
 
 impl Lister<DaemonsetListItem> for DaemonsetLister {
-    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<DaemonsetListItem> {
-        todo!()
-    }
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<DaemonsetListItem> {
         let pods = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {

@@ -57,26 +57,4 @@ impl Lister<CronListItem> for CronjobsLister {
             }
         }).collect()
     }
-
-    // TODO - record last run and how many running (somehow)
-    // fn print(&self, resources: Vec<ObjectListItem>) {
-    //
-    //     let mut rows = vec!();
-    //
-    //     rows.push(["NAMESPACE", "NAME", "SCHEDULE", "TIMEZONE", "SUSPEND", "ACTIVE", "LAST_SCHEDULE", "AGE"].map(|i| i.to_string()));
-    //
-    //     let map = resources.iter().fold(HashMap::<NamespacedName, Vec<ObjectListItem>>::new(), |mut acc, item| {
-    //         acc.entry(item.name.clone()).or_insert(vec![]).push(item.clone());
-    //         acc
-    //     });
-    //     for (name, item) in map {
-    //
-    //         rows.push([name.namespace, name.name, schedule, timezone.unwrap_or("<none>".to_string()), "False".to_string(), "-".to_string(), "-".to_string(), age]);
-    //     }
-    //
-    //     let mut table = Builder::from_iter(rows).build();
-    //     table.with(Style::empty());
-    //     println!("{}", table);
-    //
-    // }
 }
