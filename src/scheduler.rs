@@ -5,10 +5,11 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use itertools::Itertools;
 
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use k8s_openapi::Metadata;
 
 
@@ -172,6 +173,57 @@ impl DefaultScheduler {
     }
 
     fn plan_deployment(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
+
+        // check if  there are more pods than replicas running
+        // cull them if so
+        let strategy = d.spec.clone().unwrap_or_default().strategy.unwrap_or_default();
+
+        let is_rolling = match strategy.type_.clone().unwrap_or_default().as_str() {
+            "RollingUpdate" => {
+                strategy.rolling_update.is_some()
+            }
+            _ => false
+        };
+
+        if is_rolling {
+            return Self::plan_deployment_rolling_update(state, &d, strategy.rolling_update.unwrap());
+        }
+        Self::plan_deployment_recreate(state, &d)
+    }
+
+    fn plan_deployment_rolling_update(state: &ClusterState, d: &Deployment, ru: RollingUpdateDeployment) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut actions = Self::plan_deployment_recreate(state, d)?;
+
+        // TODO - respect max surge and max unavailable
+        // will require parallelism.
+        // And an OpType::Parallel
+
+        Ok(actions)
+
+        //
+    }
+
+    fn plan_deployment_recreate(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
+        let mut actions = Self::plan_deployment_generic(state, d)?;
+
+        actions.actions = actions.actions.into_iter().sorted_by(|a, b| {
+            match a.operation {
+                OpType::Delete => {
+                    return Ordering::Less;
+                }
+                OpType::Create => {
+                    return Ordering::Greater;
+                }
+                _ => {
+                    return Ordering::Equal;
+                }
+            }
+        }).collect();
+
+        Ok(actions)
+    }
+
+    fn plan_deployment_generic(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
         let d = d.clone();
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
@@ -179,19 +231,18 @@ impl DefaultScheduler {
 
         let name = d.metadata.name.clone().unwrap_or("".to_string());
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
-        // check if  there are more pods than replicas running
-        // cull them if so
-        let deployment_pods = state.locate_deployment(&name, &ns);
 
-        let deployment_pods: Vec<_> = deployment_pods.into_iter().map(|(dp, node)| {
+        let existing_pods = state.locate_deployment(&name, &ns);
+
+        let existing_pods: Vec<_> = existing_pods.into_iter().map(|(dp, node)| {
             let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
             let replica = replica.parse::<u32>().unwrap_or(0);
             (dp, node, replica)
         }).sorted_by_key(|(_, _, replica)| replica.clone()).rev().collect();
 
-        if deployment_pods.len() > replicas as usize {
+        if existing_pods.len() > replicas as usize {
             // cull the extra pods
-            let for_removal: Vec<_> = deployment_pods.into_iter().filter_map(|(pod_info, node, replica)| {
+            let for_removal: Vec<_> = existing_pods.into_iter().filter_map(|(pod_info, node, replica)| {
                 if replica >= replicas as u32 {
                     return Some(ScheduledOperation {
                         node: Some(node.clone()),
@@ -342,10 +393,9 @@ impl DefaultScheduler {
         let new_hash = hash_k8s_resource(&mut new_cron);
 
 
-
         let existing_cron = state.locate_objects(None, |si| {
             si.clone().cronjobs
-        }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
+        }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
 
 
         match existing_cron {
@@ -428,7 +478,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_service = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().services
-            }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
+            }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
 
             match existing_service {
                 Some(c) => {
@@ -487,7 +537,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_ingress = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().ingresses
-            }, &name.name, &name.namespace).first().and_then(|f|Some(f.clone()));
+            }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
 
             match existing_ingress {
                 Some(c) => {
@@ -545,7 +595,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().cluster_issuers
-            }, &name, "skate").first().and_then(|f|Some(f.clone()));
+            }, &name, "skate").first().and_then(|f| Some(f.clone()));
 
             match existing {
                 Some(c) => {

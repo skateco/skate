@@ -117,6 +117,31 @@ skate get deployment -n my-app
 - Keepalived
 - Systemd
 
+### Deployment Strategy
+
+For deployments, the default strategy is Recreate.
+You can get rolling updates the normal way via:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: my-app
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+  template:
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+```
+
+Currently, skate does not deploy in parallel, so max_surge and max_unavailable are not supported.
+They are effectively set to 1.
+
 ### Networking
 
 Static routes between hosts, maintained by a systemd unit file.
@@ -242,6 +267,7 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Scheduling
     - [ ] Rolling Deployments
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
+    - [ ] Deployment, Daemonset labels arent respsected, need to somehow be added to pods, perhaps prefixed
 - Pods
     - [ ] Remove
     - [ ] Store manifest in store so CNI plugin can get access
