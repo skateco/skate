@@ -19,7 +19,17 @@ pub struct CronListItem {
     pub suspend: String,
     pub active: String,
     pub last_schedule: String,
-    pub age: String
+    pub age: String,
+}
+
+impl NameFilters for CronListItem {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn namespace(&self) -> String {
+        self.namespace.clone()
+    }
 }
 
 impl Lister<CronListItem> for CronjobsLister {
@@ -27,7 +37,6 @@ impl Lister<CronListItem> for CronjobsLister {
         si.cronjobs.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
             let filterable: Box<dyn NameFilters> = Box::new(*j);
             return filterable.filter_names(id, ns);
-
         }).map(|item| {
             let item = item.clone();
             let cronjob: CronJob = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();
@@ -36,7 +45,7 @@ impl Lister<CronListItem> for CronjobsLister {
             let timezone = spec.time_zone;
             let created = item.created_at;
             let age = age(created);
-            CronListItem{
+            CronListItem {
                 namespace: item.name.namespace.clone(),
                 name: item.name.name.clone(),
                 schedule,

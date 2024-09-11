@@ -5,6 +5,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use tabled::Tabled;
 use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
+use crate::get::deployment::DeploymentListItem;
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
 use crate::util::{age, NamespacedName};
@@ -21,6 +22,16 @@ pub struct IngressListItem {
     pub address: String,
     pub ports: String,
     pub age: String,
+}
+
+impl NameFilters for IngressListItem {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn namespace(&self) -> String {
+        self.namespace.clone()
+    }
 }
 
 impl Lister<IngressListItem> for IngressLister {

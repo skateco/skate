@@ -1,6 +1,7 @@
 use tabled::Tabled;
 use crate::get::Lister;
 use crate::get::lister::NameFilters;
+use crate::get::node::NodeListItem;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::util::age;
@@ -29,6 +30,16 @@ pub struct PodListItem {
     pub status: String,
     pub restarts: String,
     pub age: String,
+}
+
+impl NameFilters for PodListItem {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn namespace(&self) -> String {
+        self.namespace.to_string()
+    }
 }
 
 

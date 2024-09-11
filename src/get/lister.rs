@@ -1,11 +1,14 @@
+use itertools::Itertools;
 use tabled::Tabled;
 use crate::filestore::ObjectListItem;
-use crate::get::{GetObjectArgs };
+use crate::get::{GetObjectArgs};
 use crate::skatelet::{SystemInfo};
 use crate::state::state::ClusterState;
 
 pub(crate) trait NameFilters {
-    fn id(&self) -> String;
+    fn id(&self) -> String {
+        self.name()
+    }
     fn name(&self) -> String;
     fn namespace(&self) -> String;
     fn filter_names(&self, name: &str, ns: &str) -> bool {
@@ -41,8 +44,19 @@ impl NameFilters for &ObjectListItem {
 }
 
 pub(crate) trait Lister<T> {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<T> where T: Tabled;
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T> where T: Tabled {
+    // selects data from each node
+    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<T>
+    where
+        T: Tabled + NameFilters,
+    {
+        unimplemented!("needs to be implemented if `list` is not")
+    }
+
+    // the outer list function
+    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T>
+    where
+        T: Tabled + NameFilters,
+    {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 
@@ -55,8 +69,10 @@ pub(crate) trait Lister<T> {
                 }
                 None => vec![]
             }
-        }).flatten().collect();
+        }).flatten().unique_by(|i| format!("{}.{}", i.name(), i.namespace())).collect();
 
         resources
     }
 }
+
+

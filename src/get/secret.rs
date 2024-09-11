@@ -4,6 +4,7 @@ use tabled::Tabled;
 use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
+use crate::get::pod::PodListItem;
 use crate::skatelet::{SystemInfo};
 
 use crate::util::age;
@@ -17,6 +18,16 @@ pub struct SecretListItem {
     pub name: String,
     pub data: usize,
     pub age: String,
+}
+
+impl NameFilters for SecretListItem {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn namespace(&self) -> String {
+        self.namespace.to_string()
+    }
 }
 
 impl Lister<SecretListItem> for SecretLister {
@@ -48,39 +59,4 @@ impl Lister<SecretListItem> for SecretLister {
         }).collect()
     }
 
-    // fn print(&self, items: Vec<ObjectListItem>) {
-    //     let map = items.iter().fold(HashMap::<String, Vec<ObjectListItem>>::new(), |mut acc, item| {
-    //         acc.entry(item.name.to_string()).or_insert(vec![]).push(item.clone());
-    //         acc
-    //     });
-    //
-    //     macro_rules! cols {
-    //         () => ("{0: <15}  {1: <15}  {2: <15}  {3: <15}  {4: <10}")
-    //     }
-    //     println!(
-    //         cols!(),
-    //         "NAMESPACE", "NAME", "TYPE", "DATA", "AGE",
-    //     );
-    //
-    //
-    //     for item in map {
-    //
-    //         let data: usize = match item.1.first().unwrap().manifest{
-    //             Some(ref m) => {
-    //                 let secret = serde_yaml::from_value::<Secret>(m.clone()).unwrap_or_default();
-    //                 match secret.string_data {
-    //                     Some(data) => data.len(),
-    //                     None => match secret.data {
-    //                         Some(data) => data.len(),
-    //                         None => 0
-    //                     }
-    //                 }
-    //             },
-    //             None => 0
-    //         };
-    //
-    //         let item = item.1.first().unwrap();
-    //         println!(cols!(), item.name.namespace, item.name.name, "Opaque", data, age(item.created_at))
-    //     }
-    // }
 }

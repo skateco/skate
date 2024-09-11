@@ -4,6 +4,7 @@ use tabled::Tabled;
 use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
+use crate::get::secret::SecretListItem;
 use crate::skatelet::SystemInfo;
 use crate::util::{age, NamespacedName};
 
@@ -19,6 +20,17 @@ pub struct ServiceListItem {
     pub ports: String,
     pub age: String,
 }
+
+impl NameFilters for ServiceListItem {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn namespace(&self) -> String {
+        self.namespace.to_string()
+    }
+}
+
 
 impl Lister<ServiceListItem> for ServiceLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<ServiceListItem> {

@@ -28,7 +28,7 @@ use crate::get::cronjob::CronjobsLister;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
 use crate::get::ingress::IngressLister;
-use crate::get::lister::Lister;
+use crate::get::lister::{Lister, NameFilters};
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
 use crate::get::secret::SecretLister;
@@ -85,7 +85,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
 }
 
 
-async fn get_objects<T: Tabled>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
+async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
     if errors.is_some() {
