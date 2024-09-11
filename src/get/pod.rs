@@ -1,3 +1,4 @@
+use tabled::Tabled;
 use crate::get::Lister;
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
@@ -19,27 +20,24 @@ impl NameFilters for &PodmanPodInfo {
     }
 }
 
+#[derive(Tabled)]
+#[tabled(rename_all = "UPPERCASE")]
+pub struct PodListItem {
+    pub namespace: String,
+    pub name: String,
+    pub ready: String,
+    pub status: String,
+    pub restarts: String,
+    pub age: String,
+}
 
-impl Lister<PodmanPodInfo> for PodLister {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<PodmanPodInfo>> {
-        si.pods.as_ref().and_then(|pods| {
-            Some(pods.iter().filter(|p| {
-                let filterable: Box<dyn NameFilters> = Box::new(*p);
-                filterable.filter_names(id, ns)
-            }).map(|p| p.clone()).collect())
-        })
-    }
 
-    fn print(&self, pods: Vec<PodmanPodInfo>) {
-        macro_rules! cols {
-            () =>("{0: <20}  {1: <30}  {2: <10}  {3: <10}  {4: <10}  {5: <30}")
-        }
-
-        println!(
-            cols!(),
-            "NAMESPACE", "NAME", "READY", "STATUS", "RESTARTS", "AGE"
-        );
-        for pod in pods {
+impl Lister<PodListItem> for PodLister {
+    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<PodListItem> {
+        si.pods.as_ref().unwrap_or(&vec!()).iter().filter(|p| {
+            let filterable: Box<dyn NameFilters> = Box::new(*p);
+            filterable.filter_names(id, ns)
+        }).map(|pod| {
             let num_containers = pod.containers.clone().unwrap_or_default().len();
             let healthy_containers = pod.containers.clone().unwrap_or_default().iter().filter(|c| {
                 match c.status.as_str() {
@@ -49,10 +47,15 @@ impl Lister<PodmanPodInfo> for PodLister {
             }).collect::<Vec<_>>().len();
             let restarts = pod.containers.clone().unwrap_or_default().iter().map(|c| c.restart_count.unwrap_or_default())
                 .reduce(|a, c| a + c).unwrap_or_default();
-            println!(
-                cols!(),
-                pod.namespace(), pod.name, format!("{}/{}", healthy_containers, num_containers), pod.status, restarts, age(pod.created)
-            )
-        }
+
+            PodListItem {
+                namespace: pod.namespace(),
+                name: pod.name.clone(),
+                ready: format!("{}/{}", healthy_containers, num_containers),
+                status: pod.status.to_string(),
+                restarts: restarts.to_string(),
+                age: age(pod.created),
+            }
+        }).collect()
     }
 }

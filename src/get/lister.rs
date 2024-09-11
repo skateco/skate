@@ -1,3 +1,4 @@
+use tabled::Tabled;
 use crate::filestore::ObjectListItem;
 use crate::get::{GetObjectArgs };
 use crate::skatelet::{SystemInfo};
@@ -40,8 +41,8 @@ impl NameFilters for &ObjectListItem {
 }
 
 pub(crate) trait Lister<T> {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<T>>;
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T> {
+    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<T> where T: Tabled;
+    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T> where T: Tabled {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 
@@ -49,11 +50,8 @@ pub(crate) trait Lister<T> {
         let resources = state.nodes.iter().map(|node| {
             match &node.host_info {
                 Some(hi) => match &hi.system_info {
-                    Some(si) => match self.selector(&si, &ns, &id) {
-                        Some(items) => items.into_iter().collect(),
-                        None => vec![]
-                    }
-                    None => vec![]
+                    Some(si) => self.selector(&si, &ns, &id),
+                    _ => vec![]
                 }
                 None => vec![]
             }
@@ -61,5 +59,4 @@ pub(crate) trait Lister<T> {
 
         resources
     }
-    fn print(&self, items: Vec<T>);
 }

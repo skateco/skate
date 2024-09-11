@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use strum_macros::{Display, EnumString};
+use tabled::Tabled;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -66,14 +67,17 @@ impl PodmanPodStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Tabled, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+#[tabled(rename_all = "UPPERCASE")]
 pub struct PodmanPodInfo {
     pub id: String,
     pub name: String,
     pub status: PodmanPodStatus,
     pub created: DateTime<Local>,
+    #[tabled(skip)]
     pub labels: BTreeMap<String, String>,
+    #[tabled(skip)]
     pub containers: Option<Vec<PodmanContainerInfo>>,
 }
 

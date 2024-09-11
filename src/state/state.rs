@@ -10,6 +10,7 @@ use k8s_openapi::api::core::v1::{NodeSpec, NodeStatus as K8sNodeStatus, Node as 
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
 use strum_macros::Display;
+use tabled::Tabled;
 use crate::config::{cache_dir, Config};
 use crate::filestore::ObjectListItem;
 
@@ -27,10 +28,12 @@ pub enum NodeStatus {
     Unhealthy,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Tabled, Serialize, Deserialize, Debug, Clone)]
+#[tabled(rename_all = "UPPERCASE")]
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
+    #[tabled(skip)]
     pub host_info: Option<HostInfo>,
 }
 

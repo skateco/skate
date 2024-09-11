@@ -13,7 +13,9 @@ use std::error::Error;
 
 
 use clap::{Args, Subcommand};
-
+use tabled::builder::Builder;
+use tabled::settings::Style;
+use tabled::{Table, Tabled};
 use crate::config::Config;
 use crate::refresh::refreshed_state;
 
@@ -25,7 +27,7 @@ use crate::{ssh};
 use crate::get::cronjob::CronjobsLister;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
-use crate::get::ingress::IngresssLister;
+use crate::get::ingress::IngressLister;
 use crate::get::lister::Lister;
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
@@ -83,7 +85,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
 }
 
 
-async fn get_objects<T>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
+async fn get_objects<T: Tabled>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
     if errors.is_some() {
@@ -109,7 +111,9 @@ async fn get_objects<T>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn
         return Ok(());
     }
 
-    lister.print(objects);
+    let mut table = Table::new(objects);
+    table.with(Style::empty());
+    println!("{}", table);
     Ok(())
 }
 
@@ -134,7 +138,7 @@ async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dy
 
 
 async fn get_ingress(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
-    let lister = IngresssLister {};
+    let lister = IngressLister {};
     get_objects(global_args, args, &lister).await
 }
 

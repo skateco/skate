@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
+use tabled::Tabled;
 use crate::util::NamespacedName;
 
 // all dirs/files live under /var/lib/skate/store
@@ -19,10 +20,12 @@ pub struct FileStore {
     base_path: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Tabled, Debug, Clone, Deserialize, Serialize)]
+#[tabled(rename_all = "UPPERCASE")]
 pub struct ObjectListItem {
     pub name: NamespacedName,
     pub manifest_hash: String,
+    #[tabled(skip)]
     pub manifest: Option<Value>,
     pub created_at: DateTime<Local>,
 }
