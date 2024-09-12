@@ -117,6 +117,14 @@ skate get deployment -n my-app
 - Keepalived
 - Systemd
 
+### Supported manifest attributes
+
+For pods (which affectds deployments, daemonsets and cronjobs), see [podman kube play's documentation](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html#podman-kube-play-support)
+
+For other resources, I'll add some documentation soon.
+Check [./hack/](./hack/) for examples of what's been tested.
+
+
 ### Deployment Strategy
 
 For deployments, the default strategy is Recreate.
