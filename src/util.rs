@@ -192,16 +192,16 @@ pub fn age(date_time: DateTime<Local>) -> String {
             if duration.as_secs() < 60 {
                 return format!("{}s", duration.as_secs());
             }
-            let minutes = (duration.as_secs() / 60) % 60;
+            let minutes = duration.as_secs() / 60;
             if minutes < 60 {
                 return format!("{}m", minutes);
             }
-            let hours = duration.as_secs() / 60 * 60;
+            let hours = duration.as_secs() / (60 * 60);
             if hours < 24 {
                 return format!("{}h", hours);
             }
 
-            let days = duration.as_secs() / 60 * 60 * 24;
+            let days = duration.as_secs() / (60 * 60 * 24);
             return format!("{}d", days);
         }
         Err(_) => "".to_string()
@@ -243,8 +243,6 @@ fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
 }
 
 
-
-
 pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
     let file_path = write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
 
@@ -259,4 +257,28 @@ pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
         println!("{}", result);
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Sub;
+    use chrono::{Duration, Local};
+    use crate::util::age;
+
+    #[test]
+    fn test_age() {
+        let conditions = &[
+            (Local::now(), "0s"),
+            (Local::now() - Duration::seconds(20), "20s"),
+            (Local::now() - Duration::minutes(20), "20m"),
+            (Local::now() - Duration::minutes(20*60), "20h"),
+            (Local::now() - Duration::minutes(20*60*24), "20d"),
+        ];
+
+        for (input, expect) in conditions {
+            let output = age(input.clone());
+            assert_eq!(output, *expect, "input: {}", input);
+        }
+    }
 }
