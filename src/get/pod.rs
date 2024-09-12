@@ -4,7 +4,7 @@ use crate::get::lister::NameFilters;
 use crate::get::node::NodeListItem;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::PodmanPodInfo;
-use crate::util::age;
+use crate::util::{age, metadata_name};
 
 pub(crate) struct PodLister {}
 
@@ -61,7 +61,7 @@ impl Lister<PodListItem> for PodLister {
 
             PodListItem {
                 namespace: pod.namespace(),
-                name: pod.name.clone(),
+                name: pod.name(),
                 ready: format!("{}/{}", healthy_containers, num_containers),
                 status: pod.status.to_string(),
                 restarts: restarts.to_string(),

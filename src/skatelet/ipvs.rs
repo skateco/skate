@@ -18,7 +18,7 @@ use itertools::Itertools;
 
 
 const TERMINATED_MAX_AGE: i64 = 300; // seconds
-const CLEANUP_INTERVAL: i64 = 30;//seconds
+const CLEANUP_INTERVAL: i64 = 30; //seconds
 
 #[derive(Clone, Debug, Subcommand)]
 pub enum Commands {
@@ -270,7 +270,7 @@ fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
         }
         // terminated less than 5 minutes ago
         if now - ts < TERMINATED_MAX_AGE {
-            info!("keeping {} since it was terminated {} seconds ago ( < {} seconds ago )", TERMINATED_MAX_AGE,  ip, now-ts);
+            info!("keeping {} since it was terminated {} seconds ago ( < {} seconds ago )",ip, TERMINATED_MAX_AGE,   now-ts);
             keep_set.insert(ip);
             new_contents.push_str(line);
             new_contents.push_str("\n");

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -18,7 +18,7 @@ use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name, NamespacedName};
 
 
 #[derive(Debug)]
@@ -51,8 +51,7 @@ pub struct ScheduledOperation<T> {
 }
 
 pub struct ApplyPlan {
-    // pub existing: Vec<ScheduledOperation<SupportedResources>>,
-    pub actions: Vec<ScheduledOperation<SupportedResources>>,
+    pub actions: HashMap<NamespacedName, Vec<ScheduledOperation<SupportedResources>>>,
 }
 
 pub struct RejectedNode {
@@ -132,21 +131,28 @@ impl DefaultScheduler {
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut actions = vec!();
+        let mut actions = HashMap::new();
 
-        let _name = ds.metadata.name.clone().unwrap_or("".to_string());
-        let _ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
+        let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
+        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
 
         for node in state.nodes.iter() {
             let node_name = node.node_name.clone();
             let mut pod_spec = ds.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
 
+            // inherit daemonset labels
             let mut meta = ds.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
-            meta.name = Some(format!("dms-{}.{}-{}", ds.metadata.name.as_ref().unwrap(), ds.metadata.namespace.as_ref().unwrap(), node_name));
-            meta.namespace = ds.metadata.namespace.clone();
+
+            let name = format!("dms-{}-{}", daemonset_name.clone(), node_name);
+
+            let ns_name = NamespacedName { name: name.clone(), namespace: ns.clone() };
+
+            meta.name = Some(ns_name.to_string());
+            meta.namespace = Some(ns.clone());
 
             let mut labels = meta.labels.clone().unwrap_or_default();
-            labels.insert("skate.io/daemonset".to_string(), ds.metadata.name.as_ref().unwrap().clone());
+            labels.insert("skate.io/name".to_string(), name.clone());
+            labels.insert("skate.io/daemonset".to_string(), daemonset_name.clone());
             meta.labels = Some(labels);
 
             // bind to specific node
@@ -164,11 +170,11 @@ impl DefaultScheduler {
 
 
             let result = Self::plan_pod(state, &pod)?;
-            actions.extend(result.actions);
+            actions.insert(ns_name, result);
         }
 
         Ok(ApplyPlan {
-            actions: [actions].concat()
+            actions
         })
     }
 
@@ -206,19 +212,19 @@ impl DefaultScheduler {
     fn plan_deployment_recreate(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut actions = Self::plan_deployment_generic(state, d)?;
 
-        actions.actions = actions.actions.into_iter().sorted_by(|a, b| {
-            match a.operation {
-                OpType::Delete => {
-                    return Ordering::Less;
-                }
-                OpType::Create => {
-                    return Ordering::Greater;
-                }
-                _ => {
-                    return Ordering::Equal;
-                }
-            }
-        }).collect();
+        // actions.actions = actions.actions.into_iter().sorted_by(|a, b| {
+        //     match a.operation {
+        //         OpType::Delete => {
+        //             return Ordering::Less;
+        //         }
+        //         OpType::Create => {
+        //             return Ordering::Greater;
+        //         }
+        //         _ => {
+        //             return Ordering::Equal;
+        //         }
+        //     }
+        // }).collect();
 
         Ok(actions)
     }
@@ -227,12 +233,12 @@ impl DefaultScheduler {
         let d = d.clone();
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
-        let mut actions = vec!();
+        let mut actions: HashMap<_, Vec<_>> = HashMap::new();
 
-        let name = d.metadata.name.clone().unwrap_or("".to_string());
+        let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
 
-        let existing_pods = state.locate_deployment(&name, &ns);
+        let existing_pods = state.locate_deployment(&deployment_name, &ns);
 
         let existing_pods: Vec<_> = existing_pods.into_iter().map(|(dp, node)| {
             let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
@@ -242,31 +248,42 @@ impl DefaultScheduler {
 
         if existing_pods.len() > replicas as usize {
             // cull the extra pods
-            let for_removal: Vec<_> = existing_pods.into_iter().filter_map(|(pod_info, node, replica)| {
+            for (pod_info, node, replica) in existing_pods {
                 if replica >= replicas as u32 {
-                    return Some(ScheduledOperation {
+                    let pod: Pod = pod_info.into();
+                    let name = NamespacedName::from(pod.metadata.name.clone().unwrap_or_default().as_str());
+                    let op = ScheduledOperation {
                         node: Some(node.clone()),
-                        resource: SupportedResources::Pod(pod_info.clone().into()),
+                        resource: SupportedResources::Pod(pod),
                         error: None,
                         operation: OpType::Delete,
-                    });
+                    };
+                    match actions.get_mut(&name) {
+                        Some(ops) => ops.push(op),
+                        None => {
+                            actions.insert(name, vec!(op));
+                        }
+                    };
                 }
-                None
-            }).collect();
-
-            actions.extend(for_removal);
+            }
         }
 
 
         for i in 0..replicas {
             let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
 
+            // inherit deployment labels
             let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
             // name format needs to be <type>.<fqn>.<replica>
-            meta.name = Some(format!("dpl-{}.{}-{}", d.metadata.name.as_ref().unwrap(), d.metadata.namespace.as_ref().unwrap(), i));
-            meta.namespace = d.metadata.namespace.clone();
+            let name = format!("dpl-{}-{}", deployment_name,  i);
+            let ns_name = NamespacedName { name: name.clone(), namespace: ns.clone() };
+            // needs to be the fqn for kube play, since that's what it'll call the pod
+            meta.name = Some(ns_name.to_string());
+            meta.namespace = Some(ns.clone());
+
             let mut labels = meta.labels.unwrap_or_default();
-            labels.insert("skate.io/deployment".to_string(), d.metadata.name.as_ref().unwrap().clone());
+            labels.insert("skate.io/name".to_string(), name);
+            labels.insert("skate.io/deployment".to_string(), deployment_name.clone());
             labels.insert("skate.io/replica".to_string(), i.to_string());
             meta.labels = Some(labels);
 
@@ -278,23 +295,29 @@ impl DefaultScheduler {
 
 
             let result = Self::plan_pod(state, &pod)?;
-            actions.extend(result.actions);
+
+
+            match actions.get_mut(&ns_name) {
+                Some(ops) => ops.extend(result),
+                None => {
+                    actions.insert(ns_name, result);
+                }
+            };
         }
 
 
         Ok(ApplyPlan {
-            actions: [actions].concat()
+            actions
         })
     }
-    fn plan_pod(state: &ClusterState, object: &Pod) -> Result<ApplyPlan, Box<dyn Error>> {
+
+    fn plan_pod(state: &ClusterState, object: &Pod) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
         let mut new_pod = object.clone();
         //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
-
         let new_hash = hash_k8s_resource(&mut new_pod);
 
-        let name = new_pod.metadata.name.clone().unwrap_or("".to_string());
-        let ns = new_pod.metadata.namespace.clone().unwrap_or("".to_string());
+        let name = metadata_name(object);
 
         // smuggle node selectors as labels
         match new_pod.spec.as_ref() {
@@ -315,12 +338,11 @@ impl DefaultScheduler {
 
         // existing pods with same name (duplicates if more than 1)
         // sort by replicas descending
-        let existing_pods = state.locate_pods(&name, &ns);
+        let existing_pods = state.locate_pods(&name.name, &name.namespace);
 
 
         let cull_actions: Vec<_> = match existing_pods.len() {
-            0 => vec!(),
-            1 => vec!(),
+            0 | 1 => vec!(),
             _ => (&existing_pods.as_slice()[1..]).iter().map(|(pod_info, node)| {
                 ScheduledOperation {
                     node: Some((**node).clone()),
@@ -376,9 +398,7 @@ impl DefaultScheduler {
         };
 
 
-        Ok(ApplyPlan {
-            actions: [cull_actions, actions].concat()
-        })
+        Ok([cull_actions, actions].concat())
     }
 
     fn plan_cronjob(state: &ClusterState, cron: &CronJob) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -440,13 +460,14 @@ impl DefaultScheduler {
 
 
         Ok(ApplyPlan {
-            actions,
+            actions: HashMap::from([(name, actions)]),
         })
     }
 
     // just apply on all nodes
     fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut actions = vec!();
+        let ns_name = metadata_name(secret);
 
         for node in state.nodes.iter() {
             actions.extend([
@@ -461,7 +482,7 @@ impl DefaultScheduler {
 
 
         Ok(ApplyPlan {
-            actions,
+            actions: HashMap::from([(ns_name, actions)]),
         })
     }
     fn plan_service(state: &ClusterState, service: &Service) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -519,7 +540,7 @@ impl DefaultScheduler {
 
 
         Ok(ApplyPlan {
-            actions,
+            actions: HashMap::from([(name, actions)]),
         })
     }
 
@@ -577,12 +598,12 @@ impl DefaultScheduler {
         }
 
         Ok(ApplyPlan {
-            actions,
+            actions: HashMap::from([(name, actions)]),
         })
     }
 
     fn plan_cluster_issuer(state: &mut ClusterState, cluster_issuer: &ClusterIssuer) -> Result<ApplyPlan, Box<dyn Error>> {
-        let name = cluster_issuer.metadata.name.clone().unwrap_or_default();
+        let ns_name = metadata_name(cluster_issuer);
 
         let mut actions = vec!();
 
@@ -595,7 +616,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().cluster_issuers
-            }, &name, "skate").first().and_then(|f| Some(f.clone()));
+            }, &ns_name.name, "skate").first().and_then(|f| Some(f.clone()));
 
             match existing {
                 Some(c) => {
@@ -636,13 +657,19 @@ impl DefaultScheduler {
 
 
         Ok(ApplyPlan {
-            actions,
+            actions: HashMap::from([(ns_name, actions)]),
         })
     }
     // returns tuple of (Option(prev node), Option(new node))
     fn plan(state: &mut ClusterState, object: &SupportedResources) -> Result<ApplyPlan, Box<dyn Error>> {
         match object {
-            SupportedResources::Pod(pod) => Self::plan_pod(state, pod),
+            SupportedResources::Pod(pod) => {
+                let ns_name = NamespacedName { name: pod.metadata.name.clone().unwrap_or_default(), namespace: pod.metadata.namespace.clone().unwrap_or_default() };
+                let ops = Self::plan_pod(state, pod)?;
+                Ok(ApplyPlan {
+                    actions: HashMap::from([(ns_name, ops)]),
+                })
+            }
             SupportedResources::Deployment(deployment) => Self::plan_deployment(state, deployment),
             SupportedResources::DaemonSet(ds) => Self::plan_daemonset(state, ds),
             SupportedResources::Ingress(ingress) => Self::plan_ingress(state, ingress),
@@ -677,71 +704,73 @@ impl DefaultScheduler {
 
         let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();
 
-        for mut action in plan.actions {
-            match action.operation {
-                OpType::Delete => {
-                    let node_name = action.node.clone().unwrap().node_name;
+        for (name, ops) in plan.actions {
+            for mut op in ops {
+                match op.operation {
+                    OpType::Delete => {
+                        let node_name = op.node.clone().unwrap().node_name;
 
-                    match Self::remove_existing(conns, action.clone()).await {
-                        Ok((_, stderr)) => {
-                            // println!("{}", stdout.trim());
-                            if !stderr.is_empty() {
-                                eprintln!("{}", stderr.trim())
+                        match Self::remove_existing(conns, op.clone()).await {
+                            Ok((_, stderr)) => {
+                                // println!("{}", stdout.trim());
+                                if !stderr.is_empty() {
+                                    eprintln!("{}", stderr.trim())
+                                }
+                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource.to_string(), op.resource.name(), node_name);
+                                result.push(op.clone());
                             }
-                            println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
-                            result.push(action.clone());
-                        }
-                        Err(err) => {
-                            action.error = Some(err.to_string());
-                            println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, action.resource.name(), node_name, err.to_string());
-                            result.push(action.clone());
-                        }
-                    }
-                }
-                OpType::Create => {
-                    let (node, rejected_nodes) = match action.node.clone() {
-                        // some things like ingress have the node already set
-                        Some(n) => (Some(n), vec!()),
-                        // anything else and things with node selectors go here
-                        None => Self::choose_node(state.nodes.clone(), &action.resource)
-                    };
-                    if !node.is_some() {
-                        let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
-                        return Err(anyhow!("failed to find feasible node: {}", reasons).into());
-                    }
-
-                    let node_name = node.unwrap().node_name.clone();
-
-                    let client = conns.find(&node_name).unwrap();
-                    let serialized = serde_yaml::to_string(&action.resource).expect("failed to serialize object");
-
-                    match client.apply_resource(&serialized).await {
-                        Ok((_, stderr)) => {
-                            // if !stdout.trim().is_empty() {
-                            //     stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
-                            // }
-                            if !stderr.is_empty() {
-                                stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
+                            Err(err) => {
+                                op.error = Some(err.to_string());
+                                println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, op.resource.name(), node_name, err.to_string());
+                                result.push(op.clone());
                             }
-                            let _ = state.reconcile_object_creation(&action.resource, &node_name)?;
-                            println!("{} {} {} created on node {}", CHECKBOX_EMOJI, action.resource.to_string(), &action.resource.name(), node_name);
-                            result.push(action.clone());
-                        }
-                        Err(err) => {
-                            action.error = Some(err.to_string());
-                            println!("{} {} {} creation failed on node {}: {}", CROSS_EMOJI, action.resource.to_string(), action.resource.name().name, node_name, err.to_string());
-                            result.push(action.clone());
                         }
                     }
-                }
-                OpType::Info => {
-                    let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} on {}", INFO_EMOJI, action.resource.name(), node_name);
-                    result.push(action.clone());
-                }
-                OpType::Unchanged => {
-                    let node_name = action.node.clone().unwrap().node_name;
-                    println!("{} {} {} unchanged on {}", EQUAL_EMOJI, action.resource.to_string(), action.resource.name(), node_name);
+                    OpType::Create => {
+                        let (node, rejected_nodes) = match op.node.clone() {
+                            // some things like ingress have the node already set
+                            Some(n) => (Some(n), vec!()),
+                            // anything else and things with node selectors go here
+                            None => Self::choose_node(state.nodes.clone(), &op.resource)
+                        };
+                        if !node.is_some() {
+                            let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
+                            return Err(anyhow!("failed to find feasible node: {}", reasons).into());
+                        }
+
+                        let node_name = node.unwrap().node_name.clone();
+
+                        let client = conns.find(&node_name).unwrap();
+                        let serialized = serde_yaml::to_string(&op.resource).expect("failed to serialize object");
+
+                        match client.apply_resource(&serialized).await {
+                            Ok((_, stderr)) => {
+                                // if !stdout.trim().is_empty() {
+                                //     stdout.trim().split("\n").for_each(|line| println!("{} - {}", node_name, line));
+                                // }
+                                if !stderr.is_empty() {
+                                    stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
+                                }
+                                let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
+                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource.to_string(), &op.resource.name(), node_name);
+                                result.push(op.clone());
+                            }
+                            Err(err) => {
+                                op.error = Some(err.to_string());
+                                println!("{} {} {} creation failed on node {}: {}", CROSS_EMOJI, op.resource.to_string(), op.resource.name().name, node_name, err.to_string());
+                                result.push(op.clone());
+                            }
+                        }
+                    }
+                    OpType::Info => {
+                        let node_name = op.node.clone().unwrap().node_name;
+                        println!("{} {} on {}", INFO_EMOJI, op.resource.name(), node_name);
+                        result.push(op.clone());
+                    }
+                    OpType::Unchanged => {
+                        let node_name = op.node.clone().unwrap().node_name;
+                        println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource.to_string(), op.resource.name(), node_name);
+                    }
                 }
             }
         }

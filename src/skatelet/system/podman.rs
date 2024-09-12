@@ -83,6 +83,9 @@ pub struct PodmanPodInfo {
 
 
 impl PodmanPodInfo {
+    pub fn name(&self) -> String {
+        self.labels.get("skate.io/name").map(|ns| ns.clone()).unwrap_or("".to_string())
+    }
     pub fn namespace(&self) -> String {
         self.labels.get("skate.io/namespace").map(|ns| ns.clone()).unwrap_or("".to_string())
     }

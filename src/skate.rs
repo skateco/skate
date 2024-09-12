@@ -29,6 +29,7 @@ use anyhow::anyhow;
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use log::error;
 use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::{config, spec};
 use crate::config::{cache_dir, Config, Node};
@@ -100,7 +101,7 @@ pub enum ResourceType {
     CronJob,
     Secret,
     Service,
-    ClusterIssuer
+    ClusterIssuer,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone)]
@@ -177,9 +178,7 @@ impl TryFrom<Value> for SupportedResources {
                     kind == ClusterIssuer::KIND {
                     let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::ClusterIssuer(clusterissuer))
-                }
-
-                else {
+                } else {
                     Err(anyhow!(format!("version: {}, kind {}", api_version, kind)).context("unsupported resource type").into())
                 }
             }
@@ -224,9 +223,18 @@ impl SupportedResources {
 
                 let now = chrono::Utc::now().timestamp();
 
-                let name = self.name().to_string();
+                let labels = pod.metadata.labels.as_ref().ok_or("no labels")?;
 
-                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &name, ips.join(" "), &name);
+                let name = metadata_name(pod);
+                let deployment = labels.get("skate.io/deployment");
+                if deployment.is_none() {
+                    return Ok(());
+                }
+                let deployment = deployment.unwrap().clone();
+                let fq_deployment_name = NamespacedName { name: deployment, namespace: name.namespace };
+
+
+                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &fq_deployment_name, ips.join(" "), &fq_deployment_name);
                 let res = conns.execute(&cmd).await;
                 res.into_iter().for_each(|(node, result)| {
                     if result.is_err() {

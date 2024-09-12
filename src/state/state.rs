@@ -287,11 +287,12 @@ impl ClusterState {
     }
 
     pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
-        self.filter_pods(&|p| p.name == name && p.namespace() == namespace)
+        // the pod manifest name is what podman will use to name the pod, thus has the namespace in it as a suffix
+        self.filter_pods(&|p| p.name == format!("{}.{}", name, namespace) && p.namespace() == namespace)
     }
 
 
-    pub fn locate_objects(&self, node:Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: &str, namespace: &str) -> Vec<(ObjectListItem, &NodeState)> {
+    pub fn locate_objects(&self, node: Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: &str, namespace: &str) -> Vec<(ObjectListItem, &NodeState)> {
         self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).map(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {

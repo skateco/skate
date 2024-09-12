@@ -80,7 +80,7 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
             let item = DaemonsetListItem {
                 namespace,
                 name: n.clone(),
-                desired: n.to_string(),
+                desired: state.nodes.len().to_string(),
                 current: pods.len().to_string(),
                 ready: health_pods.to_string(),
                 up_to_date: "".to_string(),
