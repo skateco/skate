@@ -210,23 +210,32 @@ impl DefaultScheduler {
     }
 
     fn plan_deployment_recreate(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut actions = Self::plan_deployment_generic(state, d)?;
+        let plan = Self::plan_deployment_generic(state, d)?;
 
-        // actions.actions = actions.actions.into_iter().sorted_by(|a, b| {
-        //     match a.operation {
-        //         OpType::Delete => {
-        //             return Ordering::Less;
-        //         }
-        //         OpType::Create => {
-        //             return Ordering::Greater;
-        //         }
-        //         _ => {
-        //             return Ordering::Equal;
-        //         }
-        //     }
-        // }).collect();
+        // have one top level key, with all the actions, sorted by delete, create, unchanged
 
-        Ok(actions)
+        let mut new_actions = vec!();
+
+        for (k, v) in plan.actions {
+            new_actions.extend(v)
+        }
+
+
+        new_actions = new_actions.into_iter().sorted_by(|a, b| {
+            match a.operation {
+                OpType::Delete => {
+                    return Ordering::Less;
+                }
+                OpType::Create => {
+                    return Ordering::Greater;
+                }
+                _ => {
+                    return Ordering::Equal;
+                }
+            }
+        }).collect();
+
+        Ok(ApplyPlan{actions: HashMap::from([(metadata_name(d), new_actions)])})
     }
 
     fn plan_deployment_generic(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
