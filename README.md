@@ -1,6 +1,10 @@
-# Skate
+<div align="center">
+  <h1 align="center">Skate</h1>
+  <p align="center">Daemonless low footprint self-hosted mini-paas with support for deploying kubernetes manifests.</p>
 
-Daemonless low footprint self-hosted mini-paas with support for deploying kubernetes manifests.
+Docs -> [skateco.github.io](https://skateco.github.io)
+</div>
+
 
 Born out of the frustration of having to learn yet another deployment configuration file syntax.
 
@@ -8,7 +12,6 @@ Skate runs as a CLI on your machine and talks to a small binary on each host ove
 
 Leverages [podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html) to run pod manifests.
 
-Documentation -> [skateco.github.io](https://skateco.github.io)
 
 Supported Distro: Ubuntu 24.04
 Supported architectures: amd64, arm64
