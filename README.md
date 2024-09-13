@@ -8,6 +8,8 @@ Skate runs as a CLI on your machine and talks to a small binary on each host ove
 
 Leverages [podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html) to run pod manifests.
 
+Documentation -> [skateco.github.io](https://skateco.github.io)
+
 Supported Distro: Ubuntu 24.04
 Supported architectures: amd64, arm64
 
@@ -272,6 +274,10 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 
 - Install
     - [ ] More idempotent install
+    - [ ] Separate peer/private ip for each node.
+     
+      Since we use ssh, we need the client reachable ip to communicate, but then we need the private ip for each node to
+      reach the other nodes dns
 - Scheduling
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
     - [ ] Deployment, Daemonset labels arent respected, need to somehow be added to pods, perhaps prefixed
