@@ -274,12 +274,14 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
     - [ ] More idempotent install
 - Scheduling
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
-    - [ ] Deployment, Daemonset labels arent respsected, need to somehow be added to pods, perhaps prefixed
+    - [ ] Deployment, Daemonset labels arent respected, need to somehow be added to pods, perhaps prefixed
 - Pods
-    - [ ] Remove
     - [ ] Store manifest in store so CNI plugin can get access
-- Cron
-    - [ ] `create job something --from=cronjob/foo`
+- CronJob
+    - [ ] Fix star expanision bug
+    - [ ] Related to below, but something like `skatelet create job --from=cronjob/foo`, use in systemd unit.
+    - [ ] logs for cronjobs across runs
+    - [ ] `skate create job something --from=cronjob/foo`
     - [ ] ForbidConcurrent
 - Secret
     - [ ] Support private registry secrets

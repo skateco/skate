@@ -202,7 +202,7 @@ pub fn age(date_time: DateTime<Local>) -> String {
             }
 
             let days = duration.as_secs() / (60 * 60 * 24);
-            return format!("{}d", days);
+            format!("{}d", days)
         }
         Err(_) => "".to_string()
     }
@@ -262,7 +262,6 @@ pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
     use chrono::{Duration, Local};
     use crate::util::age;
 
