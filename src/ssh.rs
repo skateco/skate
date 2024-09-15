@@ -69,7 +69,7 @@ impl HostInfo {
 
 impl SshClient {
     pub async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>> {
-        let command = "\
+        let command = r#"
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
@@ -81,15 +81,15 @@ ovs-vsctl --version|head -1| awk '{print $NF}' > /tmp/ovs-$$ &
 
 wait;
 
-echo hostname=$(cat /tmp/hostname-$$);
-echo arch=$(cat /tmp/arch-$$);
-echo os=$(cat /tmp/os-$$);
-echo distro=$(cat /tmp/distro-$$);
-echo skatelet=$(cat /tmp/skatelet-$$);
-echo podman=$(cat /tmp/podman-$$);
-echo sys=$(cat /tmp/sys-$$);
-echo ovs=$(cat /tmp/ovs-$$);
-";
+echo hostname="$(cat /tmp/hostname-$$)";
+echo arch="$(cat /tmp/arch-$$)";
+echo os="$(cat /tmp/os-$$)";
+echo distro="$(cat /tmp/distro-$$)";
+echo skatelet="$(cat /tmp/skatelet-$$)";
+echo podman="$(cat /tmp/podman-$$)";
+echo sys="$(cat /tmp/sys-$$)";
+echo ovs="$(cat /tmp/ovs-$$)";
+"#;
 
         let result = self.client.execute(command).await?;
 
