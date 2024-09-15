@@ -163,12 +163,12 @@ Each node gets its own container ip subnet.
 
 ### DNS
 
-Dns is coredns with fanout between all nodes along with serving from file.
+Dns is coredns with complete fanout (heh, good idea right...) between all nodes along with serving from file.
 
 Hosts are maintained via an OCI hook that adds/removes the ip to the hosts file.
 
-Pods get a hostname of `<name>.<namespace>.pod.cluster.skate.`
-Services get `<name>.<namespace>.svc.cluster.skate.`
+Pods get a hostname of `<name>.<namespace>.pod.cluster.skate.`. These are part of the fanout scope.
+Services get `<name>.<namespace>.svc.cluster.skate.`. Local to the node.
 
 Only pods where all the containers are either without healthcheck or healthy get a dns entry.
 
