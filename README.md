@@ -287,7 +287,6 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
 - Pods
     - [ ] Store manifest in store so CNI plugin can get access
 - CronJob
-    - [ ] Fix star expanision bug
     - [ ] Related to below, but something like `skatelet create job --from=cronjob/foo`, use in systemd unit.
     - [ ] logs for cronjobs across runs
     - [ ] `skate create job something --from=cronjob/foo`
