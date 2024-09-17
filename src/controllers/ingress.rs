@@ -59,7 +59,7 @@ impl IngressController {
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped()).spawn()?;
 
-            child.stdin.as_ref().unwrap().write(json_ingress_string.as_ref()).unwrap();
+            let _ = child.stdin.as_ref().unwrap().write(json_ingress_string.as_ref()).unwrap();
 
             let output = child.wait_with_output()
                 .map_err(|e| anyhow!(e).context("failed to apply resource"))?;

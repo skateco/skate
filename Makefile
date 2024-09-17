@@ -14,8 +14,11 @@ amd64:
 amd64-cross:
 	cross build --target=x86_64-unknown-linux-gnu  --release --locked
 
-.PHONY: lin
+.PHONY: lint
 lint:
 	cargo clippy
+.PHONY: lint-fix
+lint-fix:
+	cargo clippy --fix
 
 
