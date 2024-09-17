@@ -13,7 +13,7 @@ pub(crate) trait NameFilters {
     fn namespace(&self) -> String;
     fn filter_names(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
-            true => &"",
+            true => "",
             false => ns
         };
 
@@ -26,7 +26,7 @@ pub(crate) trait NameFilters {
         if ns.is_empty() && name.is_empty() && self.namespace() == "skate" {
             return false;
         }
-        return true;
+        true
     }
 }
 
@@ -61,15 +61,15 @@ pub(crate) trait Lister<T> {
         let id = filters.id.clone().unwrap_or("".to_string());
 
 
-        let resources = state.nodes.iter().map(|node| {
+        let resources = state.nodes.iter().flat_map(|node| {
             match &node.host_info {
                 Some(hi) => match &hi.system_info {
-                    Some(si) => self.selector(&si, &ns, &id),
+                    Some(si) => self.selector(si, &ns, &id),
                     _ => vec![]
                 }
                 None => vec![]
             }
-        }).flatten().unique_by(|i| format!("{}.{}", i.name(), i.namespace())).collect();
+        }).unique_by(|i| format!("{}.{}", i.name(), i.namespace())).collect();
 
         resources
     }

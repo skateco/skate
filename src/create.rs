@@ -3,14 +3,12 @@ use anyhow::anyhow;
 use base64::Engine;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use serde::Serialize;
 use node::CreateNodeArgs;
 use crate::config::{Cluster, Config};
 use crate::refresh::refreshed_state;
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::JobArgs;
 use crate::ssh;
-use crate::ssh::cluster_connections;
 
 mod node;
 
@@ -134,13 +132,10 @@ async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
 
 
     let (conns, errors) = ssh::cluster_connections(cluster).await;
-    match errors {
-        Some(e) => {
-            for e in e.errors {
-                eprintln!("{} - {}", e.node_name, e.error)
-            }
+    if let Some(e) = errors {
+        for e in e.errors {
+            eprintln!("{} - {}", e.node_name, e.error)
         }
-        _ => {}
     };
 
     let conns = match conns {
@@ -150,9 +145,9 @@ async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
         Some(c) => c
     };
 
-    let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
+    let state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
-    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, &from_name, &args.namespace);
+    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, from_name, &args.namespace);
     if cjobs.is_empty() {
         return Err(anyhow!("no cronjobs found by name of {} in namespace {}", args.args.from, args.namespace).into());
     }

@@ -1,10 +1,7 @@
-use std::collections::HashMap;
 use k8s_openapi::api::core::v1::Secret;
 use tabled::Tabled;
-use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
-use crate::get::pod::PodListItem;
 use crate::skatelet::{SystemInfo};
 
 use crate::util::age;
@@ -34,7 +31,7 @@ impl Lister<SecretListItem> for SecretLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<SecretListItem> {
         si.secrets.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
             let filterable: Box<dyn NameFilters> = Box::new(*j);
-            return filterable.filter_names(id, ns);
+            filterable.filter_names(id, ns)
         }).map(|item| {
             let data: usize = match item.manifest {
                 Some(ref m) => {

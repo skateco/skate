@@ -1,14 +1,11 @@
-use std::collections::HashMap;
 
 
 use k8s_openapi::api::networking::v1::Ingress;
 use tabled::Tabled;
-use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
-use crate::get::deployment::DeploymentListItem;
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
-use crate::util::{age, NamespacedName};
+use crate::util::age;
 
 pub(crate) struct IngressLister {}
 
@@ -38,7 +35,7 @@ impl Lister<IngressListItem> for IngressLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<IngressListItem> {
         si.ingresses.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
             let filterable: Box<dyn NameFilters> = Box::new(*j);
-            return filterable.filter_names(id, ns);
+            filterable.filter_names(id, ns)
         }).map(|item| {
             let ingress: Ingress = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();
             let spec = ingress.spec.unwrap_or_default();

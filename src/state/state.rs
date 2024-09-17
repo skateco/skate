@@ -37,29 +37,29 @@ pub struct NodeState {
     pub host_info: Option<HostInfo>,
 }
 
-impl Into<K8sNode> for NodeState {
-    fn into(self) -> K8sNode {
+impl From<NodeState> for K8sNode {
+    fn from(val: NodeState) -> Self {
         let mut metadata = ObjectMeta::default();
         let mut spec = NodeSpec::default();
         let mut status = K8sNodeStatus::default();
 
-        metadata.name = Some(self.node_name.clone());
+        metadata.name = Some(val.node_name.clone());
         metadata.namespace = Some("default".to_string());
-        metadata.uid = Some(self.node_name.clone());
+        metadata.uid = Some(val.node_name.clone());
 
-        status.phase = match self.status {
+        status.phase = match val.status {
             Unknown => Some("Pending".to_string()),
             Healthy => Some("Ready".to_string()),
             Unhealthy => Some("Pending".to_string()),
         };
 
-        spec.unschedulable = match self.status {
+        spec.unschedulable = match val.status {
             Unknown => Some(true),
             Healthy => Some(false),
             Unhealthy => Some(true),
         };
 
-        let sys_info = self.host_info.as_ref().and_then(|h| h.system_info.clone());
+        let sys_info = val.host_info.as_ref().and_then(|h| h.system_info.clone());
 
 
         (status.capacity, status.allocatable, status.addresses, metadata.labels) = match sys_info {
@@ -78,20 +78,17 @@ impl Into<K8sNode> for NodeState {
                             type_: "Hostname".to_string(),
                         },
                     ];
-                    match si.internal_ip_address {
-                        Some(ip) => {
-                            addresses.push(NodeAddress {
-                                address: ip,
-                                type_: "InternalIP".to_string(),
-                            })
-                        }
-                        None => {}
+                    if let Some(ip) = si.internal_ip_address {
+                        addresses.push(NodeAddress {
+                            address: ip,
+                            type_: "InternalIP".to_string(),
+                        })
                     }
                     Some(addresses)
                 }), (
                      Some(BTreeMap::<String, String>::from([
                          ("skate.io/arch".to_string(), si.platform.arch.clone()),
-                         ("skate.io/nodename".to_string(), self.node_name.clone()),
+                         ("skate.io/nodename".to_string(), val.node_name.clone()),
                          ("skate.io/hostname".to_string(), si.hostname.clone()),
                      ]))
                  ))
@@ -194,9 +191,9 @@ impl ClusterState {
 
         node.deref_mut().host_info.as_mut().and_then(|hi| {
             hi.system_info.as_mut().and_then(|si| {
-                si.pods.as_mut().and_then(|pods| {
+                si.pods.as_mut().map(|pods| {
                     pods.push(pod.clone());
-                    Some(())
+                    
                 })
             })
         });
@@ -247,7 +244,7 @@ impl ClusterState {
             let mut node = node.clone();
             match host_info.iter().find(|h| h.node_name == node.node_name) {
                 Some(info) => {
-                    updated = updated + 1;
+                    updated += 1;
                     node.status = match info.healthy() {
                         true => Healthy,
                         false => Unhealthy
@@ -273,9 +270,7 @@ impl ClusterState {
         let res: Vec<_> = self.nodes.iter().filter_map(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {
-                    i.pods.and_then(|p| {
-                        Some(p.clone().into_iter().filter(|p| f(p)).map(|p| vec!((p, n))).collect::<Vec<_>>())
-                    })
+                    i.pods.map(|p| p.clone().into_iter().filter(|p| f(p)).map(|p| vec!((p, n))).collect::<Vec<_>>())
                 })
             })
         }).flatten().flatten().collect();
@@ -293,17 +288,17 @@ impl ClusterState {
 
 
     pub fn locate_objects(&self, node: Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: &str, namespace: &str) -> Vec<(ObjectListItem, &NodeState)> {
-        self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).map(|n| {
+        self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).filter_map(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {
                     selector(&i).and_then(|p| {
                         p.clone().into_iter().find(|p| {
                             p.name.name == name && p.name.namespace == namespace
-                        }).and_then(|o| Some((o, n)))
+                        }).map(|o| (o, n))
                     })
                 })
             })
-        }).flatten().collect()
+        }).collect()
     }
 
 

@@ -16,7 +16,7 @@ use crate::util::spawn_orphan_process;
 
 
 fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
-    let env_args = var("CNI_ARGS").and_then(|e| {
+    let env_args = var("CNI_ARGS").map(|e| {
         let mut hm = HashMap::new();
         for kv in e.split(";") {
             let mut kv = kv.split("=");
@@ -24,7 +24,7 @@ fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
             let v = kv.next().unwrap_or_default();
             hm.insert(k.to_string(), JsonString(v.to_string()));
         }
-        Ok(hm)
+        hm
     }).unwrap_or_default();
 
     let mut new_args = config.args.clone();
@@ -35,14 +35,14 @@ fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
 fn prev_result_or_default(config: &NetworkConfig) -> SuccessReply {
     info!("{:?}", var("CNI_ARGS"));
     let prev = extract_prev_result(config.prev_result.clone());
-    prev.or(Some(SuccessReply {
+    prev.unwrap_or(SuccessReply {
         cni_version: config.cni_version.clone(),
         interfaces: Default::default(),
         ips: Default::default(),
         routes: Default::default(),
         dns: Default::default(),
         specific: Default::default(),
-    })).unwrap()
+    })
 }
 
 fn extract_prev_result(prev_value: Option<Value>) -> Option<SuccessReply> {
@@ -82,7 +82,7 @@ fn run() -> Result<String, Box<dyn Error>> {
 
             let result = prev_result_or_default(&config);
 
-            if result.ips.len() == 0 {
+            if result.ips.is_empty() {
                 return Err("no ips in prev_result".into());
             }
 
@@ -91,7 +91,7 @@ fn run() -> Result<String, Box<dyn Error>> {
 
             let ip = result.ips[0].address.ip().clone().to_string();
 
-            spawn_orphan_process("skatelet", &["dns", "add", &container_id, &ip]);
+            spawn_orphan_process("skatelet", ["dns", "add", &container_id, &ip]);
 
             serde_json::to_writer(io::stdout(), &json)?;
         }

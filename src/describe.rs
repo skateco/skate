@@ -59,7 +59,7 @@ struct NodeDescriber {}
 impl Describer<NodeState> for NodeDescriber {
     fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<NodeState> {
         let id = filters.id.as_ref().and_then(|cmd| match cmd {
-            IdCommand::Id(ids) => ids.first().and_then(|id| Some((*id).clone())),
+            IdCommand::Id(ids) => ids.first().map(|id| (*id).clone()),
         });
         let id = match id {
             Some(id) => id,
@@ -68,7 +68,7 @@ impl Describer<NodeState> for NodeDescriber {
             }
         };
 
-        state.nodes.iter().find(|n| *id == n.node_name.clone()).and_then(|n| Some(n.clone()))
+        state.nodes.iter().find(|n| *id == n.node_name.clone()).cloned()
     }
 
     fn print(&self, item: NodeState) {
@@ -85,21 +85,16 @@ async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> R
 async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let cluster = config.current_cluster()?;
-    let (conns, errs) = ssh::cluster_connections(&cluster).await;
-    if errs.is_some() {
-        if conns.as_ref().and_then(|c| Some(c.clients.len())).unwrap_or(0) == 0 {
-            return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());
-        }
+    let (conns, errs) = ssh::cluster_connections(cluster).await;
+    if errs.is_some() && conns.as_ref().map(|c| c.clients.len()).unwrap_or(0) == 0 {
+        return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());
     }
 
     let state = refreshed_state(&cluster.name, &conns.unwrap(), &config).await?;
 
     let node = inspector.find(&args, &state);
 
-    match node {
-        Some(node) => inspector.print(node),
-        None => {}
-    };
+    if let Some(node) = node { inspector.print(node) };
 
     if errs.is_some() {
         return Err(anyhow!("failed to connect to some hosts: {}", errs.as_ref().unwrap()).into());

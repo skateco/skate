@@ -6,9 +6,7 @@ use clap::{Args, Command, Parser, Subcommand};
 use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::{Container, Pod, PodTemplateSpec, Secret, Service};
-use serde_yaml;
 use serde::{Deserialize, Serialize};
-use tokio;
 use crate::apply::{apply, ApplyArgs};
 use crate::refresh::{refresh, RefreshArgs};
 use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
@@ -273,28 +271,23 @@ impl SupportedResources {
             Some(ref mut spec) => {
                 // first do env-var secrets
                 spec.containers = spec.containers.clone().into_iter().map(|mut container| {
-                    container.env = match container.env {
-                        Some(env_list) => {
-                            Some(env_list.into_iter().map(|mut e| {
+                    container.env = container.env.map(|env_list| env_list.into_iter().map(|mut e| {
                                 let name_opt = e.value_from.as_ref().and_then(|v| v.secret_key_ref.clone()).and_then(|s| s.name);
                                 if name_opt.is_some() {
                                     e.value_from.as_mut().unwrap().secret_key_ref.as_mut().unwrap().name = Some(format!("{}.{}", &name_opt.unwrap(), &ns));
                                 }
                                 e
-                            }).collect())
-                        }
-                        None => None
-                    };
+                            }).collect());
                     container
                 }).collect();
                 // now do volume secrets
-                spec.volumes = spec.volumes.clone().and_then(|volumes| Some(volumes.into_iter().map(|mut volume| {
+                spec.volumes = spec.volumes.clone().map(|volumes| volumes.into_iter().map(|mut volume| {
                     volume.secret = volume.secret.clone().map(|mut secret| {
-                        secret.secret_name = secret.secret_name.clone().and_then(|secret_name| Some(format!("{}.{}", secret_name, ns)));
+                        secret.secret_name = secret.secret_name.clone().map(|secret_name| format!("{}.{}", secret_name, ns));
                         secret
                     });
                     volume
-                }).collect()));
+                }).collect());
 
 
                 Some(spec.clone())
@@ -315,10 +308,7 @@ impl SupportedResources {
         labels.insert("skate.io/name".to_string(), name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
 
-        match extra_labels {
-            Some(extra_labels) => labels.extend(extra_labels),
-            _ => {}
-        };
+        if let Some(extra_labels) = extra_labels { labels.extend(extra_labels) };
         meta.labels = Some(labels);
 
         let mut annotations = meta.annotations.unwrap_or_default();
@@ -517,9 +507,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
 
     let num_filenames = filenames.len();
 
-    let supported_resources =
-
-        for filename in filenames {
+    for filename in filenames {
             let str_file = {
                 if num_filenames == 1 && filename == "-" {
                     let mut stdin = io::stdin();
@@ -579,7 +567,7 @@ impl Platform {
         let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
         let distro = issue.split_whitespace().next().expect("no distribution found in /etc/issue");
 
-        return Platform { arch: arch.to_string(), distribution: Distribution::from(distro) };
+        Platform { arch: arch.to_string(), distribution: Distribution::from(distro) }
     }
 }
 

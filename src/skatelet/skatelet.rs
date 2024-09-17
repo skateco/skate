@@ -79,7 +79,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     let formatter = Formatter3164 {
         facility: Facility::LOG_USER,
         hostname: None,
-        process: format!("skatelet-{}",args.command.as_static().to_lowercase()).into(),
+        process: format!("skatelet-{}",args.command.as_static().to_lowercase()),
         pid: process::id(),
     };
     let logger = match syslog::unix(formatter) {

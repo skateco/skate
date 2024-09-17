@@ -1,9 +1,8 @@
 use tabled::Tabled;
 use crate::get::{GetObjectArgs, Lister};
-use crate::get::ingress::IngressListItem;
 use crate::get::lister::NameFilters;
 use crate::skatelet::{SystemInfo};
-use crate::state::state::{ClusterState, NodeState};
+use crate::state::state::ClusterState;
 
 
 pub(crate) struct NodeLister {}

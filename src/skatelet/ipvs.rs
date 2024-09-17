@@ -65,7 +65,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     let mut manifest: Service = serde_yaml::from_str(&fs::read_to_string(args.file)?)?;
     let spec = manifest.spec.clone().unwrap_or_default();
     let name = spec.selector.unwrap_or_default().get("app.kubernetes.io/name").unwrap_or(&"default".to_string()).clone();
-    if name == "" {
+    if name.is_empty() {
         return Err(anyhow!("service selector app.kubernetes.io/name is required").into());
     }
     let ns = manifest.metadata.namespace.unwrap_or("default".to_string());
@@ -97,15 +97,15 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     info!("changes detected, rewriting keepalived config for {} -> {:?}", &args.host, &addrs);
     // check the old ADD ips in the cache file (remove those with a DEL line)
     let last_result = lastresult_list(&fqn.to_string())?;
-    let _ = lastresult_save(&fqn.to_string(), &addrs.iter().map(|i| i.clone()).collect())?;
+    lastresult_save(&fqn.to_string(), &addrs.iter().cloned().collect())?;
     // remove deleted items that are in the latest result
-    let deleted = terminating.iter().map(|i| i.clone()).filter(|i| !addrs.contains(i)).collect::<Vec<String>>();
+    let deleted = terminating.iter().filter(|&i| !addrs.contains(i)).cloned().collect::<Vec<String>>();
 
     // find those that are now missing, add those to the cache file under DEL
-    let missing_now: Vec<_> = last_result.difference(&addrs).map(|i| i.clone()).collect();
-    let _ = terminated_add(&fqn.to_string(), &missing_now)?;
+    let missing_now: Vec<_> = last_result.difference(&addrs).cloned().collect();
+    terminated_add(&fqn.to_string(), &missing_now)?;
 
-    let new: Vec<_> = addrs.difference(&last_result).map(|i| i.clone()).collect();
+    let new: Vec<_> = addrs.difference(&last_result).cloned().collect();
     info!("added: {:?}", new);
     info!("deleted: {:?}", missing_now);
 
@@ -137,11 +137,11 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
 
 fn hash_changed(addrs: &HashSet<String>, terminating: &HashSet<String>, service_name: &str) -> Result<bool, Box<dyn Error>> {
     let mut addrs_hasher = DefaultHasher::new();
-    let addrs: Vec<_> = addrs.iter().map(|i| i.clone()).sorted().collect();
+    let addrs: Vec<_> = addrs.iter().cloned().sorted().collect();
     addrs.hash(&mut addrs_hasher);
 
     let mut terminating_hasher = DefaultHasher::new();
-    let deleted: Vec<_> = terminating.iter().map(|i| i.clone()).sorted().collect();
+    let deleted: Vec<_> = terminating.iter().cloned().sorted().collect();
     deleted.hash(&mut terminating_hasher);
 
     let new_hash = format!("{:x}|{:x}", addrs_hasher.finish(), terminating_hasher.finish());
@@ -166,11 +166,8 @@ fn cleanup(service_name: &str) -> bool {
             false
         });
 
-        match fs::write(cleanup_file, format!("{}", now)) {
-            Err(e) => {
-                info!("failed to write cleanup file: {}", e);
-            }
-            Ok(_) => {}
+        if let Err(e) = fs::write(cleanup_file, format!("{}", now)) {
+            info!("failed to write cleanup file: {}", e);
         };
         return changed;
     }
@@ -202,7 +199,7 @@ fn lastresult_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
 }
 
 fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn Error>> {
-    let mut file = OpenOptions::new().write(true).append(true).create(true).open(terminated_list_file_name(service_name))?;
+    let mut file = OpenOptions::new().append(true).create(true).open(terminated_list_file_name(service_name))?;
     for ip in ips {
         file.write_all(format!("{} {}\n", ip, chrono::Utc::now().timestamp()).as_bytes())?;
     }
@@ -273,7 +270,7 @@ fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
             info!("keeping {} since it was terminated {} seconds ago ( < {} seconds ago )",ip, TERMINATED_MAX_AGE,   now-ts);
             keep_set.insert(ip);
             new_contents.push_str(line);
-            new_contents.push_str("\n");
+            new_contents.push('\n');
             continue;
         }
 

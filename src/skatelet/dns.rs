@@ -97,7 +97,7 @@ pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), Box<
             // create or open
             let mut addhosts_file = OpenOptions::new()
                 .create(true)
-                .write(true)
+                
                 .append(true)
                 .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
 
@@ -118,7 +118,7 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<
     // TODO - store pod info in store, if no info, break retry loop
     let (extracted_ip, json) = retry(10, || {
         debug!("{} inspecting container {}",log_tag, container_id);
-        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()]).map_err(|e| (true, e.into()))?;
+        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()]).map_err(|e| (true, e))?;
         let container_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e)).map_err(|e| (false, e.into()))?;
         let is_infra = container_json[0]["IsInfra"].as_bool().unwrap();
         if !is_infra {
@@ -136,7 +136,7 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<
 
 
         debug!("{} inspecting pod", log_tag);
-        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()]).map_err(|e| (true, e.into()))?;
+        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()]).map_err(|e| (true, e))?;
         let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e)).map_err(|e| (false, e.into()))?;
         Ok((ip, pod_json))
     })?;
@@ -185,7 +185,7 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<
             // create or open
             let mut addhosts_file = OpenOptions::new()
                 .create(true)
-                .write(true)
+                
                 .append(true)
                 .open(addnhosts_path).map_err(|e| anyhow!("failed to open addnhosts file: {}", e))?;
 
@@ -197,7 +197,7 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<
     }));
 
     if result.is_ok() {
-        spawn_orphan_process("skatelet", &["dns", "enable", &container_id]);
+        spawn_orphan_process("skatelet", ["dns", "enable", &container_id]);
     }
     result
 }
@@ -220,7 +220,7 @@ fn extract_skate_ip(json: Value) -> Option<String> {
         } else {
             None
         }
-    }).collect::<Vec<String>>().first().and_then(|s| Some(s.clone()))
+    }).collect::<Vec<String>>().first().cloned()
 }
 
 pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error>> {
@@ -242,7 +242,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
         c["Id"].as_str().unwrap()
     ).collect();
 
-    let args = vec!(vec!("0.2", "podman", "inspect"), containers).concat();
+    let args = [vec!("0.2", "podman", "inspect"), containers].concat();
 
     let mut healthy = false;
     for _ in 0..60 {
@@ -261,7 +261,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
             return Ok(());
         };
 
-        if containers.into_iter().all(|c| c == "healthy" || c == "") {
+        if containers.into_iter().all(|c| c == "healthy" || c.is_empty()) {
             debug!("{} all containers healthy or no healthcheck",log_tag);
             healthy = true;
             break;
@@ -378,7 +378,7 @@ pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
                     writeln!(writer, "{}", line)?;
                 } else {
                     // ip is first column
-                    let ip = line.split_whitespace().nth(0).unwrap();
+                    let ip = line.split_whitespace().next().unwrap();
                     println!("{}", ip);
                 }
             }

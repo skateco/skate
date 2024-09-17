@@ -26,7 +26,7 @@ pub fn config(args: ConfigArgs) -> Result<(), Box<dyn std::error::Error>> {
         ConfigCommands::UseContext(use_context_args) => {
             let mut config = crate::config::Config::load(Some(args.config.skateconfig.clone())).expect("failed to load skate config");
             config.clusters.iter().any(|c| c.name == use_context_args.context)
-                .then(|| ())
+                .then_some(())
                 .ok_or(anyhow!("no context exists with the name {}", use_context_args.context))?;
             config.current_context = Some(use_context_args.context.clone());
             config.persist(Some(args.config.skateconfig))?;

@@ -68,7 +68,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let node = Node {
         name: args.name.clone(),
         host: args.host.clone(),
-        port: args.port.clone(),
+        port: args.port,
         user: args.user.clone(),
         key: args.key.clone(),
         subnet_cidr: args.subnet_cidr.clone(),
@@ -98,7 +98,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
-            let _ = conn.install_skatelet(info.platform.clone()).await?;
+            conn.install_skatelet(info.platform.clone()).await?;
         }
         Some(v) => {
             println!("skatelet version {} already installed {} ", v, CHECKBOX_EMOJI)
@@ -109,7 +109,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         Some(version) => {
             let min_podman_ver = ">=3.0.0";
             let req = VersionReq::parse(min_podman_ver).unwrap();
-            let version = Version::parse(&version).unwrap();
+            let version = Version::parse(version).unwrap();
 
             if !req.matches(&version) {
                 return Err(anyhow!("podman version too old, must be {}, see https://podman.io/docs/installation", min_podman_ver).into());
@@ -153,19 +153,19 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         "dns",
         "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
 
-    _ = conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
+    conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;;
     // _ = conn.execute("sudo podman rm -fa").await;
 
-    setup_networking(&conn, &all_conns, &cluster, &node).await?;
+    setup_networking(&conn, all_conns, &cluster, &node).await?;
 
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     // Refresh state so that we can apply coredns later
-    let mut state = refreshed_state(&cluster.name, &all_conns, &config).await?;
+    let mut state = refreshed_state(&cluster.name, all_conns, &config).await?;
 
     install_cluster_manifests(&args.config, &cluster).await?;
 
-    propagate_exsting_resources(&config, &all_conns, &node, &mut state).await?;
+    propagate_exsting_resources(&config, all_conns, &node, &mut state).await?;
 
     Ok(())
 }
@@ -192,7 +192,7 @@ async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node
 
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = vec!(state.nodes.iter().filter(|n| n.node_name == node.name).cloned().next().unwrap());
+    filtered_state.nodes = vec!(state.nodes.iter().find(|n| n.node_name == node.name).cloned().unwrap());
 
 
     let scheduler = DefaultScheduler {};
@@ -214,7 +214,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
-    let coredns_yaml_path = format!("/tmp/skate-coredns.yaml");
+    let coredns_yaml_path = "/tmp/skate-coredns.yaml".to_string();
     let mut file = File::create(&coredns_yaml_path)?;
     file.write_all(coredns_yaml.as_bytes())?;
 
@@ -227,7 +227,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 
     // nginx ingress
 
-    let nginx_yaml_path = format!("/tmp/skate-nginx-ingress.yaml");
+    let nginx_yaml_path = "/tmp/skate-nginx-ingress.yaml".to_string();
     let mut file = File::create(&nginx_yaml_path)?;
     file.write_all(INGRESS_MANIFEST.as_bytes())?;
 
@@ -440,29 +440,29 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
     for other_node in &other_nodes {
         let ip = format!("{}:22", other_node.host).to_socket_addrs()
             .unwrap().next().unwrap().ip().to_string();
-        route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
+        route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }
 
     // load kernel modules
-    route_file = route_file + "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
+    route_file += "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
 
-    route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
+    route_file += "sysctl -w net.ipv4.ip_forward=1\n";
+    route_file += "sysctl fs.inotify.max_user_instances=1280\n";
+    route_file += "sysctl fs.inotify.max_user_watches=655360\n";
 
     // Virtual Server stuff
     // taken from https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/proxier.go#L295
-    route_file = route_file + "sysctl -w net.ipv4.vs.conntrack=1\n";
+    route_file += "sysctl -w net.ipv4.vs.conntrack=1\n";
     // since we're using conntrac we need to increase the max so we dont exhaust it
-    route_file = route_file + "sysctl net.nf_conntrack_max=512000\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
+    route_file += "sysctl net.nf_conntrack_max=512000\n";
+    route_file += "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
+    route_file += "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
+    route_file += "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
     // configurable in kube-proxy
     // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_ignore=1\n";
     // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_announce=2\n";
 
-    route_file = route_file + "sysctl -p\n";
+    route_file += "sysctl -p\n";
 
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
@@ -481,7 +481,7 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     conn.execute_stdout("sudo systemctl daemon-reload", true, true).await?;
     conn.execute_stdout("sudo systemctl enable skate-routes.service", true, true).await?;
-    _ = conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;
+    conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;;
 
     Ok(())
 }

@@ -155,10 +155,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             return None;
         }
         let secret_name = parts[1];
-        match secret_name.rsplit_once(".") {
-            Some((_, _)) => Some(secret_name),
-            None => None,
-        }
+        secret_name.rsplit_once(".").map(|(_, _)| secret_name)
     }).collect();
 
     let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names].concat()).unwrap_or_else(|e| {
@@ -205,8 +202,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
     });
 
 
-    let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/")
-        .and_then(|d| Some(DiskInfo {
+    let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/").map(|d| DiskInfo {
             available_space_mib: d.available_space() / BYTES_IN_MIB,
             total_space_mib: d.total_space() / BYTES_IN_MIB,
             disk_kind: match d.kind() {
@@ -214,7 +210,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
                 DiskKind::SSD => "sdd",
                 DiskKind::Unknown(_) => "unknown"
             }.to_string(),
-        }));
+        });
 
 
     let info = SystemInfo {
@@ -233,11 +229,11 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
-        ingresses: (!ingresses.is_empty()).then(|| ingresses),
-        cronjobs: (!cronjobs.is_empty()).then(|| cronjobs),
-        secrets: (!secret_info.is_empty()).then(|| secret_info),
-        services: (!services.is_empty()).then(|| services),
-        cluster_issuers: (!cluster_issuers.is_empty()).then(|| cluster_issuers),
+        ingresses: (!ingresses.is_empty()).then_some(ingresses),
+        cronjobs: (!cronjobs.is_empty()).then_some(cronjobs),
+        secrets: (!secret_info.is_empty()).then_some(secret_info),
+        services: (!services.is_empty()).then_some(services),
+        cluster_issuers: (!cluster_issuers.is_empty()).then_some(cluster_issuers),
         hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
     };

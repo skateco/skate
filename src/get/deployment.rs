@@ -3,12 +3,10 @@ use chrono::Local;
 use itertools::Itertools;
 use crate::get::{GetObjectArgs, Lister};
 use crate::get::lister::NameFilters;
-use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
 use crate::util::{age, NamespacedName};
-use tabled::{builder::Builder, settings::{style::Style}, Tabled};
-use crate::get::daemonset::DaemonsetListItem;
+use tabled::Tabled;
 
 pub(crate) struct DeploymentLister {}
 
@@ -38,14 +36,14 @@ impl Lister<DeploymentListItem> for DeploymentLister {
         let pods = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
                 let deployment = p.labels.get("skate.io/deployment").unwrap_or(&"".to_string()).clone();
-                if deployment == "" {
+                if deployment.is_empty() {
                     return None;
                 }
 
-                if {
+                let res = {
                     let filterable: Box<dyn NameFilters> = Box::new(&p);
                     filterable.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
-                } {
+                }; if res {
                     let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
                     return Some((NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()), p));
                 }
@@ -58,7 +56,7 @@ impl Lister<DeploymentListItem> for DeploymentLister {
         }).flatten();
 
         let grouped = pods.fold(HashMap::<NamespacedName, Vec<PodmanPodInfo>>::new(), |mut acc, (depl, pod)| {
-            acc.entry(depl).or_insert(vec![]).push(pod);
+            acc.entry(depl).or_default().push(pod);
             acc
         });
 
@@ -69,7 +67,7 @@ impl Lister<DeploymentListItem> for DeploymentLister {
                 if item.created < acc {
                     return item.created;
                 }
-                return acc;
+                acc
             });
 
             let its_age = age(created);

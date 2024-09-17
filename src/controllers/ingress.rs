@@ -34,7 +34,7 @@ impl IngressController {
         let hash = ingress.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
 
         if !hash.is_empty() {
-            self.store.write_file("ingress", &name, "hash", &hash.as_bytes())?;
+            self.store.write_file("ingress", name, "hash", hash.as_bytes())?;
         }
 
         self.render_nginx_conf()?;
@@ -55,7 +55,7 @@ impl IngressController {
 
 
             let child = process::Command::new("bash")
-                .args(&["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
+                .args(["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped()).spawn()?;
 
@@ -76,7 +76,7 @@ impl IngressController {
 
     pub fn delete(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&ingress);
-        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name.to_string());
+        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name);
         let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
             return Err(anyhow!(result.unwrap_err()).context(format!("failed to remove directory {}", dir)).into());
@@ -99,7 +99,7 @@ impl IngressController {
             return Err(anyhow!("no ingress container found").into());
         }
 
-        let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &format!("{}", id)])?;
+        let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
         Ok(())
     }
 
@@ -119,7 +119,7 @@ impl IngressController {
         // Template main nginx conf
         ////////////////////////////////////////////////////
 
-        let issuer = self.store.list_objects("clusterissuer").ok().and_then(|list| list.first().and_then(|c| Some(c.clone())));
+        let issuer = self.store.list_objects("clusterissuer").ok().and_then(|list| list.first().cloned());
 
         let (endpoint, email) = match issuer {
             Some(issuer) => {
@@ -131,7 +131,7 @@ impl IngressController {
             None => None
         }.unwrap_or_default();
 
-        let endpoint = if endpoint == "" {
+        let endpoint = if endpoint.is_empty() {
             // default to staging
             "https://acme-staging-v02.api.letsencrypt.org/directory".to_string()
         } else {
@@ -147,7 +147,7 @@ impl IngressController {
         });
 
         let child = process::Command::new("bash")
-            .args(&["-c", "skatelet template --file /var/lib/skate/ingress/nginx.conf.tmpl - > /var/lib/skate/ingress/nginx.conf"])
+            .args(["-c", "skatelet template --file /var/lib/skate/ingress/nginx.conf.tmpl - > /var/lib/skate/ingress/nginx.conf"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;

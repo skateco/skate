@@ -34,7 +34,7 @@ impl CronjobController {
         let hash = cron_job.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
 
         if !hash.is_empty() {
-            self.store.write_file("cronjob", &ns_name.to_string(), "hash", &hash.as_bytes())?;
+            self.store.write_file("cronjob", &ns_name.to_string(), "hash", hash.as_bytes())?;
         }
 
         let spec = cron_job.spec.clone().unwrap_or_default();
@@ -51,7 +51,7 @@ impl CronjobController {
         let mut pod = Pod::default();
         pod.spec = pod_template_spec.spec;
         pod.metadata = cron_job.metadata.clone();
-        pod.metadata.name = Some(format!("crn-{}", ns_name.to_string()));
+        pod.metadata.name = Some(format!("crn-{}", ns_name));
         let mut_spec = pod.spec.as_mut().unwrap();
         mut_spec.restart_policy = Some("Never".to_string());
 
@@ -70,7 +70,7 @@ impl CronjobController {
         handlebars.register_template_string("unit", include_str!("../resources/cron-pod.service")).map_err(|e| anyhow!(e).context("failed to load service template file"))?;
 
         let json: Value = json!({
-            "description": &format!("{} Job", ns_name.to_string()),
+            "description": &format!("{} Job", ns_name),
             "timer": &format!("skate-cronjob-{}.timer", &ns_name.to_string()),
             "command": format!("skatelet create --namespace {} job --from cronjob/{} {} -w", ns_name.namespace, ns_name.name, ns_name.name),
         });
@@ -89,7 +89,7 @@ impl CronjobController {
         handlebars.register_template_string("timer", include_str!("../resources/cron-pod.timer")).map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
 
         let json: Value = json!({
-            "description": &format!("{} Timer", ns_name.to_string()),
+            "description": &format!("{} Timer", ns_name),
             "target_unit": &format!("skate-cronjob-{}.service", &ns_name.to_string()),
             "on_calendar": systemd_timer_schedule,
         });

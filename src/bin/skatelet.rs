@@ -1,5 +1,4 @@
 use std::error::Error;
-use tokio;
 use skate::skatelet;
 
 #[tokio::main]

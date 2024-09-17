@@ -84,13 +84,13 @@ pub struct PodmanPodInfo {
 
 impl PodmanPodInfo {
     pub fn name(&self) -> String {
-        self.labels.get("skate.io/name").map(|ns| ns.clone()).unwrap_or("".to_string())
+        self.labels.get("skate.io/name").cloned().unwrap_or("".to_string())
     }
     pub fn namespace(&self) -> String {
-        self.labels.get("skate.io/namespace").map(|ns| ns.clone()).unwrap_or("".to_string())
+        self.labels.get("skate.io/namespace").cloned().unwrap_or("".to_string())
     }
     pub fn deployment(&self) -> String {
-        self.labels.get("skate.io/deployment").map(|d| d.clone()).unwrap_or("".to_string())
+        self.labels.get("skate.io/deployment").cloned().unwrap_or("".to_string())
     }
 }
 
@@ -99,30 +99,28 @@ impl From<Pod> for PodmanPodInfo {
         PodmanPodInfo {
             id: value.metadata.uid.unwrap_or("".to_string()),
             name: value.metadata.name.unwrap_or("".to_string()),
-            status: PodmanPodStatus::from_pod_phase(value.status.and_then(|s| s.phase.and_then(|p| {
-                Some(p)
-            })).unwrap_or("".to_string()).as_str()),
-            created: value.metadata.creation_timestamp.and_then(|ts| Some(DateTime::from(ts.0))).unwrap_or(DateTime::from(Local::now())),
-            labels: value.metadata.labels.unwrap_or(BTreeMap::new()),
+            status: PodmanPodStatus::from_pod_phase(value.status.and_then(|s| s.phase).unwrap_or("".to_string()).as_str()),
+            created: value.metadata.creation_timestamp.map(|ts| DateTime::from(ts.0)).unwrap_or(Local::now()),
+            labels: value.metadata.labels.unwrap_or_default(),
             containers: None, // TODO
         }
     }
 }
 
-impl Into<Pod> for PodmanPodInfo {
-    fn into(self) -> Pod {
+impl From<PodmanPodInfo> for Pod {
+    fn from(val: PodmanPodInfo) -> Self {
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
-                creation_timestamp: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(DateTime::from(self.created))),
+                creation_timestamp: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(DateTime::from(val.created))),
                 deletion_grace_period_seconds: None,
                 deletion_timestamp: None,
                 finalizers: None,
                 generate_name: None,
                 generation: None,
-                labels: match self.labels.len() {
+                labels: match val.labels.len() {
                     0 => None,
-                    _ => Some(self.labels.iter().filter_map(|(k, v)| {
+                    _ => Some(val.labels.iter().filter_map(|(k, v)| {
                         if k.starts_with("nodeselector/") {
                             None
                         } else {
@@ -131,12 +129,12 @@ impl Into<Pod> for PodmanPodInfo {
                     }).collect())
                 },
                 managed_fields: None,
-                name: Some(self.name.clone()),
-                namespace: Some(self.namespace()),
+                name: Some(val.name.clone()),
+                namespace: Some(val.namespace()),
                 owner_references: None,
                 resource_version: None,
                 self_link: None,
-                uid: Some(self.id),
+                uid: Some(val.id),
             },
             spec: Some(PodSpec {
                 active_deadline_seconds: None,
@@ -156,7 +154,7 @@ impl Into<Pod> for PodmanPodInfo {
                 image_pull_secrets: None,
                 init_containers: None,
                 node_name: None,
-                node_selector: Some(self.labels.iter().filter_map(|(k, v)| {
+                node_selector: Some(val.labels.iter().filter_map(|(k, v)| {
                     if k.starts_with("nodeselector/") {
                         Some(((*k.clone()).strip_prefix("nodeselector/").unwrap_or(k).to_string(), (*v).clone()))
                     } else {
@@ -195,7 +193,7 @@ impl Into<Pod> for PodmanPodInfo {
                 init_container_statuses: None,
                 message: None,
                 nominated_node_name: None,
-                phase: Some(self.status.to_pod_phase()),
+                phase: Some(val.status.to_pod_phase()),
                 pod_ip: None,
                 pod_ips: None,
                 qos_class: None,

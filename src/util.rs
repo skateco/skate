@@ -109,13 +109,13 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + C
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
     labels.remove("skate.io/hash");
-    labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().labels = Option::from(labels);
 
 
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 
-    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().annotations = Option::from(annotations);
 
     let serialized = serde_yaml::to_string(&obj).unwrap();
@@ -276,7 +276,7 @@ mod tests {
         ];
 
         for (input, expect) in conditions {
-            let output = age(input.clone());
+            let output = age(*input);
             assert_eq!(output, *expect, "input: {}", input);
         }
     }

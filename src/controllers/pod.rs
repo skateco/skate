@@ -1,7 +1,6 @@
 use std::error::Error;
 use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Pod;
-use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::apply_play;
 
@@ -51,10 +50,10 @@ impl PodController {
         let grace_str = format!("{}", grace);
         println!("gracefully stopping {}", id);
 
-        let containers = exec_cmd("podman", &["pod", "inspect", &id, "--format={{range.Containers}}{{.Id}} {{end}}"])?;
+        let containers = exec_cmd("podman", &["pod", "inspect", id, "--format={{range.Containers}}{{.Id}} {{end}}"])?;
         let containers = containers.split_ascii_whitespace().collect();
 
-        let _ = exec_cmd("podman", &["pod", "kill", "--signal", "SIGTERM", &id]);
+        let _ = exec_cmd("podman", &["pod", "kill", "--signal", "SIGTERM", id]);
 
 
         let args = [vec!(&grace_str, "podman", "wait"), containers].concat();

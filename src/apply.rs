@@ -31,20 +31,14 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), Box<dyn Error>> {
     let cluster = config.current_cluster()?;
     let (conns, errors) = ssh::cluster_connections(cluster).await;
-    match errors {
-        Some(e) => {
-            for e in e.errors {
-                eprintln!("{} - {}", e.node_name, e.error)
-            }
+    if let Some(e) = errors {
+        for e in e.errors {
+            eprintln!("{} - {}", e.node_name, e.error)
         }
-        _ => {}
     };
 
-    match conns {
-        None => {
-            return Err(anyhow!("failed to create cluster connections").into());
-        }
-        _ => {}
+    if conns.is_none() {
+        return Err(anyhow!("failed to create cluster connections").into());
     };
 
     let objects: Vec<Result<_, _>> = resources.into_iter().map(|sr| sr.fixup()).collect();
@@ -52,7 +46,7 @@ pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<Su
 
     let conns = conns.ok_or("no clients")?;
 
-    let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
+    let mut state = refreshed_state(&cluster.name, &conns, config).await.expect("failed to refresh state");
 
     let scheduler = DefaultScheduler {};
     match scheduler.schedule(&conns, &mut state, objects).await {

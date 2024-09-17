@@ -43,7 +43,7 @@ pub(crate) fn oci(args: OciArgs) -> Result<(), Box<dyn Error>> {
 fn post_start() -> Result<(), Box<dyn Error>> {
     info!("poststart");
     let id = container_id()?;
-    spawn_orphan_process("skatelet", &["dns", "add", &id]);
+    spawn_orphan_process("skatelet", ["dns", "add", &id]);
     Ok(())
 }
 
@@ -55,7 +55,7 @@ fn post_stop() -> Result<(), Box<dyn Error>> {
 
 fn container_id() -> Result<String, Box<dyn Error>> {
     let cwd = std::env::current_dir()?;
-    let container_dir = cwd.parent().ok_or_else(|| "no parent dir")?;
-    let container_id = container_dir.file_name().ok_or_else(|| "no dir name")?;
+    let container_dir = cwd.parent().ok_or("no parent dir")?;
+    let container_id = container_dir.file_name().ok_or("no dir name")?;
     Ok(container_id.to_string_lossy().to_string())
 }

@@ -109,7 +109,7 @@ impl FileStore {
 
         let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&file_path);
         match file.map_err(|e| anyhow!(e).context(format!("failed to create file {}", file_path))) {
-            Err(e) => return Err(e.into()),
+            Err(e) => Err(e.into()),
             Ok(mut file) => file.write_all(file_contents).map(|_| file_path).map_err(|e| e.into())
         }
     }

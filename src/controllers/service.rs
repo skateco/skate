@@ -20,7 +20,7 @@ pub struct ServiceController {
 impl ServiceController {
     pub fn new(store: FileStore) -> Self {
         ServiceController {
-            store: store,
+            store,
         }
     }
 
@@ -34,7 +34,7 @@ impl ServiceController {
         let hash = service.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
 
         if !hash.is_empty() {
-            self.store.write_file("service", &name, "hash", &hash.as_bytes())?;
+            self.store.write_file("service", name, "hash", hash.as_bytes())?;
         }
 
         // install systemd service and timer

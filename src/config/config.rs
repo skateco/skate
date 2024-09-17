@@ -38,7 +38,7 @@ pub struct Node {
 
 impl Config {
     pub fn current_cluster(&self) -> Result<&Cluster, Box<dyn Error>> {
-        if self.clusters.len() == 0 {
+        if self.clusters.is_empty() {
             return Err(anyhow!("no clusters in config").into());
         }
 
@@ -47,7 +47,7 @@ impl Config {
         let cluster_name = self.current_context.clone().unwrap_or(first.name.to_owned());
 
         Ok(self.clusters.iter().find(|c| c.name == cluster_name)
-            .expect(format!("found no cluster by name of {}", cluster_name).as_str()))
+            .unwrap_or_else(|| panic!("found no cluster by name of {}", cluster_name)))
     }
 }
 
@@ -57,7 +57,7 @@ pub fn config_dir() -> String {
 }
 
 pub fn cache_dir() -> String {
-    return config_dir() + "/cache";
+    config_dir() + "/cache"
 }
 
 pub fn ensure_config() -> Result<(), Box<dyn Error>> {
@@ -111,6 +111,7 @@ impl Config {
     pub fn persist(&self, path: Option<String>) -> Result<(), Box<dyn Error>> {
         let path = Config::path(path);
         let state_file = File::create(Path::new(&path)).expect("unable to config state file");
-        Ok(serde_yaml::to_writer(state_file, self).expect("failed to write config file"))
+        serde_yaml::to_writer(state_file, self).expect("failed to write config file");
+        Ok(())
     }
 }

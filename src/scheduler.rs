@@ -9,7 +9,6 @@ use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment}
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use k8s_openapi::Metadata;
 
 
@@ -80,7 +79,7 @@ impl DefaultScheduler {
             let node_labels = k8s_node.metadata.labels.unwrap_or_default();
             // only schedulable nodes
             let is_schedulable = k8s_node.spec.and_then(|s| {
-                s.unschedulable.and_then(|u| Some(!u))
+                s.unschedulable.map(|u| !u)
             }).unwrap_or(false);
 
             if !is_schedulable {
@@ -100,7 +99,7 @@ impl DefaultScheduler {
                         reason: format!("node selector {}:{} did not match", k, v),
                     });
                 }
-                return matches;
+                matches
             })
         }).collect::<Vec<_>>();
 
@@ -108,18 +107,18 @@ impl DefaultScheduler {
         let feasible_node = filtered_nodes.into_iter().fold(None, |maybe_prev_node, node| {
             let node_pods = node.clone().host_info.and_then(|h| {
                 h.system_info.and_then(|si| {
-                    si.pods.and_then(|p| Some(p.len()))
+                    si.pods.map(|p| p.len())
                 })
             }).unwrap_or(0);
 
             maybe_prev_node.and_then(|prev_node: NodeState| {
                 prev_node.host_info.clone().and_then(|h| {
                     h.system_info.and_then(|si| {
-                        si.pods.and_then(|prev_pods| {
+                        si.pods.map(|prev_pods| {
                             match prev_pods.len().cmp(&node_pods) {
-                                Ordering::Less => Some(prev_node.clone()),
-                                Ordering::Equal => Some(node.clone()),
-                                Ordering::Greater => Some(node.clone()),
+                                Ordering::Less => prev_node.clone(),
+                                Ordering::Equal => node.clone(),
+                                Ordering::Greater => node.clone(),
                             }
                         })
                     })
@@ -138,7 +137,7 @@ impl DefaultScheduler {
 
         for node in state.nodes.iter() {
             let node_name = node.node_name.clone();
-            let mut pod_spec = ds.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
+            let mut pod_spec = ds.spec.clone().map(|s| s.template).and_then(|t| t.spec).unwrap_or_default();
 
             // inherit daemonset labels
             let mut meta = ds.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
@@ -192,13 +191,13 @@ impl DefaultScheduler {
         };
 
         if is_rolling {
-            return Self::plan_deployment_rolling_update(state, &d, strategy.rolling_update.unwrap());
+            return Self::plan_deployment_rolling_update(state, d, strategy.rolling_update.unwrap());
         }
-        Self::plan_deployment_recreate(state, &d)
+        Self::plan_deployment_recreate(state, d)
     }
 
     fn plan_deployment_rolling_update(state: &ClusterState, d: &Deployment, ru: RollingUpdateDeployment) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut actions = Self::plan_deployment_recreate(state, d)?;
+        let actions = Self::plan_deployment_recreate(state, d)?;
 
         // TODO - respect max surge and max unavailable
         // will require parallelism.
@@ -224,13 +223,13 @@ impl DefaultScheduler {
         new_actions = new_actions.into_iter().sorted_by(|a, b| {
             match a.operation {
                 OpType::Delete => {
-                    return Ordering::Less;
+                    Ordering::Less
                 }
                 OpType::Create => {
-                    return Ordering::Greater;
+                    Ordering::Greater
                 }
                 _ => {
-                    return Ordering::Equal;
+                    Ordering::Equal
                 }
             }
         }).collect();
@@ -253,7 +252,7 @@ impl DefaultScheduler {
             let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
             let replica = replica.parse::<u32>().unwrap_or(0);
             (dp, node, replica)
-        }).sorted_by_key(|(_, _, replica)| replica.clone()).rev().collect();
+        }).sorted_by_key(|(_, _, replica)| *replica).rev().collect();
 
         if existing_pods.len() > replicas as usize {
             // cull the extra pods
@@ -279,7 +278,7 @@ impl DefaultScheduler {
 
 
         for i in 0..replicas {
-            let pod_spec = d.spec.clone().and_then(|s| Some(s.template)).and_then(|t| t.spec).unwrap_or_default();
+            let pod_spec = d.spec.clone().map(|s| s.template).and_then(|t| t.spec).unwrap_or_default();
 
             // inherit deployment labels
             let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
@@ -329,19 +328,16 @@ impl DefaultScheduler {
         let name = metadata_name(object);
 
         // smuggle node selectors as labels
-        match new_pod.spec.as_ref() {
-            Some(spec) => {
-                if spec.node_selector.is_some() {
-                    let ns = spec.node_selector.clone().unwrap();
-                    let selector_labels = ns.iter().map(|(k, v)| {
-                        (format!("nodeselector/{}", k), v.clone())
-                    });
-                    let mut labels = new_pod.metadata().labels.clone().unwrap_or_default();
-                    labels.extend(selector_labels);
-                    new_pod.metadata_mut().labels = Some(labels)
-                }
+        if let Some(spec) = new_pod.spec.as_ref() {
+            if spec.node_selector.is_some() {
+                let ns = spec.node_selector.clone().unwrap();
+                let selector_labels = ns.iter().map(|(k, v)| {
+                    (format!("nodeselector/{}", k), v.clone())
+                });
+                let mut labels = new_pod.metadata().labels.clone().unwrap_or_default();
+                labels.extend(selector_labels);
+                new_pod.metadata_mut().labels = Some(labels)
             }
-            None => {}
         }
 
 
@@ -352,7 +348,7 @@ impl DefaultScheduler {
 
         let cull_actions: Vec<_> = match existing_pods.len() {
             0 | 1 => vec!(),
-            _ => (&existing_pods.as_slice()[1..]).iter().map(|(pod_info, node)| {
+            _ => existing_pods.as_slice()[1..].iter().map(|(pod_info, node)| {
                 ScheduledOperation {
                     node: Some((**node).clone()),
                     resource: SupportedResources::Pod(pod_info.clone().into()),
@@ -424,7 +420,7 @@ impl DefaultScheduler {
 
         let existing_cron = state.locate_objects(None, |si| {
             si.clone().cronjobs
-        }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
+        }, &name.name, &name.namespace).first().cloned();
 
 
         match existing_cron {
@@ -508,7 +504,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_service = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().services
-            }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
+            }, &name.name, &name.namespace).first().cloned();
 
             match existing_service {
                 Some(c) => {
@@ -567,7 +563,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_ingress = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().ingresses
-            }, &name.name, &name.namespace).first().and_then(|f| Some(f.clone()));
+            }, &name.name, &name.namespace).first().cloned();
 
             match existing_ingress {
                 Some(c) => {
@@ -625,7 +621,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().cluster_issuers
-            }, &ns_name.name, "skate").first().and_then(|f| Some(f.clone()));
+            }, &ns_name.name, "skate").first().cloned();
 
             match existing {
                 Some(c) => {
@@ -707,7 +703,7 @@ impl DefaultScheduler {
 
     async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
-        if plan.actions.len() == 0 {
+        if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
 
@@ -725,12 +721,12 @@ impl DefaultScheduler {
                                 if !stderr.is_empty() {
                                     eprintln!("{}", stderr.trim())
                                 }
-                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource.to_string(), op.resource.name(), node_name);
+                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
                                 result.push(op.clone());
                             }
                             Err(err) => {
                                 op.error = Some(err.to_string());
-                                println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, op.resource.name(), node_name, err.to_string());
+                                println!("{} failed to delete {} on node {}: {}", CROSS_EMOJI, op.resource.name(), node_name, err);
                                 result.push(op.clone());
                             }
                         }
@@ -742,7 +738,7 @@ impl DefaultScheduler {
                             // anything else and things with node selectors go here
                             None => Self::choose_node(state.nodes.clone(), &op.resource)
                         };
-                        if !node.is_some() {
+                        if node.is_none() {
                             let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
                             return Err(anyhow!("failed to find feasible node: {}", reasons).into());
                         }
@@ -761,12 +757,12 @@ impl DefaultScheduler {
                                     stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
                                 }
                                 let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
-                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource.to_string(), &op.resource.name(), node_name);
+                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
                                 result.push(op.clone());
                             }
                             Err(err) => {
                                 op.error = Some(err.to_string());
-                                println!("{} {} {} creation failed on node {}: {}", CROSS_EMOJI, op.resource.to_string(), op.resource.name().name, node_name, err.to_string());
+                                println!("{} {} {} creation failed on node {}: {}", CROSS_EMOJI, op.resource, op.resource.name().name, node_name, err);
                                 result.push(op.clone());
                             }
                         }
@@ -778,7 +774,7 @@ impl DefaultScheduler {
                     }
                     OpType::Unchanged => {
                         let node_name = op.node.clone().unwrap().node_name;
-                        println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource.to_string(), op.resource.name(), node_name);
+                        println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource, op.resource.name(), node_name);
                     }
                 }
             }
@@ -793,12 +789,12 @@ impl Scheduler for DefaultScheduler {
     async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(&conns, state, object.clone()).await {
+            match Self::schedule_one(conns, state, object.clone()).await {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }
                 Err(err) => {
-                    println!("{} failed to schedule {} : {}", CROSS_EMOJI, object.name(), err.to_string());
+                    println!("{} failed to schedule {} : {}", CROSS_EMOJI, object.name(), err);
                     results.placements = [results.placements, vec![ScheduledOperation {
                         resource: object.clone(),
                         node: None,

@@ -3,7 +3,6 @@ use std::io;
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use handlebars::{Handlebars};
 use serde_json::Value;
 use crate::template;
 

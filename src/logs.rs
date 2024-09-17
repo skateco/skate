@@ -35,7 +35,7 @@ impl LogArgs {
             let tail = format!("--tail {}", &self.tail);
             cmd.push(tail);
         }
-        return cmd;
+        cmd
     }
 }
 
@@ -100,10 +100,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &Log
     }
 
     for res in result {
-        match res {
-            Err(e) => eprintln!("{}", e),
-            _ => {}
-        }
+        if let Err(e) = res { eprintln!("{}", e) }
     }
 
     Ok(())
@@ -126,10 +123,7 @@ pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType
     }
 
     for res in result {
-        match res {
-            Err(e) => eprintln!("{}", e),
-            _ => {}
-        }
+        if let Err(e) = res { eprintln!("{}", e) }
     }
 
     Ok(())

@@ -1,16 +1,12 @@
 use std::collections::HashMap;
 use chrono::Local;
 use itertools::Itertools;
-use tabled::builder::Builder;
-use tabled::settings::Style;
 use tabled::Tabled;
 use crate::get::{GetObjectArgs, Lister};
-use crate::get::cronjob::CronListItem;
 use crate::get::lister::NameFilters;
-use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
-use crate::util::{age, NamespacedName};
+use crate::util::age;
 
 pub(crate) struct DaemonsetLister {}
 
@@ -43,14 +39,14 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
         let pods = state.nodes.iter().filter_map(|n| {
             let items: Vec<_> = n.host_info.clone()?.system_info?.pods.unwrap_or_default().into_iter().filter_map(|p| {
                 let daemonset = p.labels.get("skate.io/daemonset").unwrap_or(&"".to_string()).clone();
-                if daemonset == "" {
+                if daemonset.is_empty() {
                     return None;
                 }
 
-                if {
+                let res = {
                     let filterable: Box<dyn NameFilters> = Box::new(&p);
                     filterable.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
-                } {
+                }; if res {
                     return Some((state.nodes.len(), daemonset, p));
                 }
                 None
@@ -62,7 +58,7 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
         }).flatten();
 
         let pods = pods.fold(HashMap::<String, Vec<PodmanPodInfo>>::new(), |mut acc, (_num_nodes, depl, pod)| {
-            acc.entry(depl).or_insert(vec![]).push(pod);
+            acc.entry(depl).or_default().push(pod);
             acc
         });
 
@@ -73,11 +69,12 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
                 if item.created < acc {
                     return item.created;
                 }
-                return acc;
+                acc
             });
             let namespace = pods.first().unwrap().labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
             let node_selector = pods.first().unwrap().labels.iter().filter(|(k, _)| k.starts_with("nodeselector/")).map(|(k, _v)| k.clone()).collect_vec().join(",");
-            let item = DaemonsetListItem {
+            
+            DaemonsetListItem {
                 namespace,
                 name: n.clone(),
                 desired: state.nodes.len().to_string(),
@@ -87,8 +84,7 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
                 available: "".to_string(),
                 node_selector,
                 age: age(created),
-            };
-            item
+            }
         }).collect()
     }
 }

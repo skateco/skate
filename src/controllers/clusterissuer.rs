@@ -29,7 +29,7 @@ impl ClusterIssuerController {
         let hash = cluster_issuer.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
 
         if !hash.is_empty() {
-            self.store.write_file("clusterissuer", &ns_name.to_string(), "hash", &hash.as_bytes())?;
+            self.store.write_file("clusterissuer", &ns_name.to_string(), "hash", hash.as_bytes())?;
         }
         // need to retemplate nginx.conf
         let ingress_ctrl = IngressController::new(self.store.clone());

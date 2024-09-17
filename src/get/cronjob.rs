@@ -1,11 +1,9 @@
-use std::collections::HashMap;
 use k8s_openapi::api::batch::v1::CronJob;
-use crate::filestore::ObjectListItem;
 use crate::get::{Lister};
 use crate::get::lister::NameFilters;
 use crate::skatelet::SystemInfo;
-use crate::util::{age, NamespacedName};
-use tabled::{builder::Builder, settings::{style::Style}, Tabled};
+use crate::util::age;
+use tabled::Tabled;
 
 pub(crate) struct CronjobsLister {}
 
@@ -36,7 +34,7 @@ impl Lister<CronListItem> for CronjobsLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<CronListItem> {
         si.cronjobs.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
             let filterable: Box<dyn NameFilters> = Box::new(*j);
-            return filterable.filter_names(id, ns);
+            filterable.filter_names(id, ns)
         }).map(|item| {
             let item = item.clone();
             let cronjob: CronJob = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();

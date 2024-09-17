@@ -1,10 +1,9 @@
 use tabled::Tabled;
 use crate::get::Lister;
 use crate::get::lister::NameFilters;
-use crate::get::node::NodeListItem;
 use crate::skatelet::SystemInfo;
 use crate::skatelet::system::podman::PodmanPodInfo;
-use crate::util::{age, metadata_name};
+use crate::util::age;
 
 pub(crate) struct PodLister {}
 
@@ -13,11 +12,11 @@ impl NameFilters for &PodmanPodInfo {
         self.id.clone()
     }
     fn name(&self) -> String {
-        self.labels.get("skate.io/name").map(|ns| ns.clone()).unwrap_or("".to_string())
+        self.labels.get("skate.io/name").cloned().unwrap_or("".to_string())
     }
 
     fn namespace(&self) -> String {
-        self.labels.get("skate.io/namespace").map(|ns| ns.clone()).unwrap_or("".to_string())
+        self.labels.get("skate.io/namespace").cloned().unwrap_or("".to_string())
     }
 }
 

@@ -13,7 +13,6 @@ use std::error::Error;
 
 
 use clap::{Args, Subcommand};
-use tabled::builder::Builder;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 use crate::config::Config;
@@ -102,7 +101,7 @@ async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetOb
 
     let objects = lister.list(&args, &state);
 
-    if objects.len() == 0 {
+    if objects.is_empty() {
         if args.namespace.is_some() {
             println!("No resources found for namespace {}", args.namespace.unwrap());
         } else {

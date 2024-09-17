@@ -1,5 +1,4 @@
 use std::error::Error;
-use russh;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::time::Duration;
@@ -47,15 +46,15 @@ pub struct HostInfo {
     pub ovs_version: Option<String>,
 }
 
-impl Into<NodeState> for HostInfo {
-    fn into(self) -> NodeState {
+impl From<HostInfo> for NodeState {
+    fn from(val: HostInfo) -> Self {
         NodeState {
-            node_name: self.node_name.to_string(),
-            status: match self.healthy() {
+            node_name: val.node_name.to_string(),
+            status: match val.healthy() {
                 true => NodeStatus::Healthy,
                 false => NodeStatus::Unhealthy
             },
-            host_info: Some(self),
+            host_info: Some(val),
         }
     }
 }
@@ -112,34 +111,28 @@ echo ovs="$(cat /tmp/ovs-$$)";
         };
         let mut arch: Option<String> = None;
         for line in lines {
-            match line.split_once('=') {
-                Some((k, v)) => {
-                    match k {
-                        "hostname" => host_info.hostname = v.to_string(),
-                        "arch" => arch = Some(v.to_string()),
-                        "distro" => host_info.platform.distribution = Distribution::from(v),
-                        "skatelet" => host_info.skatelet_version = match v {
-                            "" => None,
-                            _ => Some(v.to_string())
-                        },
-                        "podman" => host_info.podman_version = match v {
-                            "" => None,
-                            _ => Some(v.to_string())
-                        },
-                        "sys" => {
-                            match serde_json::from_str(v) {
-                                Ok(sys_info) => host_info.system_info = sys_info,
-                                Err(_) => {}
-                            }
-                        }
-                        "ovs" => host_info.ovs_version = match v {
-                            "" => None,
-                            _ => Some(v.to_string())
-                        },
-                        _ => {}
+            if let Some((k, v)) = line.split_once('=') {
+                match k {
+                    "hostname" => host_info.hostname = v.to_string(),
+                    "arch" => arch = Some(v.to_string()),
+                    "distro" => host_info.platform.distribution = Distribution::from(v),
+                    "skatelet" => host_info.skatelet_version = match v {
+                        "" => None,
+                        _ => Some(v.to_string())
+                    },
+                    "podman" => host_info.podman_version = match v {
+                        "" => None,
+                        _ => Some(v.to_string())
+                    },
+                    "sys" => {
+                        if let Ok(sys_info) = serde_json::from_str(v) { host_info.system_info = sys_info }
                     }
+                    "ovs" => host_info.ovs_version = match v {
+                        "" => None,
+                        _ => Some(v.to_string())
+                    },
+                    _ => {}
                 }
-                None => {}
             }
         }
 
@@ -190,7 +183,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
 
         let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && sudo mv skatelet skatelet-netavark /usr/local/bin ", url);
-        let _ = self.execute_stdout(&cmd, true, true).await?;
+        self.execute_stdout(&cmd, true, true).await?;
 
 
         Ok(())
@@ -266,7 +259,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         }
 
         let mut ch = self.client.get_channel().await?;
-        let _ = ch.exec(true, cmd).await?;
+        ch.exec(true, cmd).await?;
 
         let mut result: Option<_> = None;
         let mut last_char = '\n';
@@ -315,7 +308,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         if result.exit_status > 0 {
             return Err(anyhow!(result.stderr).context(format!("{} failed", cmd)).into());
         }
-        if result.stdout.len() > 0 {
+        if !result.stdout.is_empty() {
             // result.stdout.lines().for_each(|l| println!("{} |   {}", self.node_name, l));
         }
         Ok(result.stdout)
@@ -368,7 +361,7 @@ pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<SshClient
     match connect_node(&node).await {
         Ok(c) => Ok(c),
         Err(err) => {
-            Err(SshError { node_name: node.name.clone(), error: err.into() })
+            Err(SshError { node_name: node.name.clone(), error: err })
         }
     }
 }

@@ -86,7 +86,7 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
     match errors.is_empty() {
         false => Err(anyhow!("\n{}", errors.join("\n")).into()),
         true => {
-            println!("{} deleted {} {}.{}", CHECKBOX_EMOJI, r_type.to_string(), args.name, args.namespace);
+            println!("{} deleted {} {}.{}", CHECKBOX_EMOJI, r_type, args.name, args.namespace);
             Ok(())
         }
     }
