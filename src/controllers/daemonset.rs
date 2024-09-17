@@ -22,7 +22,7 @@ impl DaemonSetController {
             let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
             let ids = ids.split("\n").map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<&str>>();
 
-            let  pod_ctrl = PodController::new(self.store.clone());
+            let  pod_ctrl = PodController::new();
             pod_ctrl.delete_podman_pods(ids, grace_period)
     }
 }

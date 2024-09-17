@@ -36,7 +36,7 @@ impl Executor for DefaultExecutor {
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
             SupportedResources::Pod(pod) => {
-                let ctrl = PodController::new(self.store.clone());
+                let ctrl = PodController::new();
                 ctrl.apply(pod)
             }
             SupportedResources::Secret(secret) => {
@@ -67,7 +67,7 @@ impl Executor for DefaultExecutor {
     fn manifest_delete(&self, object: SupportedResources, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         match object {
             SupportedResources::Pod(p) => {
-                let ctrl = PodController::new(self.store.clone());
+                let ctrl = PodController::new();
                 ctrl.delete(p, grace_period)
             }
             SupportedResources::Deployment(d) => {

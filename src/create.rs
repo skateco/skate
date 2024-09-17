@@ -3,9 +3,14 @@ use anyhow::anyhow;
 use base64::Engine;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
+use serde::Serialize;
 use node::CreateNodeArgs;
 use crate::config::{Cluster, Config};
+use crate::refresh::refreshed_state;
 use crate::skate::ConfigFileArgs;
+use crate::skatelet::JobArgs;
+use crate::ssh;
+use crate::ssh::cluster_connections;
 
 mod node;
 
@@ -22,12 +27,23 @@ pub enum CreateCommands {
     Node(CreateNodeArgs),
     Cluster(CreateClusterArgs),
     ClusterResources(CreateClusterResourcesArgs),
+    Job(CreateJobArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct CreateClusterResourcesArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct CreateJobArgs {
+    #[command(flatten)]
+    config: ConfigFileArgs,
+    #[command(flatten)]
+    args: JobArgs,
+    #[arg(long, short, long_help = "Namespace of the resource.", default_value_t = String::from("default"))]
+    namespace: String,
 }
 
 #[derive(Debug, Args)]
@@ -41,11 +57,13 @@ pub struct CreateClusterArgs {
     default_key: Option<String>,
 }
 
+
 pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
     match args.command {
         CreateCommands::Node(args) => node::create_node(args).await?,
         CreateCommands::ClusterResources(args) => create_cluster_resources(args).await?,
         CreateCommands::Cluster(args) => create_cluster(args).await?,
+        CreateCommands::Job(args) => create_job(args).await?
     }
     Ok(())
 }
@@ -92,3 +110,58 @@ async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<()
     node::install_cluster_manifests(&args.config, cluster).await
 }
 
+
+async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
+
+    let (from_kind, from_name) = args.args.from.split_once("/").ok_or("invalid --from")?;
+    if from_kind !="cronjob" {
+        return Err("only cronjob is supported".into());
+    }
+
+    let config = Config::load(Some(args.config.skateconfig.clone()))?;
+
+    let context = match args.config.context {
+        None => match config.current_context {
+            None => {
+                Err(anyhow!("--context is required unless there is already a current context"))
+            }
+            Some(ref context) => Ok(context)
+        }
+        Some(ref context) => Ok(context)
+    }.map_err(Into::<Box<dyn Error>>::into)?;
+
+    let (_, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+
+
+    let (conns, errors) = ssh::cluster_connections(cluster).await;
+    match errors {
+        Some(e) => {
+            for e in e.errors {
+                eprintln!("{} - {}", e.node_name, e.error)
+            }
+        }
+        _ => {}
+    };
+
+    let conns = match conns {
+        None => {
+            return Err(anyhow!("failed to create cluster connections").into());
+        },
+        Some(c) => c
+    };
+
+    let mut state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
+
+    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, &from_name, &args.namespace);
+    if cjobs.is_empty() {
+        return Err(anyhow!("no cronjobs found by name of {} in namespace {}", args.args.from, args.namespace).into());
+    }
+    let (info, node) = cjobs.first().unwrap();
+
+    let conn = conns.find(&node.node_name).unwrap();
+
+    let wait_flag = if args.args.wait { "--wait" } else { "" };
+
+    let cmd = format!("sudo skatelet create --namespace {} job {} --from {} {}", &args.namespace, &wait_flag, &args.args.from, &args.args.name);
+    conn.execute_stdout(&cmd,false, false).await
+}

@@ -6,13 +6,11 @@ use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::apply_play;
 
 pub struct PodController {
-    store: FileStore,
 }
 
 impl PodController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new() -> Self {
         PodController {
-            store: file_store,
         }
     }
 

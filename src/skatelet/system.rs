@@ -194,6 +194,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             manifest_hash: "".to_string(), // TODO get from manifest
             manifest: Some(yaml),
             created_at: s.created_at,
+            path: "".to_string(),
         })
     }).collect();
 

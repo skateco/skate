@@ -60,7 +60,10 @@ pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Co
     let host_infos = conns.get_nodes_system_info().await;
     let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
         Ok(r) => Some((*r).clone()),
-        Err(_) => None,
+        Err(e) => {
+            eprintln!("error getting host info: {}", e);
+            None
+        },
     }).collect();
 
 

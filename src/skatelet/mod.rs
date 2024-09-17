@@ -8,7 +8,9 @@ mod delete;
 pub(crate) mod dns;
 mod oci;
 mod ipvs;
+mod create;
 
 pub use skatelet::skatelet;
 pub use system::SystemInfo;
+pub use create::JobArgs;
 

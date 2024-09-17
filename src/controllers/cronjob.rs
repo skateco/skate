@@ -7,7 +7,7 @@ use k8s_openapi::api::core::v1::Pod;
 use serde_json::{json, Value};
 use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
-use crate::skate::exec_cmd;
+use crate::skate::{exec_cmd, exec_cmd_stdout};
 use crate::template;
 use crate::util::metadata_name;
 
@@ -72,7 +72,7 @@ impl CronjobController {
         let json: Value = json!({
             "description": &format!("{} Job", ns_name.to_string()),
             "timer": &format!("skate-cronjob-{}.timer", &ns_name.to_string()),
-            "command": format!("podman kube play /var/lib/skate/store/cronjob/{}/pod.yaml --replace --network skate -w", ns_name.to_string()),
+            "command": format!("skatelet create --namespace {} job --from cronjob/{} {} -w", ns_name.namespace, ns_name.name, ns_name.name),
         });
 
         let output = handlebars.render("unit", &json)?;
@@ -125,5 +125,19 @@ impl CronjobController {
         let _ = exec_cmd("systemctl", &["reset-failed"])?;
         let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
         Ok(())
+    }
+
+    pub fn run(&self, name: &str, ns: &str, wait: bool) -> Result<(), Box<dyn Error>> {
+
+        let obj = self.store.get_object("cronjob", &format!("{}.{}",name, ns))?;
+
+        let args = &["kube", "play", &format!("{}/pod.yaml", obj.path), "--replace", "--network", "skate"];
+        let args = if wait {
+            [args.to_vec(), vec!["-w"]].concat()
+        } else {
+            args.to_vec()
+        };
+
+       exec_cmd_stdout("podman", &args)
     }
 }

@@ -614,5 +614,18 @@ pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn E
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
 }
 
+pub(crate) fn exec_cmd_stdout(command: &str, args: &[&str]) -> Result<(), Box<dyn Error>> {
+    let output = process::Command::new(command)
+        .args(args)
+        .stdout(process::Stdio::inherit())
+        .stderr(process::Stdio::inherit())
+        .status().map_err(|e| anyhow!(e).context("failed to run command"))?;
+    if !output.success() {
+        return Err(anyhow!("exit code {}", output).context(format!("{} {} failed", command, args.join(" "))).into());
+    }
+
+    Ok(())
+}
+
 
 

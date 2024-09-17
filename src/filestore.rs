@@ -1,6 +1,7 @@
 use std::error::Error;
-use std::fs::{create_dir_all};
+use std::fs::{create_dir_all, DirEntry};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,62 @@ pub struct ObjectListItem {
     #[tabled(skip)]
     pub manifest: Option<Value>,
     pub created_at: DateTime<Local>,
+    pub path: String,
+}
+
+impl TryFrom<&str> for ObjectListItem {
+    type Error = Box<dyn Error>;
+
+    fn try_from(dir: &str) -> Result<Self, Self::Error> {
+
+        let file_name = Path::new(dir).file_name().ok_or(anyhow!("failed to get file name"))?;
+
+        let ns_name = NamespacedName::from(file_name.to_str().unwrap());
+
+
+        let hash_file_name = format!("{}/hash", dir);
+
+        let hash = match std::fs::read_to_string(&hash_file_name) {
+            Err(_) => {
+                eprintln!("WARNING: failed to read hash file {}", &hash_file_name);
+                "".to_string()
+            }
+            Ok(result) => result
+        };
+
+        let manifest_file_name = format!("{}/manifest.yaml", dir);
+        let manifest: Option<Value> = match std::fs::read_to_string(&manifest_file_name) {
+            Err(e) => {
+                eprintln!("WARNING: failed to read manifest file {}: {}", &manifest_file_name, e);
+                None
+            }
+            Ok(result) => Some(serde_yaml::from_str(&result).unwrap())
+        };
+
+        let metadata = std::fs::metadata(dir).map_err(|e| anyhow!(e).context(format!("failed to get metadata for {}", dir)))?;
+
+        let created_at = metadata.created()?;
+        Ok(ObjectListItem {
+            name: ns_name,
+            manifest_hash: hash,
+            manifest,
+            created_at: DateTime::from(created_at),
+            path: dir.to_string(),
+        })
+    }
+}
+
+impl TryFrom<DirEntry> for ObjectListItem {
+    type Error = Box<dyn Error>;
+
+
+    fn try_from(dir_entry: DirEntry) -> Result<Self, Self::Error> {
+        let path = dir_entry.path();
+
+
+
+        Self::try_from(path.to_str().ok_or(anyhow!("failed to convert file name to string"))?)
+    }
 }
 
 impl FileStore {
@@ -37,9 +94,15 @@ impl FileStore {
         }
     }
 
+    fn get_path(&self, parts: &[&str]) -> String {
+        let mut path = PathBuf::from(self.base_path.clone());
+        path.extend(parts);
+        path.to_string_lossy().to_string()
+    }
+
     // will clobber
     pub fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String, Box<dyn Error>> {
-        let dir = format!("{}/{}/{}", self.base_path, object_type, object_name);
+        let dir = self.get_path(&[object_type, object_name]);
         create_dir_all(&dir).map_err(|e| anyhow!(e).context(format!("failed to create directory {}", dir)))?;
         let file_path = format!("{}/{}/{}/{}", self.base_path, object_type, object_name, file_name);
 
@@ -52,7 +115,7 @@ impl FileStore {
     }
 
     pub fn remove_file(&self, object_type: &str, object_name: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
-        let file_path = format!("{}/{}/{}/{}", self.base_path, object_type, object_name, file_name);
+        let file_path = self.get_path(&[object_type, object_name, file_name]);
         let result = std::fs::remove_file(&file_path).map_err(|e| anyhow!(e).context(format!("failed to remove file {}", file_path)));
         if result.is_err() {
             return Err(result.err().unwrap().into());
@@ -61,13 +124,13 @@ impl FileStore {
     }
 
     pub fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool {
-        let file_path = format!("{}/{}/{}/{}", self.base_path, object_type, object_name, file_name);
+        let file_path = self.get_path(&[object_type, object_name, file_name]);
         std::path::Path::new(&file_path).exists()
     }
 
     // returns true if the object was removed, false if it didn't exist
     pub fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>> {
-        let dir = format!("{}/{}/{}", self.base_path, object_type, object_name);
+        let dir = self.get_path(&[object_type, object_name]);
         match std::fs::remove_dir_all(&dir) {
             Err(err) => match err.kind() {
                 std::io::ErrorKind::NotFound => Ok(false),
@@ -77,8 +140,16 @@ impl FileStore {
         }
     }
 
+    pub fn get_object(&self, object_type: &str, object_name: &str) -> Result<ObjectListItem, Box<dyn Error>> {
+        let dir = self.get_path(&[object_type, object_name]);
+
+        let obj = ObjectListItem::try_from(dir.as_str())?;
+        Ok(obj)
+    }
+
+
     pub fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>> {
-        let dir = format!("{}/{}", self.base_path, object_type);
+        let dir = self.get_path(&[object_type]);
         let entries = match std::fs::read_dir(&dir) {
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -90,37 +161,8 @@ impl FileStore {
         let mut result = Vec::new();
         for entry in entries {
             let entry = entry.map_err(|e| anyhow!(e).context("failed to read entry"))?;
-            let path = entry.path();
-            let file_name = path.file_name().ok_or(anyhow!("failed to get file name"))?;
-
-            let ns_name = NamespacedName::from(file_name.to_string_lossy().as_ref());
-
-            let hash_file_name = format!("{}/hash", path.to_string_lossy());
-
-            let hash = match std::fs::read_to_string(&hash_file_name) {
-                Err(_) => {
-                    eprintln!("WARNING: failed to read hash file {}", &hash_file_name);
-                    "".to_string()
-                }
-                Ok(result) => result
-            };
-
-            let manifest_file_name = format!("{}/manifest.yaml", path.to_string_lossy());
-            let manifest: Option<Value> = match std::fs::read_to_string(&manifest_file_name) {
-                Err(e) => {
-                    eprintln!("WARNING: failed to read manifest file {}: {}", &manifest_file_name, e);
-                    None
-                }
-                Ok(result) => Some(serde_yaml::from_str(&result).unwrap())
-            };
-            let created_at = entry.metadata()?.created()?;
-
-            result.push(ObjectListItem {
-                name: ns_name,
-                manifest_hash: hash,
-                manifest,
-                created_at: DateTime::from(created_at),
-            });
+            let obj = ObjectListItem::try_from(entry)?;
+            result.push(obj);
         }
         Ok(result)
     }

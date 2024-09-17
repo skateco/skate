@@ -9,6 +9,7 @@ use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs};
 use crate::skatelet::cni::cni;
+use crate::skatelet::create::{create, CreateArgs};
 use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::dns::{dns, DnsArgs};
 use crate::skatelet::ipvs::{ipvs, IpvsArgs};
@@ -35,7 +36,8 @@ enum Commands {
     Dns(DnsArgs),
     Cni,
     Oci(OciArgs),
-    Ipvs(IpvsArgs)
+    Ipvs(IpvsArgs),
+    Create(CreateArgs),
 }
 
 pub fn log_panic(info: &PanicInfo) {
@@ -101,6 +103,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
         Commands::Dns(args) => dns(args),
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => ipvs(args),
+        Commands::Create(args) => create(args)
         // _ => Ok(())
     };
     match result {
