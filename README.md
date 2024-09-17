@@ -283,13 +283,12 @@ sudo apt-get install -y gcc make libssl-dev pkg-config
       reach the other nodes dns
 - Scheduling
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
+          Possibly already done by podman.
     - [ ] Deployment, Daemonset labels arent respected, need to somehow be added to pods, perhaps prefixed
 - Pods
     - [ ] Store manifest in store so CNI plugin can get access
 - CronJob
-    - [ ] Related to below, but something like `skatelet create job --from=cronjob/foo`, use in systemd unit.
     - [ ] logs for cronjobs across runs
-    - [ ] `skate create job something --from=cronjob/foo`
     - [ ] ForbidConcurrent
 - Secret
     - [ ] Support private registry secrets
