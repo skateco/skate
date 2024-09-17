@@ -5,13 +5,11 @@ use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
 
 pub struct DeploymentController {
-    store: FileStore,
 }
 
 impl DeploymentController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new() -> Self {
         DeploymentController {
-            store: file_store,
         }
     }
 

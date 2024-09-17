@@ -4,7 +4,7 @@ use std::panic::PanicInfo;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use strum::AsStaticRef;
-use strum_macros::AsStaticStr;
+use strum_macros::{AsStaticStr, IntoStaticStr};
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs};
@@ -27,7 +27,7 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Debug, Subcommand, AsStaticStr)]
+#[derive(Debug, Subcommand, IntoStaticStr)]
 enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
@@ -76,10 +76,11 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
 
     let args = Cli::parse();
 
+    let cmd_name: &'static str = (&args.command).into();
     let formatter = Formatter3164 {
         facility: Facility::LOG_USER,
         hostname: None,
-        process: format!("skatelet-{}",args.command.as_static().to_lowercase()),
+        process: format!("skatelet-{}", cmd_name.to_lowercase()),
         pid: process::id(),
     };
     let logger = match syslog::unix(formatter) {

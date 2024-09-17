@@ -300,7 +300,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
             let reader = BufReader::new(&addhosts_file);
             let mut writer = BufWriter::new(&newaddhosts_file);
 
-            for (_index, line) in reader.lines().enumerate() {
+            for line in reader.lines() {
                 let line = line?;
                 if line.ends_with(&container_id) {
                     debug!("{} enabling dns entry for {}", log_tag,container_id);

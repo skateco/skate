@@ -40,7 +40,7 @@ impl Executor for DefaultExecutor {
                 ctrl.apply(pod)
             }
             SupportedResources::Secret(secret) => {
-                let ctrl = SecretController::new(self.store.clone());
+                let ctrl = SecretController::new();
                 ctrl.apply(secret)
             }
             SupportedResources::Ingress(ingress) => {
@@ -71,11 +71,11 @@ impl Executor for DefaultExecutor {
                 ctrl.delete(p, grace_period)
             }
             SupportedResources::Deployment(d) => {
-                let ctrl = DeploymentController::new(self.store.clone());
+                let ctrl = DeploymentController::new();
                 ctrl.delete(d, grace_period)
             }
             SupportedResources::DaemonSet(d) => {
-                let ctrl = DaemonSetController::new(self.store.clone());
+                let ctrl = DaemonSetController::new();
                 ctrl.delete(d, grace_period)
             }
             SupportedResources::Ingress(ingress) => {
@@ -87,7 +87,7 @@ impl Executor for DefaultExecutor {
                 ctrl.delete(cron)
             }
             SupportedResources::Secret(secret) => {
-                let ctrl = SecretController::new(self.store.clone());
+                let ctrl = SecretController::new();
                 ctrl.delete(secret)
             }
             SupportedResources::Service(service) => {

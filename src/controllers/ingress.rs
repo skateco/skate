@@ -152,7 +152,7 @@ impl IngressController {
             .stdout(Stdio::piped())
             .spawn()?;
 
-        child.stdin.as_ref().unwrap().write(main_template_data.to_string().as_ref()).unwrap();
+        let _ = child.stdin.as_ref().unwrap().write(main_template_data.to_string().as_ref()).unwrap();
 
         let output = child.wait_with_output()
             .map_err(|e| anyhow!(e).context("failed to apply resource"))?;

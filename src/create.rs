@@ -1,6 +1,5 @@
 use std::error::Error;
 use anyhow::anyhow;
-use base64::Engine;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use node::CreateNodeArgs;
@@ -151,7 +150,7 @@ async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
     if cjobs.is_empty() {
         return Err(anyhow!("no cronjobs found by name of {} in namespace {}", args.args.from, args.namespace).into());
     }
-    let (info, node) = cjobs.first().unwrap();
+    let (_info, node) = cjobs.first().unwrap();
 
     let conn = conns.find(&node.node_name).unwrap();
 

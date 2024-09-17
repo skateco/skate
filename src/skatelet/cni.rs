@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::env::var;
 use std::error::Error;
 use std::io;
-use std::io::BufRead;
 
 use cni_plugin::reply::{SuccessReply, VersionReply};
 use log::{info, error};

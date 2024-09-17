@@ -5,13 +5,11 @@ use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::apply_play;
 
 pub struct SecretController {
-    store: FileStore,
 }
 
 impl SecretController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new() -> Self {
         SecretController {
-            store: file_store,
         }
     }
 

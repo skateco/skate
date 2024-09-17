@@ -84,7 +84,7 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub async fn log_pod(conns: &ssh::SshClients, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
     let mut cmd = args.to_podman_log_args();
 
     cmd.push(name.to_string());

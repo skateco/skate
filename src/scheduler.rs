@@ -709,7 +709,7 @@ impl DefaultScheduler {
 
         let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();
 
-        for (name, ops) in plan.actions {
+        for (_name, ops) in plan.actions {
             for mut op in ops {
                 match op.operation {
                     OpType::Delete => {

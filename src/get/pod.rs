@@ -50,10 +50,7 @@ impl Lister<PodListItem> for PodLister {
         }).map(|pod| {
             let num_containers = pod.containers.clone().unwrap_or_default().len();
             let healthy_containers = pod.containers.clone().unwrap_or_default().iter().filter(|c| {
-                match c.status.as_str() {
-                    "running" => true,
-                    _ => false
-                }
+                matches!(c.status.as_str(), "running")
             }).collect::<Vec<_>>().len();
             let restarts = pod.containers.clone().unwrap_or_default().iter().map(|c| c.restart_count.unwrap_or_default())
                 .reduce(|a, c| a + c).unwrap_or_default();

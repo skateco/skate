@@ -204,7 +204,7 @@ impl ClusterState {
             updated: 0,
         })
     }
-    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<HostInfo>) -> Result<ReconciledResult, Box<dyn Error>> {
+    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.current_cluster()?;
         self.hash = hash_string(cluster);
 
@@ -278,7 +278,7 @@ impl ClusterState {
     }
 
     pub fn locate_daemonset(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
-        self.filter_pods(&|p| p.name == name && p.namespace() == namespace && p.labels.get("skate.io/daemonset").is_some())
+        self.filter_pods(&|p| p.name == name && p.namespace() == namespace && p.labels.contains_key("skate.io/daemonset"))
     }
 
     pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {

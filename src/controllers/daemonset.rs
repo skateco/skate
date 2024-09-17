@@ -5,13 +5,11 @@ use k8s_openapi::api::apps::v1::DaemonSet;
 use std::error::Error;
 
 pub struct DaemonSetController {
-    store: FileStore,
 }
 
 impl DaemonSetController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new() -> Self {
         DaemonSetController {
-            store: file_store,
         }
     }
 

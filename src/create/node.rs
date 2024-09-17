@@ -153,7 +153,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         "dns",
         "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
 
-    conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;;
+    conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
     setup_networking(&conn, all_conns, &cluster, &node).await?;
@@ -174,7 +174,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
 // could be to take only resources that are the same on all nodes, log others
-async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
+async fn propagate_exsting_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
     let donor_state = match state.nodes.iter().find(|n| n.node_name != node.name && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
         Some(n) => n,
         None => return Ok(())
@@ -481,7 +481,7 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     conn.execute_stdout("sudo systemctl daemon-reload", true, true).await?;
     conn.execute_stdout("sudo systemctl enable skate-routes.service", true, true).await?;
-    conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;;
+    conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;
 
     Ok(())
 }
