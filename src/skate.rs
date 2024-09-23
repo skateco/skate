@@ -32,6 +32,7 @@ use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::{config, spec};
 use crate::config::{cache_dir, Config, Node};
 use crate::config_cmd::ConfigArgs;
+use crate::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
 use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
@@ -63,6 +64,8 @@ enum Commands {
     Describe(DescribeArgs),
     Logs(LogArgs),
     Config(ConfigArgs),
+    Cordon(CordonArgs),
+    Uncordon(UncordonArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -86,6 +89,8 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Describe(args) => describe(args).await,
         Commands::Logs(args) => logs(args).await,
         Commands::Config(args) => crate::config_cmd::config(args),
+        Commands::Cordon(args) => cordon(args).await,
+        Commands::Uncordon(args) => uncordon(args).await,
         _ => Ok(())
     }
 }

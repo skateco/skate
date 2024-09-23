@@ -37,17 +37,23 @@ pub struct Node {
 }
 
 impl Config {
-    pub fn current_cluster(&self) -> Result<&Cluster, Box<dyn Error>> {
+    pub fn active_cluster(&self, name: Option<String>) -> Result<&Cluster, Box<dyn Error>> {
         if self.clusters.is_empty() {
             return Err(anyhow!("no clusters in config").into());
         }
 
         let first = &(self.clusters).first().expect("no first cluster");
 
-        let cluster_name = self.current_context.clone().unwrap_or(first.name.to_owned());
+        let cluster_name = self.current_context.clone().unwrap_or(name.unwrap_or(first.name.to_owned()));
 
-        Ok(self.clusters.iter().find(|c| c.name == cluster_name)
-            .unwrap_or_else(|| panic!("found no cluster by name of {}", cluster_name)))
+        let cluster: &Cluster = self.clusters.iter().find(|c| c.name == cluster_name)
+            .unwrap_or_else(|| panic!("found no cluster by name of {}", cluster_name));
+        Ok(cluster)
+    }
+
+    pub fn replace_cluster(&mut self, cluster: &Cluster) {
+        let idx = self.clusters.iter().position(|c| c.name == cluster.name).expect("cluster not found");
+        self.clusters[idx] = cluster.clone();
     }
 }
 

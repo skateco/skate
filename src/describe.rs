@@ -84,7 +84,7 @@ async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> R
 
 async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let cluster = config.current_cluster()?;
+    let cluster = config.active_cluster(args.config.context.clone())?;
     let (conns, errs) = ssh::cluster_connections(cluster).await;
     if errs.is_some() && conns.as_ref().map(|c| c.clients.len()).unwrap_or(0) == 0 {
         return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());

@@ -62,7 +62,7 @@ impl From<HostInfo> for NodeState {
 impl HostInfo {
     pub fn healthy(&self) -> bool {
         // TODO - actual checks for things that matter
-        self.skatelet_version.is_some()
+        self.skatelet_version.is_some() && self.system_info.as_ref().and_then(|si| Some(!si.cordoned)).unwrap_or(false)
     }
 }
 

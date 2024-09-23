@@ -2,7 +2,7 @@ use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use crate::config::Config;
+use crate::config::{Cluster, Config};
 
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
@@ -57,7 +57,7 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
     // fetch state for resource type from nodes
 
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
+    let (conns, errors) = ssh::cluster_connections(config.active_cluster(args.config.context)?).await;
     if errors.is_some() {
         eprintln!("{}", errors.unwrap())
     }
@@ -95,23 +95,15 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
 async fn delete_node(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let context = match args.config.context {
-        None => match config.current_context {
-            None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
-            }
-            Some(ref context) => Ok(context)
-        }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
 
-    let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+    let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
 
     let find_result = cluster.nodes.iter().find_position(|n| n.name == args.name);
 
     match find_result {
         Some((p, _)) => {
-            config.clusters[cluster_index].nodes.remove(p);
+            cluster.nodes.remove(p);
+            config.replace_cluster(&cluster);
             config.persist(Some(args.config.skateconfig))
         }
         None => {

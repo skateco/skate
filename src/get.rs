@@ -86,7 +86,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
 
 async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
+    let (conns, errors) = ssh::cluster_connections(config.active_cluster(args.config.context.clone())?).await;
     if errors.is_some() {
         eprintln!("{}", errors.unwrap())
     }

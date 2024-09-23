@@ -29,7 +29,7 @@ pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
 }
 
 pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), Box<dyn Error>> {
-    let cluster = config.current_cluster()?;
+    let cluster = config.active_cluster(config.current_context.clone())?;
     let (conns, errors) = ssh::cluster_connections(cluster).await;
     if let Some(e) = errors {
         for e in e.errors {

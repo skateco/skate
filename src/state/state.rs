@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::File;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use anyhow::anyhow;
 use itertools::Itertools;
@@ -12,6 +12,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
 use strum_macros::Display;
 use tabled::Tabled;
 use crate::config::{cache_dir, Config};
+use crate::config_cmd::ConfigArgs;
 use crate::filestore::ObjectListItem;
 
 use crate::skate::SupportedResources;
@@ -204,8 +205,8 @@ impl ClusterState {
             updated: 0,
         })
     }
-    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
-        let cluster = config.current_cluster()?;
+    pub fn reconcile_all_nodes(&mut self, cluster_name: &str, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
+        let cluster = config.active_cluster(Some(cluster_name.to_string()))?;
         self.hash = hash_string(cluster);
 
         let state_hosts: HashSet<String> = self.nodes.iter().map(|n| n.node_name.clone()).collect();
@@ -224,7 +225,7 @@ impl ClusterState {
             }
         }).collect();
 
-        let mut new_nodes: Vec<NodeState> = config.current_cluster()?.nodes.iter().filter_map(|n| {
+        let mut new_nodes: Vec<NodeState> = config.active_cluster(Some(cluster_name.to_string()))?.nodes.iter().filter_map(|n| {
             match new.contains(&n.name) {
                 true => Some(NodeState {
                     node_name: n.name.clone(),

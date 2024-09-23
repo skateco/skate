@@ -9,6 +9,7 @@ pub(crate) mod dns;
 mod oci;
 mod ipvs;
 mod create;
+mod cordon;
 
 pub use skatelet::skatelet;
 pub use system::SystemInfo;

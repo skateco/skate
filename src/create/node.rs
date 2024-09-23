@@ -44,19 +44,7 @@ pub struct CreateNodeArgs {
 pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-
-    let context = match args.config.context {
-        None => match config.current_context {
-            None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
-            }
-            Some(ref context) => Ok(context)
-        }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
-
-    let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
-    let mut cluster = (*cluster).clone();
+    let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
@@ -84,8 +72,9 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
+    config.replace_cluster(&cluster);
 
-    config.clusters[cluster_index] = cluster.clone();
+
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     let conn = node_connection(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;

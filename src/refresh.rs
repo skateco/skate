@@ -20,7 +20,7 @@ pub struct RefreshArgs {
 
 pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig))?;
-    let cluster = config.current_cluster()?;
+    let cluster = config.active_cluster(args.config.context)?;
 
 
     let (clients, errors) = ssh::cluster_connections(cluster).await;
@@ -76,6 +76,6 @@ pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Co
         }
     };
 
-    let _ = state.reconcile_all_nodes(config, &healthy_host_infos)?;
+    let _ = state.reconcile_all_nodes(cluster_name, config, &healthy_host_infos)?;
     Ok(state)
 }

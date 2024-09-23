@@ -24,6 +24,7 @@ mod config_cmd;
 mod spec;
 mod template;
 mod controllers;
+mod cordon;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

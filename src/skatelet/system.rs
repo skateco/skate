@@ -15,6 +15,7 @@ use podman::PodmanPodInfo;
 use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Platform};
+use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::NamespacedName;
 
@@ -67,6 +68,8 @@ pub struct SystemInfo {
     pub cpu_vendor_id: String,
     pub internal_ip_address: Option<String>,
     pub hostname: String,
+    #[serde(default)]
+    pub cordoned: bool,
 }
 
 // TODO - have more generic ObjectMeta type for explaining existing resources
@@ -203,14 +206,14 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
 
     let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/").map(|d| DiskInfo {
-            available_space_mib: d.available_space() / BYTES_IN_MIB,
-            total_space_mib: d.total_space() / BYTES_IN_MIB,
-            disk_kind: match d.kind() {
-                DiskKind::HDD => "hdd",
-                DiskKind::SSD => "sdd",
-                DiskKind::Unknown(_) => "unknown"
-            }.to_string(),
-        });
+        available_space_mib: d.available_space() / BYTES_IN_MIB,
+        total_space_mib: d.total_space() / BYTES_IN_MIB,
+        disk_kind: match d.kind() {
+            DiskKind::HDD => "hdd",
+            DiskKind::SSD => "sdd",
+            DiskKind::Unknown(_) => "unknown"
+        }.to_string(),
+    });
 
 
     let info = SystemInfo {
@@ -236,6 +239,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cluster_issuers: (!cluster_issuers.is_empty()).then_some(cluster_issuers),
         hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
+        cordoned: is_cordoned(),
     };
     let json = serde_json::to_string(&info)?;
     println!("{}", json);

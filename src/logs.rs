@@ -41,7 +41,7 @@ impl LogArgs {
 
 pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
+    let (conns, errors) = ssh::cluster_connections(config.active_cluster(args.config.context.clone())?).await;
 
 
     if conns.is_none() {
