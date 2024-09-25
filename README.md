@@ -5,6 +5,11 @@
 Docs -> [skateco.github.io](https://skateco.github.io)
 </div>
 
+- Service discovery - DNS based service discovery.
+- Multi-host network - Designed to run on several nodes.
+- Kubernetes Manifests - Deploy using the same syntax you use in your day job, without the burden of running k8s yourself.
+- Low resource - Skate is written in rust, runs no daemon of it’s own and uses minimal resources.
+- Https by default - Ingress resources get LetsEncrypt TLS by default.
 
 Born out of the frustration of having to learn yet another deployment configuration file syntax.
 
