@@ -1,9 +1,13 @@
 <div align="center">
   <h1 align="center">Skate</h1>
+
   <p align="center">Daemonless low footprint self-hosted mini-paas with support for deploying kubernetes manifests.</p>
 
 Docs -> [skateco.github.io](https://skateco.github.io)
 </div>
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![](https://img.shields.io/github/v/release/skateco/skate)](https://github.com/skateco/skate/releases)
 
 - Service discovery - DNS based service discovery.
 - Multi-host network - Designed to run on several nodes.
