@@ -2,7 +2,7 @@
   <h1 align="center">Skate</h1>
 
   <p align="center">Mini-paas for deploying kubernetes manifests.</p>
-  <p align="center">Simpler, daemonles & small resource footprint.</p>
+  <p align="center">Simpler, daemonless & small resource footprint.</p>
 
 Docs -> [skateco.github.io](https://skateco.github.io)
 </div>
