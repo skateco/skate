@@ -1,3 +1,4 @@
+#![warn(unused_extern_crates)]
 use std::error::Error;
 use skate::skate;
 

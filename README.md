@@ -100,6 +100,6 @@ make aarch64-cross
 
 ```shell
 # multipass image doesn't have much
-sudo apt-get install -y gcc make libssl-dev pkg-config
+sudo apt-get install -y gcc make libssl-dev pkg-config protobuf-compiler
 ```
 
