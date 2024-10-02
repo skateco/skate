@@ -1,15 +1,15 @@
-use std::error::Error;
-use std::fs;
-use std::io::Write;
-use anyhow::anyhow;
-use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::Pod;
-use serde_json::{json, Value};
 use crate::cron::cron_to_systemd;
 use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, exec_cmd_stdout};
 use crate::template;
 use crate::util::metadata_name;
+use anyhow::anyhow;
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::core::v1::Pod;
+use serde_json::{json, Value};
+use std::error::Error;
+use std::fs;
+use std::io::Write;
 
 pub struct CronjobController {
     store: FileStore
@@ -78,7 +78,7 @@ impl CronjobController {
         let output = handlebars.render("unit", &json)?;
         // /etc/systemd/system/skate-cronjob-{}.service
 
-        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
         file.write_all(output.as_bytes())?;
 
 
@@ -96,7 +96,7 @@ impl CronjobController {
 
         let output = handlebars.render("timer", &json)?;
         // /etc/systemd/system/skate-cronjob-{}.timer
-        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
         file.write_all(output.as_bytes())?;
 
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());

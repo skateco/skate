@@ -1,13 +1,5 @@
-use std::error::Error;
-use std::{process, thread};
-use std::panic::PanicInfo;
-use clap::{Parser, Subcommand};
-use log::{error, LevelFilter};
-use strum::AsStaticRef;
-use strum_macros::{AsStaticStr, IntoStaticStr};
-use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::skatelet::apply;
-use crate::skatelet::apply::{ApplyArgs};
+use crate::skatelet::apply::ApplyArgs;
 use crate::skatelet::cni::cni;
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
 use crate::skatelet::create::{create, CreateArgs};
@@ -17,6 +9,13 @@ use crate::skatelet::ipvs::{ipvs, IpvsArgs};
 use crate::skatelet::oci::{oci, OciArgs};
 use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
+use clap::{Parser, Subcommand};
+use log::{error, LevelFilter};
+use std::error::Error;
+use std::panic::PanicInfo;
+use std::{process, thread};
+use strum_macros::IntoStaticStr;
+use syslog::{BasicLogger, Facility, Formatter3164};
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 

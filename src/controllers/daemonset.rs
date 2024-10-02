@@ -1,5 +1,4 @@
 use crate::controllers::pod::PodController;
-use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use std::error::Error;

@@ -1,8 +1,7 @@
-use std::error::Error;
-use k8s_openapi::api::core::v1::Secret;
-use crate::filestore::FileStore;
 use crate::skate::{exec_cmd, SupportedResources};
 use crate::util::apply_play;
+use k8s_openapi::api::core::v1::Secret;
+use std::error::Error;
 
 pub struct SecretController {
 }

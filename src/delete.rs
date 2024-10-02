@@ -1,8 +1,8 @@
-use std::error::Error;
+use crate::config::Config;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use crate::config::{Cluster, Config};
+use std::error::Error;
 
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;

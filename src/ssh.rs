@@ -1,23 +1,23 @@
+use anyhow::anyhow;
+use async_ssh2_tokio::client::Client;
+use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
+use base64::engine::general_purpose;
+use base64::Engine;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::time::Duration;
-use anyhow::anyhow;
-use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
-use async_ssh2_tokio::client::{Client};
-use base64::Engine;
-use base64::engine::general_purpose;
 
-use futures::stream::FuturesUnordered;
-use itertools::{Either, Itertools};
 use crate::config::{Cluster, Node};
 use crate::skate::{Distribution, Platform, ResourceType};
-use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
 use colored::Colorize;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
+use itertools::{Either, Itertools};
 use russh::CryptoVec;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub struct SshClient {
@@ -62,7 +62,7 @@ impl From<HostInfo> for NodeState {
 impl HostInfo {
     pub fn healthy(&self) -> bool {
         // TODO - actual checks for things that matter
-        self.skatelet_version.is_some() && self.system_info.as_ref().and_then(|si| Some(!si.cordoned)).unwrap_or(false)
+        self.skatelet_version.is_some() && self.system_info.as_ref().map(|si| !si.cordoned).unwrap_or(false)
     }
 }
 

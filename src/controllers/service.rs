@@ -1,17 +1,17 @@
-use std::error::Error;
-use std::fs;
-use std::net::Ipv4Addr;
-use std::str::FromStr;
-use anyhow::anyhow;
-use k8s_openapi::api::core::v1::Service;
-use log::{error, info};
-use serde_json::{json, Value};
-use crate::template;
 use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
 use crate::skatelet::dns;
 use crate::skatelet::dns::RemoveArgs;
+use crate::template;
 use crate::util::{lock_file, metadata_name};
+use anyhow::anyhow;
+use k8s_openapi::api::core::v1::Service;
+use log::{error, info};
+use serde_json::{json, Value};
+use std::error::Error;
+use std::fs;
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 
 pub struct ServiceController {
     store: FileStore
@@ -86,14 +86,14 @@ impl ServiceController {
             "yaml_path": yaml_path,
         });
 
-        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &name))?;
+        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-ipvsmon-{}.service", &name))?;
         handlebars.render_to_write("unit", &json, file)?;
 
         handlebars.register_template_string("timer", include_str!("../resources/skate-ipvsmon.timer")).map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
         let json: Value = json!({
             "svc_name":name,
         });
-        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &name))?;
+        let file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &name))?;
         handlebars.render_to_write("timer", &json, file)?;
         let unit_name = format!("skate-ipvsmon-{}", &name);
 

@@ -1,8 +1,7 @@
-use std::error::Error;
-use k8s_openapi::api::apps::v1::Deployment;
 use crate::controllers::pod::PodController;
-use crate::filestore::FileStore;
 use crate::skate::exec_cmd;
+use k8s_openapi::api::apps::v1::Deployment;
+use std::error::Error;
 
 pub struct DeploymentController {
 }
