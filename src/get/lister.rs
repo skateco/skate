@@ -45,7 +45,7 @@ impl NameFilters for &ObjectListItem {
 
 pub(crate) trait Lister<T> {
     // selects data from each node
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<T>
+    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<T>
     where
         T: Tabled + NameFilters,
     {

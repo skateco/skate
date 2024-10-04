@@ -128,8 +128,8 @@ skatelet)
     arch=$(multipass exec -n node-1 -- arch)
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet-netavark node-$f:
+        multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet node-$f:
+        multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet-netavark node-$f:
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
         multipass exec -n node-$f -- sudo mv skatelet-netavark /usr/local/bin/skatelet-netavark
     done
