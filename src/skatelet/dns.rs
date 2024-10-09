@@ -9,6 +9,7 @@ use log::{debug, info, warn};
 use crate::util::{lock_file, spawn_orphan_process};
 use std::io::prelude::*;
 use serde_json::Value;
+use crate::errors::SkateError;
 use crate::skate::exec_cmd;
 use crate::skatelet::skatelet::log_panic;
 
@@ -26,7 +27,7 @@ pub struct DnsArgs {
     command: Command,
 }
 
-pub fn dns(args: DnsArgs) -> Result<(), Box<dyn Error>> {
+pub fn dns(args: DnsArgs) -> Result<(), SkateError> {
     panic::set_hook(Box::new(move |info| {
         log_panic(info)
     }));
@@ -42,8 +43,9 @@ fn conf_path_str() -> String {
     "/var/lib/skate/dns".to_string()
 }
 
-fn lock<T>(cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
-    lock_file(&format!("{}/lock", conf_path_str()), cb)
+fn lock<T>(cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, SkateError> {
+    let result=  lock_file(&format!("{}/lock", conf_path_str()), cb)?;
+    Ok(result)
 }
 
 fn ensure_skatelet_dns_conf_dir() {
@@ -81,7 +83,7 @@ fn retry<T>(retries: u32, f: impl Fn() -> Result<T, (bool, Box<dyn Error>)>) -> 
     }
 }
 
-pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), Box<dyn Error>> {
+pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), SkateError> {
     ensure_skatelet_dns_conf_dir();
     let log_tag = "add_misc_host";
 
@@ -109,7 +111,7 @@ pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), Box<
     }))
 }
 
-pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Box<dyn Error>> {
+pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), SkateError> {
     ensure_skatelet_dns_conf_dir();
     let log_tag = format!("{}::add", container_id);
 
@@ -223,7 +225,7 @@ fn extract_skate_ip(json: Value) -> Option<String> {
     }).collect::<Vec<String>>().first().cloned()
 }
 
-pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error>> {
+pub fn wait_and_enable_healthy(container_id: String) -> Result<(), SkateError> {
     let log_tag = format!("{}::enable", container_id);
     debug!("{} inspecting container {}",log_tag, container_id);
     let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
@@ -231,7 +233,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), Box<dyn Error
     let pod = json[0]["Pod"].as_str();
     if pod.is_none() {
         warn!("{} no pod found", log_tag);
-        return Err("no pod found".into());
+        return Err("no pod found".to_string().into());
     }
 
     debug!("{} inspecting pod", log_tag);
@@ -326,7 +328,7 @@ pub struct RemoveArgs {
 }
 
 // remove prints the ip of any dns entry that the container or pod had
-pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
+pub fn remove(args: RemoveArgs) -> Result<(), SkateError> {
     let tag = {
         if args.container_id.is_some() {
             args.container_id.unwrap()
@@ -372,7 +374,7 @@ pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
             let reader = BufReader::new(&addhosts_file);
             let mut writer = BufWriter::new(&newaddhosts_file);
 
-            for (_index, line) in reader.lines().enumerate() {
+            for line in reader.lines() {
                 let line = line?;
                 if !line.ends_with(&tag) {
                     writeln!(writer, "{}", line)?;
@@ -389,7 +391,7 @@ pub fn remove(args: RemoveArgs) -> Result<(), Box<dyn Error>> {
     }))
 }
 
-pub fn reload() -> Result<(), Box<dyn Error>> {
+pub fn reload() -> Result<(), SkateError> {
     let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=coredns", "-q"])?;
 
     if id.is_empty() {

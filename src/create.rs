@@ -4,6 +4,7 @@ use clap::{Args, Subcommand};
 use itertools::Itertools;
 use node::CreateNodeArgs;
 use crate::config::{Cluster, Config};
+use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::JobArgs;
@@ -55,7 +56,7 @@ pub struct CreateClusterArgs {
 }
 
 
-pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
+pub async fn create(args: CreateArgs) -> Result<(), SkateError> {
     match args.command {
         CreateCommands::Node(args) => node::create_node(args).await?,
         CreateCommands::ClusterResources(args) => create_cluster_resources(args).await?,
@@ -65,7 +66,7 @@ pub async fn create(args: CreateArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn create_cluster(args: CreateClusterArgs) -> Result<(), Box<dyn Error>> {
+async fn create_cluster(args: CreateClusterArgs) -> Result<(), SkateError> {
     let mut config = Config::load(Some(args.skateconfig.clone()))?;
 
     let cluster = Cluster {
@@ -89,45 +90,26 @@ async fn create_cluster(args: CreateClusterArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<(), Box<dyn Error>> {
+async fn create_cluster_resources(args: CreateClusterResourcesArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let context = match args.config.context {
-        None => match config.current_context {
-            None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
-            }
-            Some(ref context) => Ok(context)
-        }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
+    let cluster = config.active_cluster(args.config.context.clone())?;
 
-    let (_, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
-
-    node::install_cluster_manifests(&args.config, cluster).await
+    node::install_cluster_manifests(&args.config, cluster).await?;
+    Ok(())
 }
 
 
-async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
+async fn create_job(args: CreateJobArgs) -> Result<(), SkateError> {
 
-    let (from_kind, from_name) = args.args.from.split_once("/").ok_or("invalid --from")?;
+    let (from_kind, from_name) = args.args.from.split_once("/").ok_or("invalid --from".to_string())?;
     if from_kind !="cronjob" {
-        return Err("only cronjob is supported".into());
+        return Err("only cronjob is supported".to_string().into());
     }
 
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let context = match args.config.context {
-        None => match config.current_context {
-            None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
-            }
-            Some(ref context) => Ok(context)
-        }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
-
-    let (_, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+    let cluster = config.active_cluster(args.config.context)?;
 
 
     let (conns, errors) = ssh::cluster_connections(cluster).await;
@@ -157,5 +139,6 @@ async fn create_job(args: CreateJobArgs) -> Result<(), Box<dyn Error>> {
     let wait_flag = if args.args.wait { "--wait" } else { "" };
 
     let cmd = format!("sudo skatelet create --namespace {} job {} --from {} {}", &args.namespace, &wait_flag, &args.args.from, &args.args.name);
-    conn.execute_stdout(&cmd,false, false).await
+    conn.execute_stdout(&cmd,false, false).await?;
+    Ok(())
 }

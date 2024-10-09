@@ -22,7 +22,7 @@ use crate::refresh::refreshed_state;
 use crate::skate::{ConfigFileArgs};
 
 use crate::{ssh};
-
+use crate::errors::SkateError;
 use crate::get::cronjob::CronjobsLister;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
@@ -69,7 +69,7 @@ pub enum GetCommands {
     Service(GetObjectArgs),
 }
 
-pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
+pub async fn get(args: GetArgs) -> Result<(), SkateError> {
     let global_args = args.clone();
     match args.commands {
         GetCommands::Pod(args) => get_pod(global_args, args).await,
@@ -84,7 +84,7 @@ pub async fn get(args: GetArgs) -> Result<(), Box<dyn Error>> {
 }
 
 
-async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), Box<dyn Error>> {
+async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetObjectArgs, lister: &dyn Lister<T>) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.active_cluster(args.config.context.clone())?).await;
     if errors.is_some() {
@@ -120,44 +120,44 @@ async fn get_objects<T: Tabled + NameFilters>(_global_args: GetArgs, args: GetOb
 
 
 
-async fn get_deployment(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_deployment(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = DeploymentLister {};
     get_objects(global_args, args, &lister).await
 }
 
-async fn get_daemonsets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_daemonsets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = DaemonsetLister {};
     get_objects(global_args, args, &lister).await
 }
 
-async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_pod(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = PodLister {};
     get_objects(global_args, args, &lister).await
 }
 
 
-async fn get_ingress(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_ingress(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = IngressLister {};
     get_objects(global_args, args, &lister).await
 }
 
-async fn get_cronjobs(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_cronjobs(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = CronjobsLister {};
     get_objects(global_args, args, &lister).await
 }
 
 
-async fn get_nodes(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_nodes(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = NodeLister {};
     get_objects(global_args, args, &lister).await
 }
 
-async fn get_secrets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_secrets(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = SecretLister{};
     get_objects(global_args, args, &lister).await
 }
 
-async fn get_services(global_args: GetArgs, args: GetObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn get_services(global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
     let lister = ServiceLister{};
     get_objects(global_args, args, &lister).await
 }

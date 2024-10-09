@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use std::error::Error;
-
+use crate::errors::SkateError;
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
 use crate::util::CHECKBOX_EMOJI;
@@ -39,7 +39,7 @@ pub struct DeleteResourceArgs {
 }
 
 
-pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
+pub async fn delete(args: DeleteArgs) -> Result<(), SkateError> {
     match args.command {
         DeleteCommands::Node(args) => delete_node(args).await?,
         DeleteCommands::Daemonset(args) => delete_resource(ResourceType::DaemonSet, args).await?,
@@ -53,7 +53,7 @@ pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Result<(), SkateError> {
     // fetch state for resource type from nodes
 
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
@@ -92,7 +92,7 @@ async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Resu
     }
 }
 
-async fn delete_node(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
+async fn delete_node(args: DeleteResourceArgs) -> Result<(), SkateError> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
 
@@ -103,7 +103,7 @@ async fn delete_node(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
     match find_result {
         Some((p, _)) => {
             cluster.nodes.remove(p);
-            config.replace_cluster(&cluster);
+            config.replace_cluster(&cluster)?;
             config.persist(Some(args.config.skateconfig))
         }
         None => {

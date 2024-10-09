@@ -5,8 +5,7 @@ use std::{io};
 
 
 use std::io::{Read};
-
-
+use crate::errors::SkateError;
 use crate::executor::{DefaultExecutor, Executor};
 
 
@@ -36,7 +35,7 @@ pub enum StdinCommand {
     Stdin {},
 }
 
-pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
+pub fn apply(apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
         StdinCommand::Stdin {} => {
             let mut stdin = io::stdin();

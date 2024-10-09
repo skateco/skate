@@ -37,6 +37,7 @@ use crate::create::{create, CreateArgs};
 use crate::delete::{delete, DeleteArgs};
 use crate::get::{get, GetArgs};
 use crate::describe::{DescribeArgs, describe};
+use crate::errors::SkateError;
 use crate::logs::{LogArgs, logs};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::skate::Os::{Darwin, Linux};
@@ -76,7 +77,7 @@ pub struct ConfigFileArgs {
     pub context: Option<String>,
 }
 
-pub async fn skate() -> Result<(), Box<dyn Error>> {
+pub async fn skate() -> Result<(), SkateError> {
     config::ensure_config();
     let args = Cli::parse();
     match args.command {
@@ -91,8 +92,9 @@ pub async fn skate() -> Result<(), Box<dyn Error>> {
         Commands::Config(args) => crate::config_cmd::config(args),
         Commands::Cordon(args) => cordon(args).await,
         Commands::Uncordon(args) => uncordon(args).await,
-        _ => Ok(())
-    }
+    }?;
+    Ok(())
+    
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString)]

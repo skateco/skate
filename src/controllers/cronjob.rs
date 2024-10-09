@@ -10,9 +10,10 @@ use serde_json::{json, Value};
 use std::error::Error;
 use std::fs;
 use std::io::Write;
+use crate::errors::SkateError;
 
 pub struct CronjobController {
-    store: FileStore
+    store: FileStore,
 }
 
 impl CronjobController {
@@ -21,7 +22,6 @@ impl CronjobController {
             store: file_store
         }
     }
-
 
 
     pub fn apply(&self, cron_job: CronJob) -> Result<(), Box<dyn Error>> {
@@ -48,9 +48,12 @@ impl CronjobController {
 
         let pod_template_spec = spec.job_template.spec.unwrap_or_default().template;
 
-        let mut pod = Pod::default();
-        pod.spec = pod_template_spec.spec;
-        pod.metadata = cron_job.metadata.clone();
+        let mut pod = Pod {
+            spec: pod_template_spec.spec,
+            metadata: cron_job.metadata.clone(),
+            ..Default::default()
+        };
+
         pod.metadata.name = Some(format!("crn-{}", ns_name));
         let mut_spec = pod.spec.as_mut().unwrap();
         mut_spec.restart_policy = Some("Never".to_string());
@@ -59,7 +62,7 @@ impl CronjobController {
         let pod_yaml_path = self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
 
         // create the pod to test that it's valid
-        exec_cmd("podman", &["kube","play", "--start=false", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
+        exec_cmd("podman", &["kube", "play", "--start=false", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
 
         let mut handlebars = template::new();
         ////////////////////////////////////////////////////
@@ -127,9 +130,8 @@ impl CronjobController {
         Ok(())
     }
 
-    pub fn run(&self, name: &str, ns: &str, wait: bool) -> Result<(), Box<dyn Error>> {
-
-        let obj = self.store.get_object("cronjob", &format!("{}.{}",name, ns))?;
+    pub fn run(&self, name: &str, ns: &str, wait: bool) -> Result<(), SkateError> {
+        let obj = self.store.get_object("cronjob", &format!("{}.{}", name, ns))?;
 
         let args = &["kube", "play", &format!("{}/pod.yaml", obj.path), "--replace", "--network", "skate"];
         let args = if wait {
@@ -138,6 +140,7 @@ impl CronjobController {
             args.to_vec()
         };
 
-       exec_cmd_stdout("podman", &args)
+        exec_cmd_stdout("podman", &args)?;
+        Ok(())
     }
 }

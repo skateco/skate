@@ -14,8 +14,10 @@ use log::{error, LevelFilter};
 use std::error::Error;
 use std::panic::PanicInfo;
 use std::{process, thread};
+use anyhow::anyhow;
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
+use crate::errors::SkateError;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 
@@ -74,7 +76,7 @@ pub fn log_panic(info: &PanicInfo) {
     }
 }
 
-pub async fn skatelet() -> Result<(), Box<dyn Error>> {
+pub async fn skatelet() -> Result<(), SkateError> {
 
     let args = Cli::parse();
 
@@ -91,7 +93,7 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     };
 
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-        .map(|()| log::set_max_level(LevelFilter::Debug))?;
+        .map(|()| log::set_max_level(LevelFilter::Debug)).map_err(|e| anyhow!(e))?;
 
 
     let result = match args.command {

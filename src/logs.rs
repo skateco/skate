@@ -6,6 +6,7 @@ use crate::config::Config;
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;
 use futures::StreamExt;
+use crate::errors::SkateError;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
@@ -39,7 +40,7 @@ impl LogArgs {
     }
 }
 
-pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
+pub async fn logs(args: LogArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let (conns, errors) = ssh::cluster_connections(config.active_cluster(args.config.context.clone())?).await;
 
@@ -84,7 +85,7 @@ pub async fn logs(args: LogArgs) -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), SkateError> {
     let mut cmd = args.to_podman_log_args();
 
     cmd.push(name.to_string());
@@ -106,7 +107,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &Lo
     Ok(())
 }
 
-pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), Box<dyn Error>> {
+pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
     let mut cmd = args.to_podman_log_args();
 
     cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q)", resource_type.to_string().to_lowercase(), name, ns));

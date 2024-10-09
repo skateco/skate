@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use clap::Args;
 
 use crate::config::Config;
+use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 
@@ -22,13 +23,13 @@ immediate shutdown.")]
     pub config: ConfigFileArgs,
 }
 
-pub async fn apply(args: ApplyArgs) -> Result<(), Box<dyn Error>> {
-    let config = Config::load(Some(args.config.skateconfig)).expect("failed to load skate config");
+pub async fn apply(args: ApplyArgs) -> Result<(), SkateError> {
+    let config = Config::load(Some(args.config.skateconfig))?;
     let objects = crate::skate::read_manifests(args.filename)?;
     apply_supported_resources(&config, objects).await
 }
 
-pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), SkateError> {
     let cluster = config.active_cluster(config.current_context.clone())?;
     let (conns, errors) = ssh::cluster_connections(cluster).await;
     if let Some(e) = errors {
@@ -44,7 +45,7 @@ pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<Su
     let objects: Vec<Result<_, _>> = resources.into_iter().map(|sr| sr.fixup()).collect();
     let objects: Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
 
-    let conns = conns.ok_or("no clients")?;
+    let conns = conns.ok_or("no clients".to_string())?;
 
     let mut state = refreshed_state(&cluster.name, &conns, config).await.expect("failed to refresh state");
 
