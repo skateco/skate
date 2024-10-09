@@ -1,4 +1,3 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use k8s_openapi::api::core::v1::Node as K8sNode;

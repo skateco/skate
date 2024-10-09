@@ -11,7 +11,6 @@ use crate::skatelet::system::{system, SystemArgs};
 use crate::skatelet::template::{template, TemplateArgs};
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::error::Error;
 use std::panic::PanicInfo;
 use std::{process, thread};
 use anyhow::anyhow;

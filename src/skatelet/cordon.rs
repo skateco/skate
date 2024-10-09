@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use anyhow::anyhow;

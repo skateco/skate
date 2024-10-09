@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::io;
 use std::io::Read;
 use clap::{Args, Subcommand};

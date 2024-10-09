@@ -1,7 +1,5 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use itertools::Itertools;
 use node::CreateNodeArgs;
 use crate::config::{Cluster, Config};
 use crate::errors::SkateError;

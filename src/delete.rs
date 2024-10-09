@@ -2,7 +2,6 @@ use crate::config::Config;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
-use std::error::Error;
 use crate::errors::SkateError;
 use crate::skate::{ConfigFileArgs, ResourceType};
 use crate::ssh;

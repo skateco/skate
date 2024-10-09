@@ -1,5 +1,4 @@
 use clap::{Args, Subcommand};
-use std::error::Error;
 
 use std::{io};
 

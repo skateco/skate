@@ -1,4 +1,3 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::Args;
 use crate::config::Config;

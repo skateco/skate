@@ -7,7 +7,6 @@ use handlebars::Handlebars;
 use k8s_openapi::api::core::v1::Service;
 use log::info;
 use serde_json::json;
-use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::net::ToSocketAddrs;

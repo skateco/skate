@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::panic;
 use clap::{Args, Subcommand};
 use log::{error, info};
