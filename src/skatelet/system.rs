@@ -12,6 +12,7 @@ use k8s_openapi::api::core::v1::Secret;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
+use crate::errors::SkateError;
 use crate::filestore::{FileStore, ObjectListItem};
 
 use crate::skate::{Distribution, exec_cmd, Platform};
@@ -33,7 +34,7 @@ pub enum SystemCommands {
     Info,
 }
 
-pub async fn system(args: SystemArgs) -> Result<(), Box<dyn Error>> {
+pub async fn system(args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
         SystemCommands::Info => info().await?
     }

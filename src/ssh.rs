@@ -18,6 +18,7 @@ use futures::StreamExt;
 use itertools::{Either, Itertools};
 use russh::CryptoVec;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct SshClient {
@@ -316,7 +317,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
 }
 
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub struct SshError {
     pub node_name: String,
     pub error: Box<dyn Error>,

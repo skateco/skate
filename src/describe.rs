@@ -1,8 +1,8 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use k8s_openapi::api::core::v1::Node as K8sNode;
 use crate::config::Config;
+use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
@@ -40,7 +40,7 @@ pub enum DescribeCommands {
     Node(DescribeObjectArgs),
 }
 
-pub async fn describe(args: DescribeArgs) -> Result<(), Box<dyn Error>> {
+pub async fn describe(args: DescribeArgs) -> Result<(), SkateError> {
     let global_args = args.clone();
     match args.commands {
         DescribeCommands::Pod(_p_args) => Ok(()),
@@ -77,12 +77,12 @@ impl Describer<NodeState> for NodeDescriber {
     }
 }
 
-async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> Result<(), Box<dyn Error>> {
+async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> Result<(), SkateError> {
     let inspector = NodeDescriber {};
     describe_object(global_args, args, &inspector).await
 }
 
-async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
+async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
     let cluster = config.active_cluster(args.config.context.clone())?;
     let (conns, errs) = ssh::cluster_connections(cluster).await;

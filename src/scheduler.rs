@@ -721,6 +721,8 @@ impl DefaultScheduler {
                                 if !stderr.is_empty() {
                                     eprintln!("{}", stderr.trim())
                                 }
+
+                                let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
                                 println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
                                 result.push(op.clone());
                             }

@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use crate::errors::SkateError;
 use crate::skate::ConfigFileArgs;
 
 #[derive(Debug, Args)]
@@ -21,7 +22,7 @@ pub enum ConfigCommands {
     UseContext(UseContextArgs),
 }
 
-pub fn config(args: ConfigArgs) -> Result<(), Box<dyn std::error::Error>> {
+pub fn config(args: ConfigArgs) -> Result<(), SkateError> {
     match args.command {
         ConfigCommands::UseContext(use_context_args) => {
             let mut config = crate::config::Config::load(Some(args.config.skateconfig.clone())).expect("failed to load skate config");

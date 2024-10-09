@@ -1,7 +1,7 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::Args;
 use crate::config::Config;
+use crate::errors::SkateError;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
@@ -13,12 +13,12 @@ use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 pub struct RefreshArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
-    #[arg(long, long_help = "Url prefix where to find binaries", default_value = "https://skate.on/releases/", env)]
-    binary_url_prefix: String,
+    #[arg(long, long_help="print state as json to stdout")]
+    json: bool
 }
 
 
-pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
+pub async fn refresh(args: RefreshArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig))?;
     let cluster = config.active_cluster(args.config.context)?;
 
@@ -37,26 +37,32 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), Box<dyn Error>> {
 
     let state = refreshed_state(&cluster.name, &clients, &config).await.expect("failed to refresh state");
 
-    for node in &(state.nodes) {
-        let emoji = match node.status {
-            NodeStatus::Unhealthy => {
-                CROSS_EMOJI
-            }
-            NodeStatus::Healthy => {
-                CHECKBOX_EMOJI
-            }
-            NodeStatus::Unknown => {
-                ' '
-            }
-        };
-        println!("node {} {} - {} ", node.node_name, node.status, emoji)
+
+    if args.json {
+        serde_json::to_writer(std::io::stdout(), &state)?;
+    }else {
+        for node in &(state.nodes) {
+            let emoji = match node.status {
+                NodeStatus::Unhealthy => {
+                    CROSS_EMOJI
+                }
+                NodeStatus::Healthy => {
+                    CHECKBOX_EMOJI
+                }
+                NodeStatus::Unknown => {
+                    ' '
+                }
+            };
+            println!("node {} {} - {} ", node.node_name, node.status, emoji)
+        }
     }
+
 
     Ok(())
 }
 
 
-pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, Box<dyn Error>> {
+pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, SkateError> {
     let host_infos = conns.get_nodes_system_info().await;
     let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
         Ok(r) => Some((*r).clone()),

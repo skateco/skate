@@ -72,7 +72,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
-    config.replace_cluster(&cluster);
+    config.replace_cluster(&cluster)?;
 
 
     config.persist(Some(args.config.skateconfig.clone()))?;

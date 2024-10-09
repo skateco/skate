@@ -4,10 +4,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
+use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::{Metadata};
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::core::v1::{Secret, Service};
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tabled::Tabled;
-use crate::util::NamespacedName;
+use crate::errors::SkateError;
+use crate::spec::cert::ClusterIssuer;
+use crate::util::{metadata_name, NamespacedName};
 
 // all dirs/files live under /var/lib/skate/store
 // One directory for
@@ -30,6 +37,20 @@ pub struct ObjectListItem {
     pub manifest: Option<Value>,
     pub created_at: DateTime<Local>,
     pub path: String,
+}
+
+impl ObjectListItem {
+    fn from_k8s_resource(res:  &(impl Metadata<Ty=ObjectMeta> + Serialize), path: Option<&str>) -> Self {
+
+        let obj = ObjectListItem{
+            name: metadata_name(res),
+            manifest_hash: res.metadata().labels.as_ref().and_then(|l| l.get("skate.io/hash")).cloned().unwrap_or("".to_string()),
+            manifest: Some(serde_yaml::to_value(res).expect("failed to serialize kubernetes object")),
+            created_at: Local::now(),
+            path: path.unwrap_or_default().to_string(),
+        };
+        obj
+    }
 }
 
 impl TryFrom<&str> for ObjectListItem {
@@ -87,6 +108,37 @@ impl TryFrom<DirEntry> for ObjectListItem {
     }
 }
 
+impl From<&Ingress> for ObjectListItem {
+    fn from(res: &Ingress) -> Self {
+        Self::from_k8s_resource(res, None)
+    }
+}
+
+impl From<&CronJob> for ObjectListItem {
+    fn from(res: &CronJob) -> Self {
+        Self::from_k8s_resource(res, None)
+    }
+}
+
+impl From<&Service> for ObjectListItem {
+    fn from(res: &Service) -> Self {
+        Self::from_k8s_resource(res, None)
+    }
+}
+
+
+impl From<&Secret> for ObjectListItem {
+    fn from(res: &Secret) -> Self {
+        Self::from_k8s_resource(res, None)
+    }
+}
+
+impl From<&ClusterIssuer> for ObjectListItem {
+    fn from(res: &ClusterIssuer) -> Self {
+        Self::from_k8s_resource(res, None)
+    }
+}
+
 impl FileStore {
     pub fn new() -> Self {
         FileStore {
@@ -101,16 +153,15 @@ impl FileStore {
     }
 
     // will clobber
-    pub fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String, Box<dyn Error>> {
+    pub fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String,SkateError> {
         let dir = self.get_path(&[object_type, object_name]);
         create_dir_all(&dir).map_err(|e| anyhow!(e).context(format!("failed to create directory {}", dir)))?;
         let file_path = format!("{}/{}/{}/{}", self.base_path, object_type, object_name, file_name);
 
-
         let file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).open(&file_path);
         match file.map_err(|e| anyhow!(e).context(format!("failed to create file {}", file_path))) {
             Err(e) => Err(e.into()),
-            Ok(mut file) => file.write_all(file_contents).map(|_| file_path).map_err(|e| e.into())
+            Ok(mut file) => Ok(file.write_all(file_contents).map(|_| file_path)?)
         }
     }
 

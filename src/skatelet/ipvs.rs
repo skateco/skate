@@ -7,7 +7,6 @@ use handlebars::Handlebars;
 use k8s_openapi::api::core::v1::Service;
 use log::info;
 use serde_json::json;
-use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::net::ToSocketAddrs;
@@ -15,7 +14,7 @@ use std::path::Path;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use itertools::Itertools;
-
+use crate::errors::SkateError;
 
 const TERMINATED_MAX_AGE: i64 = 300; // seconds
 const CLEANUP_INTERVAL: i64 = 30; //seconds
@@ -35,7 +34,7 @@ pub struct IpvsArgs {
 }
 
 
-pub fn ipvs(args: IpvsArgs) -> Result<(), Box<dyn Error>> {
+pub fn ipvs(args: IpvsArgs) -> Result<(), SkateError> {
     match args.command {
         Commands::Sync(args) => sync(args),
         Commands::DisableIp(args) => disable_ips(args),
@@ -48,7 +47,7 @@ pub struct DisableIpArgs {
     ips: Vec<String>,
 }
 
-fn disable_ips(args: DisableIpArgs) -> Result<(), Box<dyn Error>> {
+fn disable_ips(args: DisableIpArgs) -> Result<(), SkateError> {
     terminated_add(&args.host, &args.ips)
 }
 
@@ -60,7 +59,7 @@ pub struct SyncArgs {
     file: String,
 }
 
-pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
+pub fn sync(args: SyncArgs) -> Result<(), SkateError> {
     // args.service_name is fqn like foo.bar
     let mut manifest: Service = serde_yaml::from_str(&fs::read_to_string(args.file)?)?;
     let spec = manifest.spec.clone().unwrap_or_default();
@@ -97,7 +96,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     info!("changes detected, rewriting keepalived config for {} -> {:?}", &args.host, &addrs);
     // check the old ADD ips in the cache file (remove those with a DEL line)
     let last_result = lastresult_list(&fqn.to_string())?;
-    lastresult_save(&fqn.to_string(), &addrs.iter().cloned().collect())?;
+    lastresult_save(&fqn.to_string(), &addrs.iter().cloned().collect::<Vec<String>>())?;
     // remove deleted items that are in the latest result
     let deleted = terminating.iter().filter(|&i| !addrs.contains(i)).cloned().collect::<Vec<String>>();
 
@@ -135,7 +134,7 @@ pub fn sync(args: SyncArgs) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn hash_changed(addrs: &HashSet<String>, terminating: &HashSet<String>, service_name: &str) -> Result<bool, Box<dyn Error>> {
+fn hash_changed(addrs: &HashSet<String>, terminating: &HashSet<String>, service_name: &str) -> Result<bool, SkateError> {
     let mut addrs_hasher = DefaultHasher::new();
     let addrs: Vec<_> = addrs.iter().cloned().sorted().collect();
     addrs.hash(&mut addrs_hasher);
@@ -185,11 +184,11 @@ fn cleanup_last_run_file_name(service_name: &str) -> String {
     format!("/run/skatelet-ipvsmon-{}.cleanup", service_name)
 }
 
-fn lastresult_save(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn Error>> {
+fn lastresult_save(service_name: &str, ips: &[String]) -> Result<(), SkateError> {
     fs::write(last_result_file_name(service_name), ips.join("\n"))?;
     Ok(())
 }
-fn lastresult_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>> {
+fn lastresult_list(service_name: &str) -> Result<HashSet<String>, SkateError> {
     let contents = match fs::read_to_string(last_result_file_name(service_name)) {
         Ok(contents) => contents,
         Err(_) => return Ok(HashSet::new())
@@ -198,7 +197,7 @@ fn lastresult_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
     Ok(contents.lines().map(|i| i.to_string()).collect())
 }
 
-fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn Error>> {
+fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), SkateError> {
     let mut file = OpenOptions::new().append(true).create(true).open(terminated_list_file_name(service_name))?;
     for ip in ips {
         file.write_all(format!("{} {}\n", ip, chrono::Utc::now().timestamp()).as_bytes())?;
@@ -206,7 +205,7 @@ fn terminated_add(service_name: &str, ips: &Vec<String>) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>> {
+fn terminated_list(service_name: &str) -> Result<HashSet<String>, SkateError> {
     let now = chrono::Utc::now().timestamp();
 
     let contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
@@ -224,7 +223,7 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
         let ip = parts[0];
         let ts = parts[1];
 
-        if now - ts.parse::<i64>()? > TERMINATED_MAX_AGE {
+        if now - ts.parse::<i64>().map_err(|e|anyhow!(e))? > TERMINATED_MAX_AGE {
             continue;
         }
 
@@ -237,7 +236,7 @@ fn terminated_list(service_name: &str) -> Result<HashSet<String>, Box<dyn Error>
     Ok(deleted)
 }
 // TODO - remove straight away if ipvs active + inactive conns = 0
-fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
+fn cleanup_terminated_list(service_name: &str) -> Result<bool, SkateError> {
     info!("cleaning up terminated list for {}", service_name);
     let contents = match fs::read_to_string(terminated_list_file_name(service_name)) {
         Ok(contents) => contents,
@@ -259,7 +258,7 @@ fn cleanup_terminated_list(service_name: &str) -> Result<bool, Box<dyn Error>> {
             continue;
         }
         let ip = parts[0];
-        let ts = parts[1].parse::<i64>()?;
+        let ts = parts[1].parse::<i64>().map_err(|e| anyhow!(e))?;
 
         if keep_set.contains(ip) {
             changed = true;

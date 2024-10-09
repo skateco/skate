@@ -1,9 +1,9 @@
 use clap::{Args, Subcommand};
-use std::error::Error;
 
 
 
 use crate::controllers::cronjob::CronjobController;
+use crate::errors::SkateError;
 use crate::filestore::FileStore;
 
 #[derive(Debug, Args, Clone)]
@@ -33,27 +33,28 @@ pub enum CreateCommand {
 }
 
 
-pub fn create(main_args: CreateArgs) -> Result<(), Box<dyn Error>> {
+pub fn create(main_args: CreateArgs) -> Result<(), SkateError> {
     match main_args.command.clone() {
         CreateCommand::Job(args) => create_job(main_args, args)
     }
 }
 
-pub fn create_job(create_args: CreateArgs, args: JobArgs) -> Result<(), Box<dyn Error>> {
+pub fn create_job(create_args: CreateArgs, args: JobArgs) -> Result<(), SkateError> {
     let from = args.from.clone();
-    let (from_type, from_name) = from.split_once("/").ok_or("invalid --from")?;
+    let (from_type, from_name) = from.split_once("/").ok_or("invalid --from".to_string())?;
     if from_type == "cronjob" {
         create_job_cronjob(create_args, args, from_name)
     } else {
-        Err("only cronjob is supported".into())
+        Err("only cronjob is supported".to_string().into())
     }
 }
 
-pub fn create_job_cronjob(create_args: CreateArgs, args: JobArgs, from_name:&str) -> Result<(), Box<dyn Error>> {
+pub fn create_job_cronjob(create_args: CreateArgs, args: JobArgs, from_name:&str) -> Result<(), SkateError> {
     // the pod.yaml is already in the store, so we can just run that
 
     let ctrl = CronjobController::new(FileStore::new());
 
-    ctrl.run(from_name, &create_args.namespace, args.wait)
+    ctrl.run(from_name, &create_args.namespace, args.wait)?;
+    Ok(())
 }
 
