@@ -241,10 +241,23 @@ impl DefaultScheduler {
         let d = d.clone();
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
-        let mut actions: HashMap<_, Vec<_>> = HashMap::new();
 
         let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
+
+        let default_ops: Vec<_> = state.nodes.iter().map(|n| ScheduledOperation{
+            resource: SupportedResources::Deployment(d.clone()),
+            node: Some(n.clone()),
+            operation: OpType::Create,
+            error: None,
+        }).collect();
+
+        let mut actions: HashMap<_, Vec<_>> = HashMap::from([(metadata_name(&d), default_ops)]);
+
+        // regardless what happens, overwrite the deployment manifest to reflect the current one
+
+
+
 
         let existing_pods = state.locate_deployment(&deployment_name, &ns);
 

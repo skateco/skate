@@ -115,6 +115,7 @@ pub struct ClusterState {
     pub nodes: Vec<NodeState>,
 }
 
+#[derive(Default)]
 pub struct ReconciledResult {
     pub removed: usize,
     pub added: usize,
@@ -202,6 +203,7 @@ impl ClusterState {
             SupportedResources::Secret(secret) => Self::reconcile_secret_creation(secret, node),
             SupportedResources::Service(service) => Self::reconcile_service_creation(service, node),
             SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_creation(issuer, node),
+            SupportedResources::Deployment(_) => {/* nothing to do */Ok(ReconciledResult::default())},
             _ => todo!("reconcile not supported")
         }
     }

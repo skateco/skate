@@ -35,6 +35,10 @@ impl Executor for DefaultExecutor {
         // just to check
         let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
         match object {
+            SupportedResources::Deployment(deployment) => {
+                let ctrl = DeploymentController::new(self.store.clone());
+                ctrl.apply(deployment)?;
+            }
             SupportedResources::Pod(pod) => {
                 let ctrl = PodController::new();
                 ctrl.apply(pod)?;
@@ -74,7 +78,7 @@ impl Executor for DefaultExecutor {
                 ctrl.delete(p, grace_period)?;
             }
             SupportedResources::Deployment(d) => {
-                let ctrl = DeploymentController::new();
+                let ctrl = DeploymentController::new(self.store.clone());
                 ctrl.delete(d, grace_period)?;
             }
             SupportedResources::DaemonSet(d) => {
