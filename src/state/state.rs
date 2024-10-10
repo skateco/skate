@@ -11,6 +11,7 @@ use std::error::Error;
 use std::fs::File;
 use std::ops::DerefMut;
 use std::path::Path;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::networking::v1::Ingress;
 use strum_macros::Display;
@@ -105,6 +106,16 @@ impl From<NodeState> for K8sNode {
             spec: Some(spec),
             status: Some(status),
         }
+    }
+}
+
+impl NodeState {
+    pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<PodmanPodInfo> {
+        self.host_info.as_ref().and_then(|h| {
+                h.system_info.clone().and_then(|i| {
+                    i.pods.map(|p| p.clone().into_iter().filter(|p| f(p)).collect::<Vec<_>>())
+                })
+        }).unwrap_or_default()
     }
 }
 
@@ -203,6 +214,8 @@ impl ClusterState {
             SupportedResources::Secret(secret) => Self::reconcile_secret_creation(secret, node),
             SupportedResources::Service(service) => Self::reconcile_service_creation(service, node),
             SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_creation(issuer, node),
+            // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
+            // The state change is all done by the Pods' scheduled operations
             SupportedResources::Deployment(_) => {/* nothing to do */Ok(ReconciledResult::default())},
             _ => todo!("reconcile not supported")
         }
@@ -219,6 +232,8 @@ impl ClusterState {
             SupportedResources::Secret(secret) => Self::reconcile_secret_deletion(secret, node),
             SupportedResources::Service(service) =>Self::reconcile_service_deletion(service,node),
             SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_deletion(issuer, node),
+            SupportedResources::Deployment(deployment) => Self::reconcile_deployment_deletion(deployment, node),
+            SupportedResources::DaemonSet(daemonset) => Self::reconcile_daemonset_deletion(daemonset, node),
             _ => todo!("reconcile not supported")
         }
     }
@@ -348,6 +363,22 @@ impl ClusterState {
         Ok(ReconciledResult::removed())
     }
 
+    fn reconcile_daemonset_deletion(daemonset: &DaemonSet, node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(daemonset).to_string();
+        node.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p|!p.daemonset().is_empty() &&  p.daemonset() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_deployment_deletion(deployment: &Deployment, node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(deployment).to_string();
+        node.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.deployment().is_empty() && p.deployment() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
+
     pub fn reconcile_all_nodes(&mut self, cluster_name: &str, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.active_cluster(Some(cluster_name.to_string()))?;
         self.hash = hash_string(cluster);
@@ -412,12 +443,8 @@ impl ClusterState {
 
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<(PodmanPodInfo, &NodeState)> {
         let res: Vec<_> = self.nodes.iter().filter_map(|n| {
-            n.host_info.as_ref().and_then(|h| {
-                h.system_info.clone().and_then(|i| {
-                    i.pods.map(|p| p.clone().into_iter().filter(|p| f(p)).map(|p| vec!((p, n))).collect::<Vec<_>>())
-                })
-            })
-        }).flatten().flatten().collect();
+            Some(n.filter_pods(&|p| f(p)).into_iter().map(|p| (p, n)).collect::<Vec<_>>())
+        }).flatten().collect();
         res
     }
 
@@ -450,4 +477,5 @@ impl ClusterState {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
         self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
     }
+
 }

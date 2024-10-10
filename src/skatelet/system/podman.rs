@@ -92,6 +92,9 @@ impl PodmanPodInfo {
     pub fn deployment(&self) -> String {
         self.labels.get("skate.io/deployment").cloned().unwrap_or("".to_string())
     }
+    pub fn daemonset(&self) -> String {
+        self.labels.get("skate.io/daemonset").cloned().unwrap_or("".to_string())
+    }
 }
 
 impl From<Pod> for PodmanPodInfo {
