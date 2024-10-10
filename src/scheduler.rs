@@ -47,6 +47,7 @@ pub struct ScheduledOperation<T> {
     pub node: Option<NodeState>,
     pub operation: OpType,
     pub error: Option<String>,
+    pub silent: bool,
 }
 
 pub struct ApplyPlan {
@@ -250,6 +251,7 @@ impl DefaultScheduler {
             node: Some(n.clone()),
             operation: OpType::Create,
             error: None,
+            silent: true,
         }).collect();
 
         let mut actions: HashMap<_, Vec<_>> = HashMap::from([(metadata_name(&d), default_ops)]);
@@ -278,6 +280,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::Pod(pod),
                         error: None,
                         operation: OpType::Delete,
+                        silent: false,
                     };
                     match actions.get_mut(&name) {
                         Some(ops) => ops.push(op),
@@ -367,6 +370,7 @@ impl DefaultScheduler {
                     resource: SupportedResources::Pod(pod_info.clone().into()),
                     error: None,
                     operation: OpType::Delete,
+                    silent: false,
                 }
             }).collect(),
         };
@@ -386,6 +390,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::Pod(pod_info.clone().into()),
                         error: None,
                         operation: OpType::Unchanged,
+                        silent: false,
                     }),
                     false => {
                         vec!(
@@ -394,12 +399,14 @@ impl DefaultScheduler {
                                 resource: SupportedResources::Pod(pod_info.clone().into()),
                                 error: None,
                                 operation: OpType::Delete,
+                                silent: false,
                             },
                             ScheduledOperation {
                                 node: None,
                                 resource: SupportedResources::Pod(new_pod),
                                 error: None,
                                 operation: OpType::Create,
+                                silent: false,
                             }
                         )
                     }
@@ -411,6 +418,7 @@ impl DefaultScheduler {
                     resource: SupportedResources::Pod(new_pod.clone()),
                     error: None,
                     operation: OpType::Create,
+                    silent: false,
                 }
             )
         };
@@ -443,6 +451,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::CronJob(new_cron),
                         error: None,
                         operation: OpType::Unchanged,
+                        silent: false,
                         node: Some(c.1.clone()),
                     });
                     // nothing to do
@@ -451,6 +460,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::CronJob(new_cron.clone()),
                         error: None,
                         operation: OpType::Delete,
+                        silent: false,
                         node: Some(c.1.clone()),
                     });
 
@@ -458,6 +468,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::CronJob(new_cron),
                         error: None,
                         operation: OpType::Create,
+                        silent: false,
                         node: None,
                     });
                 }
@@ -467,6 +478,7 @@ impl DefaultScheduler {
                     resource: SupportedResources::CronJob(new_cron),
                     error: None,
                     operation: OpType::Create,
+                    silent: false,
                     node: None,
                 });
             }
@@ -493,6 +505,7 @@ impl DefaultScheduler {
                     resource: SupportedResources::Secret(secret.clone()),
                     error: None,
                     operation: OpType::Create,
+                    silent: false,
                     node: Some(node.clone()),
                 }
             ]);
@@ -526,6 +539,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Service(new_service.clone()),
                             error: None,
                             operation: OpType::Unchanged,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                         // nothing to do
@@ -534,6 +548,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Service(new_service.clone()),
                             error: None,
                             operation: OpType::Delete,
+                            silent: false,
                             node: Some(node.clone()),
                         });
 
@@ -541,6 +556,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Service(new_service.clone()),
                             error: None,
                             operation: OpType::Create,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                     }
@@ -550,6 +566,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::Service(new_service.clone()),
                         error: None,
                         operation: OpType::Create,
+                        silent: false,
                         node: Some(node.clone()),
                     });
                 }
@@ -585,6 +602,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Ingress(new_ingress.clone()),
                             error: None,
                             operation: OpType::Unchanged,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                         // nothing to do
@@ -593,6 +611,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Ingress(new_ingress.clone()),
                             error: None,
                             operation: OpType::Delete,
+                            silent: false,
                             node: Some(node.clone()),
                         });
 
@@ -600,6 +619,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::Ingress(new_ingress.clone()),
                             error: None,
                             operation: OpType::Create,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                     }
@@ -609,6 +629,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::Ingress(new_ingress.clone()),
                         error: None,
                         operation: OpType::Create,
+                        silent: false,
                         node: Some(node.clone()),
                     });
                 }
@@ -643,6 +664,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
                             error: None,
                             operation: OpType::Unchanged,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                         // nothing to do
@@ -651,6 +673,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
                             error: None,
                             operation: OpType::Delete,
+                            silent: false,
                             node: Some(node.clone()),
                         });
 
@@ -658,6 +681,7 @@ impl DefaultScheduler {
                             resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
                             error: None,
                             operation: OpType::Create,
+                            silent: false,
                             node: Some(node.clone()),
                         });
                     }
@@ -667,6 +691,7 @@ impl DefaultScheduler {
                         resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
                         error: None,
                         operation: OpType::Create,
+                        silent: false,
                         node: Some(node.clone()),
                     });
                 }
@@ -736,7 +761,9 @@ impl DefaultScheduler {
                                 }
 
                                 let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
-                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
+                                if !op.silent {
+                                    println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
+                                }
                                 result.push(op.clone());
                             }
                             Err(err) => {
@@ -772,7 +799,10 @@ impl DefaultScheduler {
                                     stderr.trim().split("\n").for_each(|line| eprintln!("{} - ERROR: {}", node_name, line));
                                 }
                                 let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
-                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
+
+                                if !op.silent {
+                                    println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
+                                }
                                 result.push(op.clone());
                             }
                             Err(err) => {
@@ -784,12 +814,18 @@ impl DefaultScheduler {
                     }
                     OpType::Info => {
                         let node_name = op.node.clone().unwrap().node_name;
-                        println!("{} {} on {}", INFO_EMOJI, op.resource.name(), node_name);
+
+                        if !op.silent {
+                            println!("{} {} on {}", INFO_EMOJI, op.resource.name(), node_name);
+                        }
                         result.push(op.clone());
                     }
                     OpType::Unchanged => {
                         let node_name = op.node.clone().unwrap().node_name;
-                        println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource, op.resource.name(), node_name);
+
+                        if !op.silent {
+                            println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource, op.resource.name(), node_name);
+                        }
                     }
                 }
             }
@@ -814,6 +850,7 @@ impl Scheduler for DefaultScheduler {
                         resource: object.clone(),
                         node: None,
                         operation: OpType::Info,
+                        silent: false,
                         error: Some(err.to_string()),
                     }]].concat()
                 }
