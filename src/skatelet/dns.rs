@@ -159,20 +159,24 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Skat
     let ns = labels["skate.io/namespace"].as_str().ok_or_else(|| anyhow!("missing skate.io/namespace label"))?;
 
     // only add for daemonsets or deployments
-    let mut parent_resource = "";
-
-    if labels.contains_key("skate.io/daemonset") {
-        parent_resource = "daemonset";
-    } else if labels.contains_key("skate.io/deployment") {
-        parent_resource = "deployment";
-    } else {
+    let parent_resource = {
+        if labels.contains_key("skate.io/daemonset") {
+            Some("daemonset")
+        } else if labels.contains_key("skate.io/deployment") {
+            Some("deployment")
+        } else {
+            None
+        }
+    };
+    
+    if parent_resource.is_none() {
         info!("not a daemonset or deployment, skipping");
         return Ok(());
     }
 
-    let parent_identifer_label = format!("skate.io/{}", parent_resource);
+    let parent_identifier_label = format!("skate.io/{}", parent_resource.unwrap());
 
-    let app = labels.get(&parent_identifer_label).unwrap().as_str().unwrap();
+    let app = labels.get(&parent_identifier_label).unwrap().as_str().unwrap();
 
     let domain = format!("{}.{}.pod.cluster.skate", app, ns);
     let addnhosts_path = Path::new(&conf_path_str()).join("addnhosts");

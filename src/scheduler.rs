@@ -221,7 +221,7 @@ impl DefaultScheduler {
         Self::plan_deployment_recreate(state, d)
     }
 
-    fn plan_deployment_rolling_update(state: &ClusterState, d: &Deployment, ru: RollingUpdateDeployment) -> Result<ApplyPlan, Box<dyn Error>> {
+    fn plan_deployment_rolling_update(state: &ClusterState, d: &Deployment, _: RollingUpdateDeployment) -> Result<ApplyPlan, Box<dyn Error>> {
         let actions = Self::plan_deployment_recreate(state, d)?;
 
         // TODO - respect max surge and max unavailable
@@ -240,12 +240,12 @@ impl DefaultScheduler {
 
         let mut new_actions = vec!();
 
-        for (k, v) in plan.actions {
+        for (_, v) in plan.actions {
             new_actions.extend(v)
         }
 
 
-        new_actions = new_actions.into_iter().sorted_by(|a, b| {
+        new_actions = new_actions.into_iter().sorted_by(|a, _| {
             match a.operation {
                 OpType::Delete => {
                     Ordering::Less

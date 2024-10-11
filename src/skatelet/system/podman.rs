@@ -44,7 +44,7 @@ pub enum PodmanPodStatus {
 }
 
 impl PodmanPodStatus {
-    fn to_pod_phase(self) -> String {
+    fn to_pod_phase(&self) -> String {
         match self {
             PodmanPodStatus::Running => "Running",
             PodmanPodStatus::Stopped => "Succeeded",

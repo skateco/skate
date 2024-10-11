@@ -14,7 +14,7 @@ use itertools::Itertools;
 use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use crate::skate::{exec_cmd, SupportedResources};
 
 pub const CHECKBOX_EMOJI: char = '✔';
@@ -89,18 +89,6 @@ where
     let mut hasher = DefaultHasher::new();
     obj.hash(&mut hasher);
     format!("{:x}", hasher.finish())
-}
-
-
-// use with #[serde(deserialize_with = "deserialize_null_default")]
-// null or nonexistant values will be deserialized as T::default(
-fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    T: Default + Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    let opt = Option::deserialize(deserializer)?;
-    Ok(opt.unwrap_or_default())
 }
 
 pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String

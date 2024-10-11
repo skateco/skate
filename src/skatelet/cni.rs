@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env::var;
 use std::error::Error;
 use std::io;
@@ -8,28 +7,10 @@ use log::{info, error};
 use anyhow::anyhow;
 use cni_plugin::config::NetworkConfig;
 use serde_json::Value;
-use serde_json::Value::String as JsonString;
 use crate::skatelet::dns;
 use crate::skatelet::dns::RemoveArgs;
 use crate::util::spawn_orphan_process;
 
-
-fn extract_args(config: &NetworkConfig) -> HashMap<String, Value> {
-    let env_args = var("CNI_ARGS").map(|e| {
-        let mut hm = HashMap::new();
-        for kv in e.split(";") {
-            let mut kv = kv.split("=");
-            let k = kv.next().unwrap_or_default();
-            let v = kv.next().unwrap_or_default();
-            hm.insert(k.to_string(), JsonString(v.to_string()));
-        }
-        hm
-    }).unwrap_or_default();
-
-    let mut new_args = config.args.clone();
-    new_args.extend(env_args);
-    new_args
-}
 
 fn prev_result_or_default(config: &NetworkConfig) -> SuccessReply {
     info!("{:?}", var("CNI_ARGS"));

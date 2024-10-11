@@ -234,7 +234,6 @@ impl ClusterState {
             SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_deletion(issuer, node),
             SupportedResources::Deployment(deployment) => Self::reconcile_deployment_deletion(deployment, node),
             SupportedResources::DaemonSet(daemonset) => Self::reconcile_daemonset_deletion(daemonset, node),
-            _ => todo!("reconcile not supported")
         }
     }
 
@@ -442,8 +441,8 @@ impl ClusterState {
     }
 
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<(PodmanPodInfo, &NodeState)> {
-        let res: Vec<_> = self.nodes.iter().filter_map(|n| {
-            Some(n.filter_pods(&|p| f(p)).into_iter().map(|p| (p, n)).collect::<Vec<_>>())
+        let res: Vec<_> = self.nodes.iter().map(|n| {
+            n.filter_pods(&|p| f(p)).into_iter().map(|p| (p, n)).collect::<Vec<_>>()
         }).flatten().collect();
         res
     }
