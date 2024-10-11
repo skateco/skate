@@ -17,7 +17,14 @@ impl DaemonSetController {
     }
 
     pub fn apply(&self, ds: DaemonSet) -> Result<(), Box<dyn Error>> {
+        
         self.store.write_file("daemonset", &metadata_name(&ds).to_string(), "manifest.yaml", serde_yaml::to_string(&ds)?.as_bytes())?;
+
+        let ns_name = metadata_name(&ds);
+        let hash = ds.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+        if !hash.is_empty() {
+            self.store.write_file("daemonset", &ns_name.to_string(), "hash", hash.as_bytes())?;
+        }
         Ok(())
     }
 

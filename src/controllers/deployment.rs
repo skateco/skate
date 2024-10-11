@@ -19,6 +19,12 @@ impl DeploymentController {
     pub fn apply(&self, deployment: Deployment) -> Result<(), Box<dyn Error>> {
         // store the deployment manifest on the node basically
         self.store.write_file("deployment", &metadata_name(&deployment).to_string(), "manifest.yaml", serde_yaml::to_string(&deployment)?.as_bytes())?;
+
+        let ns_name = metadata_name(&deployment);
+        let hash = deployment.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
+        if !hash.is_empty() {
+            self.store.write_file("deployment", &ns_name.to_string(), "hash", hash.as_bytes())?;
+        }
         Ok(())
     }
 
