@@ -19,6 +19,6 @@ lint:
 	cargo clippy
 .PHONY: lint-fix
 lint-fix:
-	cargo clippy --fix --bin skate --allow-dirty --allow-staged
+	cargo clippy --fix --all --allow-dirty --allow-staged
 
 

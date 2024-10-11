@@ -441,9 +441,9 @@ impl ClusterState {
     }
 
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<(PodmanPodInfo, &NodeState)> {
-        let res: Vec<_> = self.nodes.iter().map(|n| {
+        let res: Vec<_> = self.nodes.iter().flat_map(|n| {
             n.filter_pods(&|p| f(p)).into_iter().map(|p| (p, n)).collect::<Vec<_>>()
-        }).flatten().collect();
+        }).collect();
         res
     }
 
