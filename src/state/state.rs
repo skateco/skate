@@ -217,6 +217,7 @@ impl ClusterState {
             // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
             // The state change is all done by the Pods' scheduled operations
             SupportedResources::Deployment(_) => {/* nothing to do */Ok(ReconciledResult::default())},
+            SupportedResources::DaemonSet(_) => {/* nothing to do */Ok(ReconciledResult::default())},
             _ => todo!("reconcile not supported")
         }
     }

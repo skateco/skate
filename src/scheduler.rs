@@ -155,7 +155,18 @@ impl DefaultScheduler {
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut actions = HashMap::new();
+        let mut ds = ds.clone();
+        
+        let new_hash = hash_k8s_resource(&mut ds);
+
+        let default_ops: Vec<_> = state.nodes.iter().map(|n|
+            ScheduledOperation::new(OpType::Create, SupportedResources::DaemonSet(ds.clone()))
+                .silent()
+                .node(n.clone())
+        ).collect();
+        
+        let mut actions = HashMap::from([(metadata_name(&ds), default_ops)]);
+
 
         let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
         let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
@@ -263,7 +274,9 @@ impl DefaultScheduler {
     }
 
     fn plan_deployment_generic(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
-        let d = d.clone();
+        let mut d = d.clone();
+
+        let new_hash = hash_k8s_resource(&mut d);
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
 
@@ -271,7 +284,6 @@ impl DefaultScheduler {
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
 
         let default_ops: Vec<_> = state.nodes.iter().map(|n|
-
             ScheduledOperation::new(OpType::Create, SupportedResources::Deployment(d.clone()))
                 .silent()
                 .node(n.clone())
