@@ -22,7 +22,7 @@ use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, I
 
 #[derive(Debug)]
 pub struct ScheduleResult {
-    pub placements: Vec<ScheduledOperation<SupportedResources>>,
+    pub placements: Vec<ScheduledOperation>,
 }
 
 #[async_trait(? Send)]
@@ -42,16 +42,40 @@ pub enum OpType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScheduledOperation<T> {
-    pub resource: T,
+pub struct ScheduledOperation {
+    pub resource: SupportedResources,
     pub node: Option<NodeState>,
     pub operation: OpType,
     pub error: Option<String>,
     pub silent: bool,
 }
 
+impl ScheduledOperation {
+    pub fn new(op: OpType, resource: SupportedResources) -> Self {
+        ScheduledOperation {
+            resource,
+            node: None,
+            operation: op,
+            error: None,
+            silent: false,
+        }
+    }
+    pub fn silent(mut self) -> Self {
+        self.silent = true;
+        self
+    }
+    pub fn node(mut self, n: NodeState) -> Self {
+        self.node = Some(n);
+        self
+    }
+    pub fn error(mut self, err: String) -> Self {
+        self.error = Some(err);
+        self
+    }
+}
+
 pub struct ApplyPlan {
-    pub actions: HashMap<NamespacedName, Vec<ScheduledOperation<SupportedResources>>>,
+    pub actions: HashMap<NamespacedName, Vec<ScheduledOperation>>,
 }
 
 pub struct RejectedNode {
@@ -235,7 +259,7 @@ impl DefaultScheduler {
             }
         }).collect();
 
-        Ok(ApplyPlan{actions: HashMap::from([(metadata_name(d), new_actions)])})
+        Ok(ApplyPlan { actions: HashMap::from([(metadata_name(d), new_actions)]) })
     }
 
     fn plan_deployment_generic(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -246,19 +270,16 @@ impl DefaultScheduler {
         let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
 
-        let default_ops: Vec<_> = state.nodes.iter().map(|n| ScheduledOperation{
-            resource: SupportedResources::Deployment(d.clone()),
-            node: Some(n.clone()),
-            operation: OpType::Create,
-            error: None,
-            silent: true,
-        }).collect();
+        let default_ops: Vec<_> = state.nodes.iter().map(|n|
+
+            ScheduledOperation::new(OpType::Create, SupportedResources::Deployment(d.clone()))
+                .silent()
+                .node(n.clone())
+        ).collect();
 
         let mut actions: HashMap<_, Vec<_>> = HashMap::from([(metadata_name(&d), default_ops)]);
 
         // regardless what happens, overwrite the deployment manifest to reflect the current one
-
-
 
 
         let existing_pods = state.locate_deployment(&deployment_name, &ns);
@@ -275,13 +296,7 @@ impl DefaultScheduler {
                 if replica >= replicas as u32 {
                     let pod: Pod = pod_info.into();
                     let name = NamespacedName::from(pod.metadata.name.clone().unwrap_or_default().as_str());
-                    let op = ScheduledOperation {
-                        node: Some(node.clone()),
-                        resource: SupportedResources::Pod(pod),
-                        error: None,
-                        operation: OpType::Delete,
-                        silent: false,
-                    };
+                    let op = ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod)).node(node.clone());
                     match actions.get_mut(&name) {
                         Some(ops) => ops.push(op),
                         None => {
@@ -299,7 +314,7 @@ impl DefaultScheduler {
             // inherit deployment labels
             let mut meta = d.spec.as_ref().and_then(|s| s.template.metadata.clone()).unwrap_or_default();
             // name format needs to be <type>.<fqn>.<replica>
-            let name = format!("dpl-{}-{}", deployment_name,  i);
+            let name = format!("dpl-{}-{}", deployment_name, i);
             let ns_name = NamespacedName { name: name.clone(), namespace: ns.clone() };
             // needs to be the fqn for kube play, since that's what it'll call the pod
             meta.name = Some(ns_name.to_string());
@@ -335,7 +350,7 @@ impl DefaultScheduler {
         })
     }
 
-    fn plan_pod(state: &ClusterState, object: &Pod) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
+    fn plan_pod(state: &ClusterState, object: &Pod) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let mut new_pod = object.clone();
         //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
@@ -364,64 +379,38 @@ impl DefaultScheduler {
 
         let cull_actions: Vec<_> = match existing_pods.len() {
             0 | 1 => vec!(),
-            _ => existing_pods.as_slice()[1..].iter().map(|(pod_info, node)| {
-                ScheduledOperation {
-                    node: Some((**node).clone()),
-                    resource: SupportedResources::Pod(pod_info.clone().into()),
-                    error: None,
-                    operation: OpType::Delete,
-                    silent: false,
-                }
-            }).collect(),
+            _ => existing_pods.as_slice()[1..].iter().map(|(pod_info, node)|
+                ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod_info.clone().into()))
+                    .node((**node).clone())
+            ).collect(),
         };
 
         let existing_pod = &existing_pods.first();
 
 
-        let actions = match existing_pod {
+        let op_types = match existing_pod {
             Some((pod_info, node)) => {
                 let previous_hash = pod_info.labels.get("skate.io/hash").unwrap_or(&"".to_string()).clone();
                 let state_running = pod_info.status == PodmanPodStatus::Running;
 
                 let hash_matches = previous_hash.clone() == new_hash;
                 match hash_matches && state_running {
-                    true => vec!(ScheduledOperation {
-                        node: Some((**node).clone()),
-                        resource: SupportedResources::Pod(pod_info.clone().into()),
-                        error: None,
-                        operation: OpType::Unchanged,
-                        silent: false,
-                    }),
-                    false => {
-                        vec!(
-                            ScheduledOperation {
-                                node: Some((**node).clone()),
-                                resource: SupportedResources::Pod(pod_info.clone().into()),
-                                error: None,
-                                operation: OpType::Delete,
-                                silent: false,
-                            },
-                            ScheduledOperation {
-                                node: None,
-                                resource: SupportedResources::Pod(new_pod),
-                                error: None,
-                                operation: OpType::Create,
-                                silent: false,
-                            }
-                        )
-                    }
+                    true => vec!((OpType::Unchanged, Some((**node).clone()))),
+                    false => vec!((OpType::Delete, Some((**node).clone())), (OpType::Create, None)),
                 }
             }
-            None => vec!(
-                ScheduledOperation {
-                    node: None,
-                    resource: SupportedResources::Pod(new_pod.clone()),
-                    error: None,
-                    operation: OpType::Create,
-                    silent: false,
-                }
-            )
+            None => vec!((OpType::Create, None))
         };
+
+        let actions = op_types.into_iter().map(|(op, node)|
+            ScheduledOperation {
+                resource: SupportedResources::Pod(new_pod.clone()),
+                node,
+                operation: op,
+                error: None,
+                silent: false,
+            }
+        ).collect();
 
 
         Ok([cull_actions, actions].concat())
@@ -443,46 +432,27 @@ impl DefaultScheduler {
             si.clone().cronjobs
         }, &name.name, &name.namespace).first().cloned();
 
-
-        match existing_cron {
+        let op_types = match existing_cron {
             Some(c) => {
                 if c.0.manifest_hash == new_hash {
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::CronJob(new_cron),
-                        error: None,
-                        operation: OpType::Unchanged,
-                        silent: false,
-                        node: Some(c.1.clone()),
-                    });
-                    // nothing to do
+                    vec![(OpType::Unchanged, Some(c.1.clone()))]
                 } else {
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::CronJob(new_cron.clone()),
-                        error: None,
-                        operation: OpType::Delete,
-                        silent: false,
-                        node: Some(c.1.clone()),
-                    });
-
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::CronJob(new_cron),
-                        error: None,
-                        operation: OpType::Create,
-                        silent: false,
-                        node: None,
-                    });
+                    vec![(OpType::Delete, Some(c.1.clone())), (OpType::Create, None)]
                 }
             }
             None => {
-                actions.push(ScheduledOperation {
-                    resource: SupportedResources::CronJob(new_cron),
-                    error: None,
-                    operation: OpType::Create,
-                    silent: false,
-                    node: None,
-                });
+                vec![(OpType::Create, None)]
             }
-        }
+        };
+        op_types.into_iter().for_each(|(op_type, node)|
+            actions.push(ScheduledOperation {
+                operation: op_type,
+                resource: SupportedResources::CronJob(new_cron.clone()),
+                node,
+                error: None,
+                silent: false,
+            })
+        );
 
 
         // check if we have an existing cronjob for this
@@ -501,13 +471,10 @@ impl DefaultScheduler {
 
         for node in state.nodes.iter() {
             actions.extend([
-                ScheduledOperation {
-                    resource: SupportedResources::Secret(secret.clone()),
-                    error: None,
-                    operation: OpType::Create,
-                    silent: false,
-                    node: Some(node.clone()),
-                }
+                ScheduledOperation::new(
+                    OpType::Create,
+                    SupportedResources::Secret(secret.clone()),
+                ).node(node.clone())
             ]);
         }
 
@@ -532,45 +499,24 @@ impl DefaultScheduler {
                 si.clone().services
             }, &name.name, &name.namespace).first().cloned();
 
-            match existing_service {
+            let op_types = match existing_service {
                 Some(c) => {
                     if c.0.manifest_hash == new_hash {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Service(new_service.clone()),
-                            error: None,
-                            operation: OpType::Unchanged,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-                        // nothing to do
+                        vec![OpType::Unchanged]
                     } else {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Service(new_service.clone()),
-                            error: None,
-                            operation: OpType::Delete,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Service(new_service.clone()),
-                            error: None,
-                            operation: OpType::Create,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
+                        vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::Service(new_service.clone()),
-                        error: None,
-                        operation: OpType::Create,
-                        silent: false,
-                        node: Some(node.clone()),
-                    });
+                    vec![OpType::Create]
                 }
-            }
+            };
+            op_types.into_iter().for_each(|op_type|
+                actions.push(ScheduledOperation::new(
+                    op_type,
+                    SupportedResources::Service(new_service.clone()),
+                ).node(node.clone()))
+            );
         }
 
 
@@ -595,45 +541,24 @@ impl DefaultScheduler {
                 si.clone().ingresses
             }, &name.name, &name.namespace).first().cloned();
 
-            match existing_ingress {
+            let op_types = match existing_ingress {
                 Some(c) => {
                     if c.0.manifest_hash == new_hash {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Ingress(new_ingress.clone()),
-                            error: None,
-                            operation: OpType::Unchanged,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-                        // nothing to do
+                        vec![OpType::Unchanged]
                     } else {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Ingress(new_ingress.clone()),
-                            error: None,
-                            operation: OpType::Delete,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::Ingress(new_ingress.clone()),
-                            error: None,
-                            operation: OpType::Create,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
+                        vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::Ingress(new_ingress.clone()),
-                        error: None,
-                        operation: OpType::Create,
-                        silent: false,
-                        node: Some(node.clone()),
-                    });
+                    vec![OpType::Create]
                 }
-            }
+            };
+            op_types.into_iter().for_each(|op_type|
+                actions.push(ScheduledOperation::new(
+                    op_type,
+                    SupportedResources::Ingress(new_ingress.clone()),
+                ).node(node.clone()))
+            );
         }
 
         Ok(ApplyPlan {
@@ -657,45 +582,24 @@ impl DefaultScheduler {
                 si.clone().cluster_issuers
             }, &ns_name.name, "skate").first().cloned();
 
-            match existing {
+            let op_types = match existing {
                 Some(c) => {
                     if c.0.manifest_hash == new_hash {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
-                            error: None,
-                            operation: OpType::Unchanged,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-                        // nothing to do
+                        vec![OpType::Unchanged]
                     } else {
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
-                            error: None,
-                            operation: OpType::Delete,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
-
-                        actions.push(ScheduledOperation {
-                            resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
-                            error: None,
-                            operation: OpType::Create,
-                            silent: false,
-                            node: Some(node.clone()),
-                        });
+                        vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    actions.push(ScheduledOperation {
-                        resource: SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
-                        error: None,
-                        operation: OpType::Create,
-                        silent: false,
-                        node: Some(node.clone()),
-                    });
+                    vec![OpType::Create]
                 }
-            }
+            };
+            op_types.into_iter().for_each(|op_type|
+                actions.push(ScheduledOperation::new(
+                    op_type,
+                    SupportedResources::ClusterIssuer(new_cluster_issuer.clone()),
+                ).node(node.clone()))
+            );
         }
 
 
@@ -723,7 +627,7 @@ impl DefaultScheduler {
         }
     }
 
-    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation<SupportedResources>) -> Result<(String, String), Box<dyn Error>> {
+    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation) -> Result<(String, String), Box<dyn Error>> {
         let hook_result = resource.resource.pre_remove_hook(resource.node.as_ref().unwrap(), conns).await;
 
 
@@ -739,13 +643,13 @@ impl DefaultScheduler {
         remove_result
     }
 
-    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation<SupportedResources>>, Box<dyn Error>> {
+    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
 
-        let mut result: Vec<ScheduledOperation<SupportedResources>> = vec!();
+        let mut result: Vec<ScheduledOperation> = vec!();
 
         for (_name, ops) in plan.actions {
             for mut op in ops {
@@ -846,13 +750,10 @@ impl Scheduler for DefaultScheduler {
                 }
                 Err(err) => {
                     println!("{} failed to schedule {} : {}", CROSS_EMOJI, object.name(), err);
-                    results.placements = [results.placements, vec![ScheduledOperation {
-                        resource: object.clone(),
-                        node: None,
-                        operation: OpType::Info,
-                        silent: false,
-                        error: Some(err.to_string()),
-                    }]].concat()
+                    results.placements = [results.placements, vec![ScheduledOperation::new(
+                        OpType::Info,
+                        object.clone()
+                    ).error(err.to_string())]].concat();
                 }
             }
         }
