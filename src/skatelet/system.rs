@@ -63,6 +63,8 @@ pub struct SystemInfo {
     pub secrets: Option<Vec<ObjectListItem>>,
     pub services: Option<Vec<ObjectListItem>>,
     pub cluster_issuers: Option<Vec<ObjectListItem>>,
+    pub deployments: Option<Vec<ObjectListItem>>,
+    pub daemonsets: Option<Vec<ObjectListItem>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -146,6 +148,8 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let cronjobs = store.list_objects("cronjob")?;
     let services = store.list_objects("service")?;
     let cluster_issuers = store.list_objects("clusterissuer")?;
+    let deployments = store.list_objects("deployment")?;
+    let daemonsets = store.list_objects("daemonset")?;
 
 
     let secrets = exec_cmd("podman", &["secret", "ls", "--noheading"]).unwrap_or_else(|e| {
@@ -238,6 +242,8 @@ async fn info() -> Result<(), Box<dyn Error>> {
         secrets: (!secret_info.is_empty()).then_some(secret_info),
         services: (!services.is_empty()).then_some(services),
         cluster_issuers: (!cluster_issuers.is_empty()).then_some(cluster_issuers),
+        deployments: (!deployments.is_empty()).then_some(deployments),
+        daemonsets: (!daemonsets.is_empty()).then_some(daemonsets),
         hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
         cordoned: is_cordoned(),

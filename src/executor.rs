@@ -10,6 +10,7 @@ use crate::filestore::FileStore;
 use crate::skate::SupportedResources;
 use anyhow::anyhow;
 use crate::errors::SkateError;
+use crate::get::GetCommands::Daemonset;
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), SkateError>;
@@ -39,6 +40,10 @@ impl Executor for DefaultExecutor {
                 let ctrl = DeploymentController::new(self.store.clone());
                 ctrl.apply(deployment)?;
             }
+            SupportedResources::DaemonSet(daemonset) => {
+                let ctrl = DaemonSetController::new(self.store.clone());
+                ctrl.apply(daemonset)?;
+            }
             SupportedResources::Pod(pod) => {
                 let ctrl = PodController::new();
                 ctrl.apply(pod)?;
@@ -63,9 +68,6 @@ impl Executor for DefaultExecutor {
                 let ctrl = ClusterIssuerController::new(self.store.clone());
                 ctrl.apply(issuer)?;
             }
-            _ => {
-                return Err(anyhow!("unsupported resource type").into())
-            }
         }
         Ok(())
     }
@@ -82,7 +84,7 @@ impl Executor for DefaultExecutor {
                 ctrl.delete(d, grace_period)?;
             }
             SupportedResources::DaemonSet(d) => {
-                let ctrl = DaemonSetController::new();
+                let ctrl = DaemonSetController::new(self.store.clone());
                 ctrl.delete(d, grace_period)?;
             }
             SupportedResources::Ingress(ingress) => {
