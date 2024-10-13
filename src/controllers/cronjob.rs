@@ -62,7 +62,7 @@ impl CronjobController {
         let pod_yaml_path = self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
 
         // create the pod to test that it's valid
-        exec_cmd("podman", &["kube", "play", "--start=false", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
+        exec_cmd("podman", &["kube", "play", "--start=false", "--replace", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
 
         let mut handlebars = template::new();
         ////////////////////////////////////////////////////
