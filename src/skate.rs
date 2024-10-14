@@ -68,7 +68,7 @@ enum Commands {
     Refresh(RefreshArgs),
     #[command(long_about="List resources")]
     Get(GetArgs),
-    #[command(long_about="View a resources")]
+    #[command(long_about="View a resource")]
     Describe(DescribeArgs),
     #[command(long_about="View resource logs")]
     Logs(LogArgs),
