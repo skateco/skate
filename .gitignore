@@ -1,3 +1,4 @@
 /target
 /.idea
 *.skstate
+.cluster-plz.yaml
