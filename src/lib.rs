@@ -27,6 +27,8 @@ mod controllers;
 mod cordon;
 
 pub mod errors;
+mod cluster;
+
 pub use skate::skate;
 pub use skatelet::skatelet;
 #[cfg(target_os = "linux")]

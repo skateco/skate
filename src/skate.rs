@@ -30,6 +30,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::error;
 use serde_yaml::{Error as SerdeYamlError, Value};
 use crate::{config, spec};
+use crate::cluster::{cluster, ClusterArgs};
 use crate::config::{cache_dir, Config, Node};
 use crate::config_cmd::ConfigArgs;
 use crate::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
@@ -57,16 +58,28 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    #[command(long_about="Create resources")]
     Create(CreateArgs),
+    #[command(long_about="Delete resources")]
     Delete(DeleteArgs),
+    #[command(long_about="Apply kubernetes manifest files")]
     Apply(ApplyArgs),
+    #[command(long_about="Refresh cluster state")]
     Refresh(RefreshArgs),
+    #[command(long_about="List resources")]
     Get(GetArgs),
+    #[command(long_about="View a resources")]
     Describe(DescribeArgs),
+    #[command(long_about="View resource logs")]
     Logs(LogArgs),
+    #[command(long_about="Configuration actions")]
     Config(ConfigArgs),
+    #[command(long_about="Taint a node as unschedulable")]
     Cordon(CordonArgs),
-    Uncordon(UncordonArgs)
+    #[command(long_about="Remove unschedulable taint on a node")]
+    Uncordon(UncordonArgs),
+    #[command(long_about="Cluster actions")]
+    Cluster(ClusterArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -92,6 +105,7 @@ pub async fn skate() -> Result<(), SkateError> {
         Commands::Config(args) => crate::config_cmd::config(args),
         Commands::Cordon(args) => cordon(args).await,
         Commands::Uncordon(args) => uncordon(args).await,
+        Commands::Cluster(args) => cluster(args).await,
     }?;
     Ok(())
     
