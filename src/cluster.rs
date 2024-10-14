@@ -1,11 +1,12 @@
 use crate::config::{Config, Node};
 use crate::skate::{ConfigFileArgs, SupportedResources};
-use crate::ssh::{node_connection, SshClients};
+use crate::ssh::{cluster_connections, node_connection, SshClients};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use std::error::Error;
 use crate::create::CreateArgs;
 use crate::errors::SkateError;
+use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::state::state::ClusterState;
 
@@ -13,31 +14,53 @@ use crate::state::state::ClusterState;
 pub struct ClusterArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
-    node: String,
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    #[command(long_about="Re-apply all resources in the cluster. Useful after cordon/uncordon or node creation")]
+    #[command(
+        long_about = "Re-apply all resources in the cluster. Useful after cordon/uncordon or node creation"
+    )]
     Reschedule(RescheduleArgs),
 }
 
-pub async fn cluster(args: ClusterArgs) -> Result<(), SkateError> {
-    Ok(())
+pub async fn cluster(global_args: ClusterArgs) -> Result<(), SkateError> {
+    match global_args.command {
+        Commands::Reschedule(args) => {
+            let mut args = args;
+            args.config = global_args.config;
+            reschedule(args).await
+        }
+    }
 }
 
 #[derive(Debug, Args)]
 pub struct RescheduleArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
+    #[arg(long, long_help = "Will not affect the cluster if set to true")]
+    dry_run: bool,
 }
 
 pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let cluster = config.active_cluster(config.current_context.clone())?;
+    let mut cluster = config.active_cluster(config.current_context.clone())?;
+
+    let (conns, _) = cluster_connections(&cluster).await;
+
+    let conns = conns.ok_or("failed to get cluster connections".to_string())?;
+
+    let mut state = refreshed_state(&cluster.name, &conns, &config).await?;
+
+    propagate_existing_resources(&conns, None, &mut state, args.dry_run).await?;
+
+    Ok(())
+}
+
+async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &mut ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
 
     // get all resources from the cluster
     // - secrets
@@ -45,16 +68,12 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
     // - daemonsets
     // - services
     // - ingress
-    
+
     // for each one, do an `apply`
 
-    Ok(())
-}
-
-async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
     // TODO - search all nodes, not just one random
-    let donor_state = match state.nodes.iter().find(|n| 
-        (exclude_donor_node.is_none() ||  n.node_name != exclude_donor_node.unwrap()) 
+    let donor_state = match state.nodes.iter().find(|n|
+        (exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap())
             && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
         Some(n) => n,
         None => return Ok(())
@@ -76,13 +95,13 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
 
     let mut filtered_state = state.clone();
     filtered_state.nodes = vec!(state.nodes.iter().find(|n|
-        exclude_donor_node.is_none() ||  n.node_name != exclude_donor_node.unwrap()
+        exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap()
     ).cloned().unwrap());
 
 
     let scheduler = DefaultScheduler {};
 
-    scheduler.schedule(all_conns, &mut filtered_state, all_manifests).await?;
+    scheduler.schedule(all_conns, &mut filtered_state, all_manifests, dry_run).await?;
 
     Ok(())
 }

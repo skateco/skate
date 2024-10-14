@@ -27,7 +27,7 @@ pub struct ScheduleResult {
 
 #[async_trait(? Send)]
 pub trait Scheduler {
-    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>>;
+    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
@@ -655,7 +655,7 @@ impl DefaultScheduler {
         remove_result
     }
 
-    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
@@ -668,6 +668,13 @@ impl DefaultScheduler {
                 match op.operation {
                     OpType::Delete => {
                         let node_name = op.node.clone().unwrap().node_name;
+                        if dry_run {
+                            let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
+                            if !op.silent {
+                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
+                            }
+                            continue;
+                        }
 
                         match Self::remove_existing(conns, op.clone()).await {
                             Ok((_, stderr)) => {
@@ -702,6 +709,17 @@ impl DefaultScheduler {
                         }
 
                         let node_name = node.unwrap().node_name.clone();
+
+                        if dry_run {
+
+                            let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
+                            if !op.silent {
+                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
+                            }
+                            continue;
+
+                        }
+
 
                         let client = conns.find(&node_name).unwrap();
                         let serialized = serde_yaml::to_string(&op.resource).expect("failed to serialize object");
@@ -753,10 +771,10 @@ impl DefaultScheduler {
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>) -> Result<ScheduleResult, Box<dyn Error>> {
+    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(conns, state, object.clone()).await {
+            match Self::schedule_one(conns, state, object.clone(), dry_run).await {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }
