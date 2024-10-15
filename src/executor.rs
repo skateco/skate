@@ -8,9 +8,7 @@ use crate::controllers::secret::SecretController;
 use crate::controllers::service::ServiceController;
 use crate::filestore::FileStore;
 use crate::skate::SupportedResources;
-use anyhow::anyhow;
 use crate::errors::SkateError;
-use crate::get::GetCommands::Daemonset;
 
 pub trait Executor {
     fn apply(&self, manifest: &str) -> Result<(), SkateError>;

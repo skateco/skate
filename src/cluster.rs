@@ -1,10 +1,8 @@
-use crate::config::{Config, Node};
+use crate::config::Config;
 use crate::skate::{ConfigFileArgs, SupportedResources};
-use crate::ssh::{cluster_connections, node_connection, SshClients};
-use anyhow::anyhow;
+use crate::ssh::{cluster_connections, SshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
-use crate::create::CreateArgs;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::scheduler::{DefaultScheduler, Scheduler};
@@ -47,7 +45,7 @@ pub struct RescheduleArgs {
 pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let mut cluster = config.active_cluster(config.current_context.clone())?;
+    let cluster = config.active_cluster(config.current_context.clone())?;
 
     let (conns, _) = cluster_connections(&cluster).await;
 
