@@ -115,12 +115,14 @@ shell)
     tmux attach-session -t $SESSION
     ;;
 skate)
+    cargo run --bin skate create cluster test
     set -euo pipefail
+    cargo run --bin skate config use-context test
     for f in $(seq $nodes); do
         info=$(multipass info node-$f)
         ip=$(echo "$info" | grep -e '^IPv4:' | awk '{print $2}')
         name=$(echo "$info" | grep -e '^Name:' | awk '{print $2}')
-        cargo run --bin skate create node --name $name --host $ip --subnet-cidr "20.${f}.0.0/16"
+        cargo run --bin skate create node --name $name --host $ip --subnet-cidr "20.${f}.0.0/16" --key $HOME/.ssh/id_rsa --user $USER
     done
     ;;
 skatelet)
@@ -128,10 +130,13 @@ skatelet)
     arch=$(multipass exec -n node-1 -- arch)
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
-        multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet node-$f:
-        multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet-netavark node-$f:
+        if [ "$(arch)" = "$arch" ]; then
+          multipass transfer target/release/skatelet node-$f:
+        else
+          multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet node-$f:
+        fi
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
-        multipass exec -n node-$f -- sudo mv skatelet-netavark /usr/local/bin/skatelet-netavark
+
     done
     ;;
 esac

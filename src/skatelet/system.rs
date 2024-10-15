@@ -9,6 +9,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
 use k8s_openapi::api::core::v1::Secret;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
@@ -166,8 +167,8 @@ async fn info() -> Result<(), Box<dyn Error>> {
         secret_name.rsplit_once(".").map(|(_, _)| secret_name)
     }).collect();
 
-    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names].concat()).unwrap_or_else(|e| {
-        eprintln!("failed to get secret info: {}", e);
+    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names.clone()].concat()).unwrap_or_else(|e| {
+        error!("failed to get secret info for {:?}: {}",secret_names, e);
         "[]".to_string()
     });
 

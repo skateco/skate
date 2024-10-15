@@ -9,6 +9,7 @@ use k8s_openapi::{Metadata};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Secret, Service};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use log::{warn};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tabled::Tabled;
@@ -67,7 +68,7 @@ impl TryFrom<&str> for ObjectListItem {
 
         let hash = match std::fs::read_to_string(&hash_file_name) {
             Err(_) => {
-                eprintln!("WARNING: failed to read hash file {}", &hash_file_name);
+                warn!("WARNING: failed to read hash file {}", &hash_file_name);
                 "".to_string()
             }
             Ok(result) => result
@@ -76,7 +77,7 @@ impl TryFrom<&str> for ObjectListItem {
         let manifest_file_name = format!("{}/manifest.yaml", dir);
         let manifest: Option<Value> = match std::fs::read_to_string(&manifest_file_name) {
             Err(e) => {
-                eprintln!("WARNING: failed to read manifest file {}: {}", &manifest_file_name, e);
+                warn!("WARNING: failed to read manifest file {}: {}", &manifest_file_name, e);
                 None
             }
             Ok(result) => Some(serde_yaml::from_str(&result).unwrap())
