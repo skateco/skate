@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
@@ -83,8 +84,15 @@ pub struct RejectedNode {
     pub reason: String,
 }
 
+pub struct NodeSelection {
+    pub selected: Option<NodeState>,
+    pub rejected: Vec<RejectedNode>,
+    pub updated_state: Vec<NodeState>,
+}
+
 impl DefaultScheduler {
-    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> (Option<NodeState>, Vec<RejectedNode>) {
+    
+    fn choose_node(mut nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
         let node_selector = match object {
@@ -150,8 +158,19 @@ impl DefaultScheduler {
                 })
             }).or_else(|| Some(node.clone()))
         });
+        
+        if feasible_node.is_some() {
+            let name = feasible_node.as_ref().unwrap().node_name.clone();
+            
+            let updated_node: &mut NodeState =  nodes.iter_mut().find(| n| {
+                n.node_name ==  name
+            }).unwrap();
+            
+            let _ = updated_node.reconcile_object_creation(object);
+        }
+        
 
-        (feasible_node, rejected_nodes)
+        NodeSelection{selected: feasible_node, rejected: rejected_nodes, updated_state: nodes}
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -697,18 +716,29 @@ impl DefaultScheduler {
                         }
                     }
                     OpType::Create => {
-                        let (node, rejected_nodes) = match op.node.clone() {
+                        let selection = match op.node.clone() {
                             // some things like ingress have the node already set
-                            Some(n) => (Some(n), vec!()),
+                            Some(n) => NodeSelection{
+                                selected: None,
+                                rejected: vec![],
+                                updated_state: vec![],
+                            },
                             // anything else and things with node selectors go here
+                            // TODO move this inside of plan, maybe with a copy of state.
                             None => Self::choose_node(state.nodes.clone(), &op.resource)
                         };
-                        if node.is_none() {
-                            let reasons = rejected_nodes.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
-                            return Err(anyhow!("failed to find feasible node: {}", reasons).into());
+                        if selection.selected.is_none() {
+                            let reasons = selection.rejected.iter().map(|r| format!("{} - {}", r.node_name, r.reason)).collect::<Vec<_>>().join(", ");
+                            let reasons = if reasons.is_empty() {
+                                "<none>".to_string()
+                            } else {
+                                reasons
+                            };
+                            
+                            return Err(anyhow!("failed to find feasible node ({} rejected): {}", selection.rejected.len(),  reasons).into());
                         }
 
-                        let node_name = node.unwrap().node_name.clone();
+                        let node_name = selection.selected.unwrap().node_name.clone();
 
                         if dry_run {
 
@@ -779,7 +809,7 @@ impl Scheduler for DefaultScheduler {
                     results.placements = [results.placements, placements].concat();
                 }
                 Err(err) => {
-                    println!("{} failed to schedule {} : {}", CROSS_EMOJI, object.name(), err);
+                    println!("{} failed to schedule {} {} : {}", CROSS_EMOJI, object.to_string(), object.name(), err);
                     results.placements = [results.placements, vec![ScheduledOperation::new(
                         OpType::Info,
                         object.clone()

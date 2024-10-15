@@ -117,6 +117,174 @@ impl NodeState {
                 })
         }).unwrap_or_default()
     }
+    
+    pub fn reconcile_object_creation(&mut self, object: &SupportedResources) -> Result<ReconciledResult,Box<dyn Error>> {
+        match object {
+            SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone())),
+            SupportedResources::Ingress(ingress) => self.reconcile_ingress_creation(ingress),
+            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_creation(cronjob),
+            SupportedResources::Secret(secret) => self.reconcile_secret_creation(secret),
+            SupportedResources::Service(service) => self.reconcile_service_creation(service),
+            SupportedResources::ClusterIssuer(issuer) => self.reconcile_cluster_issuer_creation(issuer),
+            // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
+            // The state change is all done by the Pods' scheduled operations
+            SupportedResources::Deployment(_) => {/* nothing to do */Ok(ReconciledResult::default())},
+            SupportedResources::DaemonSet(_) => {/* nothing to do */Ok(ReconciledResult::default())},
+        }
+    }
+
+    pub fn reconcile_object_deletion(&mut self, object: &SupportedResources) -> Result<crate::state::state::ReconciledResult,Box<dyn Error>> {
+        match object {
+            SupportedResources::Pod(pod) => self.reconcile_pod_deletion(&PodmanPodInfo::from((*pod).clone())),
+            SupportedResources::Ingress(ingress) => self.reconcile_ingress_deletion(ingress),
+            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_deletion(cronjob),
+            SupportedResources::Secret(secret) => self.reconcile_secret_deletion(secret),
+            SupportedResources::Service(service) => self.reconcile_service_deletion(service),
+            SupportedResources::ClusterIssuer(issuer) => self.reconcile_cluster_issuer_deletion(issuer),
+            SupportedResources::Deployment(deployment) => self.reconcile_deployment_deletion(deployment),
+            SupportedResources::DaemonSet(daemonset) => self.reconcile_daemonset_deletion(daemonset),
+        }
+    }
+
+    fn reconcile_cluster_issuer_creation(&mut self, issuer: &ClusterIssuer ) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cluster_issuers.as_mut().map(|i| i.push(ObjectListItem::from(issuer)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+    fn reconcile_cluster_issuer_deletion(&mut self, issuer: &ClusterIssuer) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cluster_issuers.as_mut().map(|i| i.retain(|i| i.name != metadata_name(issuer)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+    fn reconcile_service_creation(&mut self, service: &Service) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.services.as_mut().map(|i| i.push(ObjectListItem::from(service)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_service_deletion(&mut self, service: &Service) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.services.as_mut().map(|i| i.retain(|i| i.name != metadata_name(service)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_secret_creation(&mut self, secret: &Secret) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.secrets.as_mut().map(|i| i.push(ObjectListItem::from(secret)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_secret_deletion(&mut self, secret: &Secret) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.secrets.as_mut().map(|i| i.retain(|i| i.name != metadata_name(secret)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_cronjob_creation(&mut self, cronjob: &CronJob) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cronjobs.as_mut().map(|i| i.push(ObjectListItem::from(cronjob)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_cronjob_deletion(&mut self,cronjob: &CronJob) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cronjobs.as_mut().map(|i| i.retain(|c| c.name != metadata_name(cronjob)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+
+    fn reconcile_ingress_creation(&mut self, ingress: &Ingress) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.ingresses.as_mut().map(|i| i.push(ObjectListItem::from(ingress)))
+            })
+        });
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_ingress_deletion(&mut self, ingress: &Ingress) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.ingresses.as_mut().map(|items|
+                    items.retain(|existing| existing.name != metadata_name(ingress))
+                )
+            })
+        });
+        Ok(ReconciledResult::removed())
+    }
+
+
+    fn reconcile_pod_creation(&mut self, pod: &PodmanPodInfo) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.pods.as_mut().map(|pods| {
+                    pods.push(pod.clone());
+                })
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_pod_deletion(&mut self, pod: &PodmanPodInfo) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.pods.as_mut().map(|pods| {
+                    pods.retain(|p| p.name != pod.name)
+                })
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_daemonset_deletion(&mut self, daemonset: &DaemonSet) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(daemonset).to_string();
+        self.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p|!p.daemonset().is_empty() &&  p.daemonset() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_deployment_deletion(&mut self, deployment: &Deployment) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(deployment).to_string();
+        self.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.deployment().is_empty() && p.deployment() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -206,178 +374,16 @@ impl ClusterState {
     pub fn reconcile_object_creation(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
         let node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
             .ok_or(anyhow!("node not found: {}", node_name))?;
-
-        match object {
-            SupportedResources::Pod(pod) => Self::reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node),
-            SupportedResources::Ingress(ingress) => Self::reconcile_ingress_creation(ingress, node),
-            SupportedResources::CronJob(cronjob) => Self::reconcile_cronjob_creation(cronjob, node),
-            SupportedResources::Secret(secret) => Self::reconcile_secret_creation(secret, node),
-            SupportedResources::Service(service) => Self::reconcile_service_creation(service, node),
-            SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_creation(issuer, node),
-            // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
-            // The state change is all done by the Pods' scheduled operations
-            SupportedResources::Deployment(_) => {/* nothing to do */Ok(ReconciledResult::default())},
-            SupportedResources::DaemonSet(_) => {/* nothing to do */Ok(ReconciledResult::default())},
-            _ => todo!("reconcile not supported")
-        }
+        node.reconcile_object_creation(object)
     }
 
     pub fn reconcile_object_deletion(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
         let node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
             .ok_or(anyhow!("node not found: {}", node_name))?;
-
-        match object {
-            SupportedResources::Pod(pod) => Self::reconcile_pod_deletion(&PodmanPodInfo::from((*pod).clone()), node),
-            SupportedResources::Ingress(ingress) => Self::reconcile_ingress_deletion(ingress, node),
-            SupportedResources::CronJob(cronjob) => Self::reconcile_cronjob_deletion(cronjob, node),
-            SupportedResources::Secret(secret) => Self::reconcile_secret_deletion(secret, node),
-            SupportedResources::Service(service) =>Self::reconcile_service_deletion(service,node),
-            SupportedResources::ClusterIssuer(issuer) => Self::reconcile_cluster_issuer_deletion(issuer, node),
-            SupportedResources::Deployment(deployment) => Self::reconcile_deployment_deletion(deployment, node),
-            SupportedResources::DaemonSet(daemonset) => Self::reconcile_daemonset_deletion(daemonset, node),
-        }
+        node.reconcile_object_deletion(object)
     }
 
 
-    fn reconcile_cluster_issuer_creation(issuer: &ClusterIssuer, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cluster_issuers.as_mut().map(|i| i.push(ObjectListItem::from(issuer)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-    fn reconcile_cluster_issuer_deletion(issuer: &ClusterIssuer, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cluster_issuers.as_mut().map(|i| i.retain(|i| i.name != metadata_name(issuer)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-    fn reconcile_service_creation(service: &Service, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.services.as_mut().map(|i| i.push(ObjectListItem::from(service)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_service_deletion(service: &Service, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.services.as_mut().map(|i| i.retain(|i| i.name != metadata_name(service)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_secret_creation(secret: &Secret, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.secrets.as_mut().map(|i| i.push(ObjectListItem::from(secret)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_secret_deletion(secret: &Secret, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.secrets.as_mut().map(|i| i.retain(|i| i.name != metadata_name(secret)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_cronjob_creation(cronjob: &CronJob, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cronjobs.as_mut().map(|i| i.push(ObjectListItem::from(cronjob)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_cronjob_deletion(cronjob: &CronJob, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cronjobs.as_mut().map(|i| i.retain(|c| c.name != metadata_name(cronjob)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-
-    fn reconcile_ingress_creation(ingress: &Ingress, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.ingresses.as_mut().map(|i| i.push(ObjectListItem::from(ingress)))
-            })
-        });
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_ingress_deletion(ingress: &Ingress, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.ingresses.as_mut().map(|items|
-                    items.retain(|existing| existing.name != metadata_name(ingress))
-                )
-            })
-        });
-        Ok(ReconciledResult::removed())
-    }
-
-
-    fn reconcile_pod_creation(pod: &PodmanPodInfo, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.pods.as_mut().map(|pods| {
-                    pods.push(pod.clone());
-                })
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_pod_deletion(pod: &PodmanPodInfo, mut node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.pods.as_mut().map(|pods| {
-                    pods.retain(|p| p.name != pod.name)
-                })
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_daemonset_deletion(daemonset: &DaemonSet, node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        let name = metadata_name(daemonset).to_string();
-        node.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
-            si.pods.as_mut().map(|pods| pods.iter().filter(|p|!p.daemonset().is_empty() &&  p.daemonset() != name))
-        ));
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_deployment_deletion(deployment: &Deployment, node: &mut NodeState) -> Result<ReconciledResult, Box<dyn Error>> {
-        let name = metadata_name(deployment).to_string();
-        node.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
-            si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.deployment().is_empty() && p.deployment() != name))
-        ));
-        Ok(ReconciledResult::removed())
-    }
 
     pub fn reconcile_all_nodes(&mut self, cluster_name: &str, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.active_cluster(Some(cluster_name.to_string()))?;
