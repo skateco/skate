@@ -719,7 +719,7 @@ impl DefaultScheduler {
                         let selection = match op.node.clone() {
                             // some things like ingress have the node already set
                             Some(n) => NodeSelection{
-                                selected: None,
+                                selected: Some(n),
                                 rejected: vec![],
                                 updated_state: vec![],
                             },

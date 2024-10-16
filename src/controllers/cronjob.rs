@@ -72,17 +72,19 @@ impl CronjobController {
 
         handlebars.register_template_string("unit", include_str!("../resources/cron-pod.service")).map_err(|e| anyhow!(e).context("failed to load service template file"))?;
 
+        let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
+
         let json: Value = json!({
             "description": &format!("{} Job", ns_name),
-            "timer": &format!("skate-cronjob-{}.timer", &ns_name.to_string()),
+            "timer": &format!("{}.timer", &unit_name),
             "command": format!("skatelet create --namespace {} job --from cronjob/{} {} -w", ns_name.namespace, ns_name.name, ns_name.name),
         });
 
         let output = handlebars.render("unit", &json)?;
-        // /etc/systemd/system/skate-cronjob-{}.service
 
-        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/{}.service", &unit_name))?;
         file.write_all(output.as_bytes())?;
+
 
 
         ////////////////////////////////////////////////////
@@ -93,19 +95,18 @@ impl CronjobController {
 
         let json: Value = json!({
             "description": &format!("{} Timer", ns_name),
-            "target_unit": &format!("skate-cronjob-{}.service", &ns_name.to_string()),
+            "target_unit": &format!("{}.service", &unit_name),
             "on_calendar": systemd_timer_schedule,
         });
 
         let output = handlebars.render("timer", &json)?;
-        // /etc/systemd/system/skate-cronjob-{}.timer
-        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string()))?;
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).open(format!("/etc/systemd/system/{}.timer", &unit_name))?;
         file.write_all(output.as_bytes())?;
 
-        let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
 
         exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["enable", &unit_name])?;
+        exec_cmd("systemctl", &["enable", &format!("{}.timer", &unit_name)])?;
+        exec_cmd("systemctl", &["start", &format!("{}.timer", &unit_name)])?;
         let _ = exec_cmd("systemctl", &["reset-failed", &unit_name]);
 
         Ok(())
@@ -114,11 +115,12 @@ impl CronjobController {
     // TODO - warn about failures
     pub fn delete(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(&cron);
+        let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
         // systemctl stop skate-cronjob-{}
-        let _ = exec_cmd("systemctl", &["stop", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+        let _ = exec_cmd("systemctl", &["stop", &unit_name]);
 
         // systemctl disable skate-cronjob-{}
-        let _ = exec_cmd("systemctl", &["disable", &format!("skate-cronjob-{}", &ns_name.to_string())]);
+        let _ = exec_cmd("systemctl", &["disable", &unit_name]);
         // rm /etc/systemd/system/skate-cronjob-{}.service
         let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
         let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
