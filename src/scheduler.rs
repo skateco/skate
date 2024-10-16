@@ -47,11 +47,11 @@ pub enum OpType {
 impl OpType {
     pub fn symbol(&self) -> String {
         match self {
-            OpType::Clobber => "-/+".green(),
-            OpType::Info => "[i]".blue(),
-            OpType::Create => "+".green(),
-            OpType::Delete => "-".red(),
-            OpType::Unchanged => "=".blue()
+            OpType::Clobber => "-/+".green().bold(),
+            OpType::Info => "[i]".blue().bold(),
+            OpType::Create => "+".green().bold(),
+            OpType::Delete => "-".red().bold(),
+            OpType::Unchanged => "~".blue().bold()
         }.to_string()
     }
 }
