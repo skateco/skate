@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use colored::Colorize;
 use itertools::Itertools;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
@@ -46,11 +47,11 @@ pub enum OpType {
 impl OpType {
     pub fn symbol(&self) -> String {
         match self {
-            OpType::Clobber => "-/+",
-            OpType::Info => "[i]",
-            OpType::Create => "+",
-            OpType::Delete => "-",
-            OpType::Unchanged => "="
+            OpType::Clobber => "-/+".green(),
+            OpType::Info => "[i]".blue(),
+            OpType::Create => "+".green(),
+            OpType::Delete => "-".red(),
+            OpType::Unchanged => "=".blue()
         }.to_string()
     }
 }
@@ -215,7 +216,7 @@ impl DefaultScheduler {
                         actions.insert(name, vec!(op));
                     }
                 };
-                
+
             }
         }
 
@@ -754,7 +755,7 @@ impl DefaultScheduler {
 
         remove_result
     }
-    
+
 
     async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
