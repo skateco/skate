@@ -57,11 +57,7 @@ impl From<NodeState> for K8sNode {
             Unhealthy => Some("Pending".to_string()),
         };
 
-        spec.unschedulable = match val.status {
-            Unknown => Some(true),
-            Healthy => Some(false),
-            Unhealthy => Some(true),
-        };
+        spec.unschedulable = Some(!val.schedulable());
 
         let sys_info = val.host_info.as_ref().and_then(|h| h.system_info.clone());
 
@@ -284,6 +280,18 @@ impl NodeState {
             si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.deployment().is_empty() && p.deployment() != name))
         ));
         Ok(ReconciledResult::removed())
+    }
+    
+    // whether we can schedule workloads on this node
+    pub fn schedulable(&self) -> bool {
+        if self.status != Healthy {
+            return false
+        }
+        
+        self.host_info.as_ref().and_then(|hi| 
+            hi.system_info.as_ref().and_then(|si| 
+                Some(!si.cordoned)
+        )).unwrap_or(true)
     }
 }
 

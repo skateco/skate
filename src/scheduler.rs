@@ -90,7 +90,6 @@ pub struct NodeSelection {
 }
 
 impl DefaultScheduler {
-    
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
@@ -157,14 +156,14 @@ impl DefaultScheduler {
                 })
             }).or_else(|| Some(node.clone()))
         });
-        
 
-        NodeSelection{selected: feasible_node, rejected: rejected_nodes}
+
+        NodeSelection { selected: feasible_node, rejected: rejected_nodes }
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut ds = ds.clone();
-        
+
         let new_hash = hash_k8s_resource(&mut ds);
 
         let default_ops: Vec<_> = state.nodes.iter().map(|n|
@@ -172,7 +171,7 @@ impl DefaultScheduler {
                 .silent()
                 .node(n.clone())
         ).collect();
-        
+
         let mut actions = HashMap::from([(metadata_name(&ds), default_ops)]);
 
 
@@ -414,7 +413,7 @@ impl DefaultScheduler {
                 let state_running = pod_info.status == PodmanPodStatus::Running;
 
                 let hash_matches = previous_hash.clone() == new_hash;
-                match hash_matches && state_running {
+                match hash_matches && state_running && node.schedulable() {
                     true => vec!((OpType::Unchanged, Some((**node).clone()))),
                     false => vec!((OpType::Delete, Some((**node).clone())), (OpType::Create, None)),
                 }
@@ -454,7 +453,7 @@ impl DefaultScheduler {
 
         let op_types = match existing_cron {
             Some(c) => {
-                if c.0.manifest_hash == new_hash {
+                if c.0.manifest_hash == new_hash && c.1.schedulable() {
                     vec![(OpType::Unchanged, Some(c.1.clone()))]
                 } else {
                     vec![(OpType::Delete, Some(c.1.clone())), (OpType::Create, None)]
@@ -485,41 +484,44 @@ impl DefaultScheduler {
     }
 
     fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
-        
         let mut new_secret = secret.clone();
-        
+
         let mut actions = vec!();
         let ns_name = metadata_name(&new_secret);
-        
+
         let new_hash = hash_k8s_resource(&mut new_secret);
 
         let mut op_types: Vec<_> = vec!();
-            
+
 
         for node in state.nodes.iter() {
-
             let existing_secrets = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().secrets
             }, &ns_name.name, &ns_name.namespace);
             let existing_secret = existing_secrets.first();
-            
+
 
             op_types.extend(match existing_secret {
                 Some(c) => {
-                    if c.0.manifest_hash == new_hash {
+                    if !c.1.schedulable() {
+                        vec![(OpType::Delete, c.1.clone())]
+                    } else if c.0.manifest_hash == new_hash {
                         vec![(OpType::Unchanged, c.1.clone())]
                     } else {
                         vec![(OpType::Delete, c.1.clone()), (OpType::Create, node.clone())]
                     }
                 }
                 None => {
-                    vec![(OpType::Create, node.clone())]
+                    if node.schedulable() {
+                        vec![(OpType::Create, node.clone())]
+                    } else {
+                        vec![]
+                    }
                 }
             });
-            
         }
 
-            
+
         for (op, node) in op_types {
             actions.push(
                 ScheduledOperation::new(
@@ -552,14 +554,20 @@ impl DefaultScheduler {
 
             let op_types = match existing_service {
                 Some(c) => {
-                    if c.0.manifest_hash == new_hash {
+                    if !c.1.schedulable() {
+                        vec![OpType::Delete]
+                    } else if c.0.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    vec![OpType::Create]
+                    if node.schedulable() {
+                        vec![OpType::Create]
+                    } else {
+                        vec![]
+                    }
                 }
             };
             op_types.into_iter().for_each(|op_type|
@@ -594,14 +602,20 @@ impl DefaultScheduler {
 
             let op_types = match existing_ingress {
                 Some(c) => {
-                    if c.0.manifest_hash == new_hash {
+                    if !c.1.schedulable() {
+                        vec![OpType::Delete]
+                    } else if c.0.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    vec![OpType::Create]
+                    if node.schedulable() {
+                        vec![OpType::Create]
+                    } else {
+                        vec![]
+                    }
                 }
             };
             op_types.into_iter().for_each(|op_type|
@@ -635,14 +649,21 @@ impl DefaultScheduler {
 
             let op_types = match existing {
                 Some(c) => {
-                    if c.0.manifest_hash == new_hash {
+                    
+                    if !node.schedulable() {
+                        vec![OpType::Delete]
+                    }else if c.0.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
-                        vec![OpType::Delete, OpType::Create]
+                            vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
-                    vec![OpType::Create]
+                    if node.schedulable() {
+                        vec![OpType::Create]
+                    } else {
+                        vec![]
+                    }
                 }
             };
             op_types.into_iter().for_each(|op_type|
@@ -738,7 +759,7 @@ impl DefaultScheduler {
                     OpType::Create => {
                         let selection = match op.node.clone() {
                             // some things like ingress have the node already set
-                            Some(n) => NodeSelection{
+                            Some(n) => NodeSelection {
                                 selected: Some(n),
                                 rejected: vec![],
                             },
@@ -752,20 +773,18 @@ impl DefaultScheduler {
                             } else {
                                 reasons
                             };
-                            
+
                             return Err(anyhow!("failed to find feasible node ({} rejected): {}", selection.rejected.len(),  reasons).into());
                         }
 
                         let node_name = selection.selected.unwrap().node_name.clone();
 
                         if dry_run {
-
                             let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
                             if !op.silent {
                                 println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
                             }
                             continue;
-
                         }
 
 
