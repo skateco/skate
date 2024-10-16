@@ -186,7 +186,8 @@ async fn propagate_exsting_resources(_conf: &Config, all_conns: &SshClients, nod
 
     let scheduler = DefaultScheduler {};
 
-    scheduler.schedule(all_conns, &mut filtered_state, all_manifests).await?;
+    // TODO - remove
+    scheduler.schedule(all_conns, &mut filtered_state, all_manifests, false).await?;
 
     Ok(())
 }

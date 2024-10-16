@@ -23,6 +23,8 @@ pub enum SkateError {
     SerdeJson(#[from] serde_json::Error),
     #[error("Error: {0}")]
     Ssh(#[from] SshError),
+    #[error("Error: {0:?}")]
+    Multi(Vec<SkateError>),
     #[error("unknown error")]
     Unknown,
 }

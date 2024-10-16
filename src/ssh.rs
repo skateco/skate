@@ -76,7 +76,7 @@ uname -s > /tmp/os-$$ &
 { { cat /etc/issue |head -1|awk '{print $1}'; }  || echo '' ; } > /tmp/distro-$$ &
 skatelet --version|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
-sudo skatelet system info > /tmp/sys-$$ &
+sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
 ovs-vsctl --version|head -1| awk '{print $NF}' > /tmp/ovs-$$ &
 
 wait;
@@ -97,7 +97,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
             let mut errlines = result.stderr.lines();
             return Err(anyhow!(errlines.join("\n")).into());
         }
-        let lines = result.stdout.lines();
+        let lines = result.stdout.split("\n");
         let mut host_info = HostInfo {
             node_name: self.node_name.clone(),
             hostname: "".to_string(),
@@ -126,7 +126,21 @@ echo ovs="$(cat /tmp/ovs-$$)";
                         _ => Some(v.to_string())
                     },
                     "sys" => {
-                        if let Ok(sys_info) = serde_json::from_str(v) { host_info.system_info = sys_info }
+                        if !v.is_empty() {
+
+                            match general_purpose::STANDARD.decode(v) {
+                                Ok(v) => {
+                                    if let Ok(sys_info) = serde_json::from_slice(&v) {
+                                        host_info.system_info = sys_info
+                                    }
+                                }
+                                Err(e) => {
+                                // TODO
+                                }
+                            };
+
+                        }
+
                     }
                     "ovs" => host_info.ovs_version = match v {
                         "" => None,

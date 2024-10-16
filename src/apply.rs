@@ -49,7 +49,7 @@ pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<Su
     let mut state = refreshed_state(&cluster.name, &conns, config).await.expect("failed to refresh state");
 
     let scheduler = DefaultScheduler {};
-    match scheduler.schedule(&conns, &mut state, objects).await {
+    match scheduler.schedule(&conns, &mut state, objects, false).await {
         Ok(_) => {}
         Err(e) => {
             eprintln!("{}", e);

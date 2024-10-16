@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use clap::Args;
+use itertools::{Either, Itertools};
 use crate::config::Config;
 use crate::errors::SkateError;
 use crate::skate::ConfigFileArgs;
@@ -13,8 +14,8 @@ use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 pub struct RefreshArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
-    #[arg(long, long_help="print state as json to stdout")]
-    json: bool
+    #[arg(long, long_help = "print state as json to stdout")]
+    json: bool,
 }
 
 
@@ -40,7 +41,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), SkateError> {
 
     if args.json {
         serde_json::to_writer(std::io::stdout(), &state)?;
-    }else {
+    } else {
         for node in &(state.nodes) {
             let emoji = match node.status {
                 NodeStatus::Unhealthy => {
@@ -64,13 +65,16 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), SkateError> {
 
 pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, SkateError> {
     let host_infos = conns.get_nodes_system_info().await;
-    let healthy_host_infos: Vec<_> = host_infos.iter().filter_map(|h| match h {
-        Ok(r) => Some((*r).clone()),
-        Err(e) => {
-            eprintln!("error getting host info: {}", e);
-            None
-        },
-    }).collect();
+    let (healthy_host_infos, errors): (Vec<_>, Vec<SkateError>) = host_infos.into_iter().partition_map(|r|
+        match r {
+            Ok(r) => Either::Left(r),
+            Err(e) => Either::Right(e.into()),
+        }
+    );
+
+    if errors.len() > 0 {
+        return Err(SkateError::Multi(errors));
+    }
 
 
     let mut state = match ClusterState::load(cluster_name) {

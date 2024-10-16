@@ -9,6 +9,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
 use k8s_openapi::api::core::v1::Secret;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
@@ -18,7 +19,7 @@ use crate::filestore::{FileStore, ObjectListItem};
 use crate::skate::{Distribution, exec_cmd, Platform};
 use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::system::podman::PodmanSecret;
-use crate::util::NamespacedName;
+use crate::util::{hash_k8s_resource, NamespacedName};
 
 
 #[derive(Debug, Args)]
@@ -166,18 +167,21 @@ async fn info() -> Result<(), Box<dyn Error>> {
         secret_name.rsplit_once(".").map(|(_, _)| secret_name)
     }).collect();
 
-    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names].concat()).unwrap_or_else(|e| {
-        eprintln!("failed to get secret info: {}", e);
+    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names.clone()].concat()).unwrap_or_else(|e| {
+        error!("failed to get secret info for {:?}: {}",secret_names, e);
         "[]".to_string()
     });
 
 
     let secret_info: Vec<PodmanSecret> = serde_json::from_str(&secret_json).map_err(|e| anyhow!(e).context("failed to deserialize secret info"))?;
     let secret_info: Vec<ObjectListItem> = secret_info.iter().filter_map(|s| {
-        let manifest_result: Result<Secret, _> = serde_yaml::from_str(&s.secret_data);
-        if manifest_result.is_err() {
-            return None;
-        }
+        
+        let manifest = match serde_yaml::from_str::<Secret>(&s.secret_data) {
+            Ok(secret) => secret,
+            Err(_) => return None
+        };
+        
+        let hash = manifest.metadata.labels.as_ref().and_then(|l| l.get("skate.io/hash").and_then(|hash|Some(hash.clone())));
 
         // if we want to redact the secret values.
         // removing for now since we don't store the state anyway.
@@ -191,12 +195,12 @@ async fn info() -> Result<(), Box<dyn Error>> {
         //     Some(data.into_iter().map(|(k, _)| (k, "".to_string())).collect())
         // });
 
-        let yaml = serde_yaml::to_value(manifest_result.as_ref().unwrap()).unwrap();
+        let yaml = serde_yaml::to_value(&manifest).unwrap();
 
 
         Some(ObjectListItem {
             name: NamespacedName::from(s.spec.name.as_str()),
-            manifest_hash: "".to_string(), // TODO get from manifest
+            manifest_hash: hash.unwrap_or("".to_string()),
             manifest: Some(yaml),
             created_at: s.created_at,
             path: "".to_string(),

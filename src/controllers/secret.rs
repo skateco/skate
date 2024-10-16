@@ -1,5 +1,5 @@
 use crate::skate::{exec_cmd, SupportedResources};
-use crate::util::apply_play;
+use crate::util::{apply_play, metadata_name};
 use k8s_openapi::api::core::v1::Secret;
 use std::error::Error;
 
@@ -18,8 +18,8 @@ impl SecretController {
 
 
     pub fn delete(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
-        let fqn = format!("{}.{}", secret.metadata.name.unwrap(), secret.metadata.namespace.unwrap());
-        let output = exec_cmd("podman", &["secret", "rm", &fqn])?;
+        let name = metadata_name(&secret);
+        let output = exec_cmd("podman", &["secret", "rm", &name.to_string()])?;
 
         if !output.is_empty() {
             println!("{}", output);
