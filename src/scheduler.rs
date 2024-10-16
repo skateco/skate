@@ -87,12 +87,11 @@ pub struct RejectedNode {
 pub struct NodeSelection {
     pub selected: Option<NodeState>,
     pub rejected: Vec<RejectedNode>,
-    pub updated_state: Vec<NodeState>,
 }
 
 impl DefaultScheduler {
     
-    fn choose_node(mut nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
+    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
         let node_selector = match object {
@@ -159,18 +158,8 @@ impl DefaultScheduler {
             }).or_else(|| Some(node.clone()))
         });
         
-        if feasible_node.is_some() {
-            let name = feasible_node.as_ref().unwrap().node_name.clone();
-            
-            let updated_node: &mut NodeState =  nodes.iter_mut().find(| n| {
-                n.node_name ==  name
-            }).unwrap();
-            
-            let _ = updated_node.reconcile_object_creation(object);
-        }
-        
 
-        NodeSelection{selected: feasible_node, rejected: rejected_nodes, updated_state: nodes}
+        NodeSelection{selected: feasible_node, rejected: rejected_nodes}
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -674,7 +663,7 @@ impl DefaultScheduler {
         remove_result
     }
 
-    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
@@ -721,7 +710,6 @@ impl DefaultScheduler {
                             Some(n) => NodeSelection{
                                 selected: Some(n),
                                 rejected: vec![],
-                                updated_state: vec![],
                             },
                             // anything else and things with node selectors go here
                             // TODO move this inside of plan, maybe with a copy of state.
@@ -801,10 +789,10 @@ impl DefaultScheduler {
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
+    async fn schedule(&self, conns: &SshClients, mut state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(conns, state, object.clone(), dry_run).await {
+            match Self::schedule_one(conns, &mut state, object.clone(), dry_run).await {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }

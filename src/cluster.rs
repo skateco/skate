@@ -88,13 +88,16 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
     let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
 
     let all_manifests: Vec<_> = [services, secrets, deployments, daemonsets, ingresses].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
-    println!("propagating {} resources", all_manifests.len());
-
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = vec!(state.nodes.iter().find(|n|
+    filtered_state.nodes = filtered_state.nodes.into_iter().filter(|n|
         exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap()
-    ).cloned().unwrap());
+    ).collect();
+    
+    println!("propagating {} resources across {} nodes", all_manifests.len(), filtered_state.nodes.len());
+
+
+    
 
 
     let scheduler = DefaultScheduler {};
