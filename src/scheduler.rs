@@ -38,8 +38,21 @@ pub struct DefaultScheduler {}
 pub enum OpType {
     Info,
     Create,
+    Clobber,
     Delete,
     Unchanged,
+}
+
+impl OpType {
+    pub fn symbol(&self) -> String {
+        match self {
+            OpType::Clobber => "-/+",
+            OpType::Info => "[i]",
+            OpType::Create => "+",
+            OpType::Delete => "-",
+            OpType::Unchanged => "="
+        }.to_string()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -536,7 +549,7 @@ impl DefaultScheduler {
                     } else if c.0.manifest_hash == new_hash {
                         vec![(OpType::Unchanged, c.1.clone())]
                     } else {
-                        vec![(OpType::Delete, c.1.clone()), (OpType::Create, node.clone())]
+                        vec![(OpType::Clobber, node.clone())]
                     }
                 }
                 None => {
@@ -741,6 +754,7 @@ impl DefaultScheduler {
 
         remove_result
     }
+    
 
     async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
@@ -758,7 +772,7 @@ impl DefaultScheduler {
                         if dry_run {
                             let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
                             if !op.silent {
-                                println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
+                                println!("{} {} {} deleted on node {} ", op.operation.symbol(), op.resource, op.resource.name(), node_name);
                             }
                             continue;
                         }
@@ -772,7 +786,7 @@ impl DefaultScheduler {
 
                                 let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
                                 if !op.silent {
-                                    println!("{} {} {} deleted on node {} ", CHECKBOX_EMOJI, op.resource, op.resource.name(), node_name);
+                                    println!("{} {} {} deleted on node {} ", op.operation.symbol(), op.resource, op.resource.name(), node_name);
                                 }
                                 result.push(op.clone());
                             }
@@ -783,7 +797,7 @@ impl DefaultScheduler {
                             }
                         }
                     }
-                    OpType::Create => {
+                    OpType::Create | OpType::Clobber => {
                         let selection = match op.node.clone() {
                             // some things like ingress have the node already set
                             Some(n) => NodeSelection {
@@ -809,7 +823,7 @@ impl DefaultScheduler {
                         if dry_run {
                             let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
                             if !op.silent {
-                                println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
+                                println!("{} {} {} created on node {}", op.operation.symbol(), op.resource, &op.resource.name(), node_name);
                             }
                             continue;
                         }
@@ -829,7 +843,7 @@ impl DefaultScheduler {
                                 let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
 
                                 if !op.silent {
-                                    println!("{} {} {} created on node {}", CHECKBOX_EMOJI, op.resource, &op.resource.name(), node_name);
+                                    println!("{} {} {} created on node {}", op.operation.symbol(), op.resource, &op.resource.name(), node_name);
                                 }
                                 result.push(op.clone());
                             }
@@ -844,7 +858,7 @@ impl DefaultScheduler {
                         let node_name = op.node.clone().unwrap().node_name;
 
                         if !op.silent {
-                            println!("{} {} on {}", INFO_EMOJI, op.resource.name(), node_name);
+                            println!("{} {} on {}", op.operation.symbol(), op.resource.name(), node_name);
                         }
                         result.push(op.clone());
                     }
@@ -852,7 +866,7 @@ impl DefaultScheduler {
                         let node_name = op.node.clone().unwrap().node_name;
 
                         if !op.silent {
-                            println!("{} {} {} unchanged on {}", EQUAL_EMOJI, op.resource, op.resource.name(), node_name);
+                            println!("{} {} {} unchanged on {}", op.operation.symbol(), op.resource, op.resource.name(), node_name);
                         }
                     }
                 }
