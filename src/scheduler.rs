@@ -484,7 +484,6 @@ impl DefaultScheduler {
         })
     }
 
-    // just apply on all nodes
     fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
         
         let mut new_secret = secret.clone();
@@ -493,7 +492,6 @@ impl DefaultScheduler {
         let ns_name = metadata_name(&new_secret);
         
         let new_hash = hash_k8s_resource(&mut new_secret);
-
 
         let mut op_types: Vec<_> = vec!();
             
@@ -526,7 +524,7 @@ impl DefaultScheduler {
             actions.push(
                 ScheduledOperation::new(
                     op,
-                    SupportedResources::Secret(secret.clone()),
+                    SupportedResources::Secret(new_secret.clone()),
                 ).node(node.clone())
             );
         }
