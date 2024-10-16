@@ -486,16 +486,49 @@ impl DefaultScheduler {
 
     // just apply on all nodes
     fn plan_secret(state: &ClusterState, secret: &Secret) -> Result<ApplyPlan, Box<dyn Error>> {
+        
+        let mut new_secret = secret.clone();
+        
         let mut actions = vec!();
-        let ns_name = metadata_name(secret);
+        let ns_name = metadata_name(&new_secret);
+        
+        let new_hash = hash_k8s_resource(&mut new_secret);
+
+
+        let mut op_types: Vec<_> = vec!();
+            
 
         for node in state.nodes.iter() {
-            actions.extend([
+
+            let existing_secrets = state.locate_objects(Some(&node.node_name), |si| {
+                si.clone().secrets
+            }, &ns_name.name, &ns_name.namespace);
+            let existing_secret = existing_secrets.first();
+            
+
+            op_types.extend(match existing_secret {
+                Some(c) => {
+                    if c.0.manifest_hash == new_hash {
+                        vec![(OpType::Unchanged, c.1.clone())]
+                    } else {
+                        vec![(OpType::Delete, c.1.clone()), (OpType::Create, node.clone())]
+                    }
+                }
+                None => {
+                    vec![(OpType::Create, node.clone())]
+                }
+            });
+            
+        }
+
+            
+        for (op, node) in op_types {
+            actions.push(
                 ScheduledOperation::new(
-                    OpType::Create,
+                    op,
                     SupportedResources::Secret(secret.clone()),
                 ).node(node.clone())
-            ]);
+            );
         }
 
 
@@ -712,7 +745,6 @@ impl DefaultScheduler {
                                 rejected: vec![],
                             },
                             // anything else and things with node selectors go here
-                            // TODO move this inside of plan, maybe with a copy of state.
                             None => Self::choose_node(state.nodes.clone(), &op.resource)
                         };
                         if selection.selected.is_none() {

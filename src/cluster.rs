@@ -94,11 +94,7 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
         exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap()
     ).collect();
     
-    println!("propagating {} resources across {} nodes", all_manifests.len(), filtered_state.nodes.len());
-
-
-    
-
+    println!("rescheduling {} resources across {} nodes", all_manifests.len(), filtered_state.nodes.len());
 
     let scheduler = DefaultScheduler {};
 
