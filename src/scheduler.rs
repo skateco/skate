@@ -90,8 +90,8 @@ pub struct NodeSelection {
 }
 
 // 3 types of planning:
-// per node (service, ingress, secret)
-// maybe per node (daemonset)
+// 1 per node (service, ingress, secret)
+// maybe > 0 per node (daemonset)
 // distributed (pod, cron)
 impl DefaultScheduler {
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
@@ -182,7 +182,31 @@ impl DefaultScheduler {
         let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
         let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
 
-        for node in state.nodes.iter() {
+
+        let schedulable_nodes = state.nodes.iter().filter(|n| n.schedulable());
+        let unschedulable_nodes = state.nodes.iter().filter(|n| !n.schedulable());
+
+        for node in unschedulable_nodes {
+            let existing_pods = node.filter_pods(&|p|
+                p.labels.contains_key("skate.io/daemonset")
+                    && p.labels.get("skate.io/daemonset").unwrap() == &daemonset_name
+                    && p.labels.get("skate.io/namespace").unwrap() == &ns
+            );
+            for pod_info in existing_pods {
+                let pod: Pod = pod_info.into();
+                let name = NamespacedName::from(pod.metadata.name.clone().unwrap_or_default().as_str());
+                let op = ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod)).node(node.clone());
+                match actions.get_mut(&name) {
+                    Some(ops) => ops.push(op),
+                    None => {
+                        actions.insert(name, vec!(op));
+                    }
+                };
+                
+            }
+        }
+
+        for node in schedulable_nodes {
             let node_name = node.node_name.clone();
             let mut pod_spec = ds.spec.clone().map(|s| s.template).and_then(|t| t.spec).unwrap_or_default();
 
@@ -653,13 +677,12 @@ impl DefaultScheduler {
 
             let op_types = match existing {
                 Some(c) => {
-                    
                     if !node.schedulable() {
                         vec![OpType::Delete]
-                    }else if c.0.manifest_hash == new_hash {
+                    } else if c.0.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
-                            vec![OpType::Delete, OpType::Create]
+                        vec![OpType::Delete, OpType::Create]
                     }
                 }
                 None => {
