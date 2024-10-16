@@ -89,6 +89,10 @@ pub struct NodeSelection {
     pub rejected: Vec<RejectedNode>,
 }
 
+// 3 types of planning:
+// per node (service, ingress, secret)
+// maybe per node (daemonset)
+// distributed (pod, cron)
 impl DefaultScheduler {
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
