@@ -15,14 +15,14 @@ use crate::ssh::SshClients;
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
 
-#[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString)]
+#[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString,PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum ResourceType {
     #[strum(serialize="pod", serialize="pods")]
     Pod,
     #[strum(serialize="deployment", serialize="deployments")]
     Deployment,
-    #[strum(serialize="daemonset", serialize="deployments")]
+    #[strum(serialize="daemonset", serialize="daemonsets")]
     DaemonSet,
     #[strum(serialize="ingress")]
     Ingress,
@@ -429,5 +429,37 @@ impl SupportedResources {
             }
         };
         Ok(resource)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use crate::cron::cron_to_systemd;
+    use crate::resource::ResourceType;
+
+    #[test]
+    fn test_resource_type_from_str() {
+
+        let table = &[
+            ("pod", ResourceType::Pod),
+            ("pods", ResourceType::Pod),
+            ("Pod", ResourceType::Pod),
+            ("pods", ResourceType::Pod),
+            ("daemonset", ResourceType::DaemonSet),
+            ("daemonsets", ResourceType::DaemonSet),
+            ("DaemonSet", ResourceType::DaemonSet),
+            ("DaemonSets", ResourceType::DaemonSet),
+        ];
+
+        for (input, expect) in table {
+            match ResourceType::from_str(input) {
+                Ok(output) => {
+                    assert_eq!(output, *expect, "input: {}", input);
+                }
+                Err(e) => {
+                    panic!("{}: {}", *expect, e);
+                }
+            }
+        }
     }
 }
