@@ -213,6 +213,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
         filename: vec![coredns_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     // nginx ingress
@@ -226,6 +227,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
         filename: vec![nginx_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     Ok(())

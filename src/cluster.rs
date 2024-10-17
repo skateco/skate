@@ -37,9 +37,9 @@ pub async fn cluster(global_args: ClusterArgs) -> Result<(), SkateError> {
 #[derive(Debug, Args)]
 pub struct RescheduleArgs {
     #[command(flatten)]
-    config: ConfigFileArgs,
+    pub config: ConfigFileArgs,
     #[arg(long, long_help = "Will not affect the cluster if set to true")]
-    dry_run: bool,
+    pub dry_run: bool,
 }
 
 pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
