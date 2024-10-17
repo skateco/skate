@@ -126,7 +126,7 @@ async fn create_job(args: CreateJobArgs) -> Result<(), SkateError> {
 
     let state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
 
-    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, from_name, &args.namespace);
+    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, Some(from_name), Some(&args.namespace));
     if cjobs.is_empty() {
         return Err(anyhow!("no cronjobs found by name of {} in namespace {}", args.args.from, args.namespace).into());
     }

@@ -491,7 +491,7 @@ impl DefaultScheduler {
 
         let existing_cron = state.locate_objects(None, |si| {
             si.clone().cronjobs
-        }, &name.name, &name.namespace).first().cloned();
+        }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
         let op_types = match existing_cron {
             Some(c) => {
@@ -539,7 +539,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_secrets = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().secrets
-            }, &ns_name.name, &ns_name.namespace);
+            }, Some(&ns_name.name), Some(&ns_name.namespace));
             let existing_secret = existing_secrets.first();
 
 
@@ -592,7 +592,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_service = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().services
-            }, &name.name, &name.namespace).first().cloned();
+            }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
             let op_types = match existing_service {
                 Some(c) => {
@@ -640,7 +640,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_ingress = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().ingresses
-            }, &name.name, &name.namespace).first().cloned();
+            }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
             let op_types = match existing_ingress {
                 Some(c) => {
@@ -687,7 +687,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().cluster_issuers
-            }, &ns_name.name, "skate").first().cloned();
+            }, Some(&ns_name.name), Some("skate")).first().cloned();
 
             let op_types = match existing {
                 Some(c) => {
