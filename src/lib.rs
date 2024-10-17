@@ -28,6 +28,8 @@ mod cordon;
 
 pub mod errors;
 mod cluster;
+mod rollout;
+mod resource;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

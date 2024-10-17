@@ -17,7 +17,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use strum_macros::Display;
 use tabled::Tabled;
 
-use crate::skate::SupportedResources;
+use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;

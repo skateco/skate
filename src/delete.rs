@@ -3,7 +3,8 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use crate::errors::SkateError;
-use crate::skate::{ConfigFileArgs, ResourceType};
+use crate::resource::ResourceType;
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
 use crate::util::CHECKBOX_EMOJI;
 

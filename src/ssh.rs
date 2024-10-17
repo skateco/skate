@@ -9,7 +9,7 @@ use std::fmt::{Debug, Formatter};
 use std::time::Duration;
 
 use crate::config::{Cluster, Node};
-use crate::skate::{Distribution, Platform, ResourceType};
+use crate::skate::{Distribution, Platform};
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
 use colored::Colorize;
@@ -19,6 +19,7 @@ use itertools::{Either, Itertools};
 use russh::CryptoVec;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use crate::resource::ResourceType;
 
 #[derive(Clone)]
 pub struct SshClient {

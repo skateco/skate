@@ -1,7 +1,8 @@
-use crate::skate::{exec_cmd, SupportedResources};
+use crate::skate::exec_cmd;
 use crate::util::{apply_play, metadata_name};
 use k8s_openapi::api::core::v1::Secret;
 use std::error::Error;
+use crate::resource::SupportedResources;
 
 pub struct SecretController {
 }

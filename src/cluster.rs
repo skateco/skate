@@ -1,10 +1,11 @@
 use crate::config::Config;
-use crate::skate::{ConfigFileArgs, SupportedResources};
+use crate::skate::ConfigFileArgs;
 use crate::ssh::{cluster_connections, SshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
+use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::state::state::ClusterState;
 

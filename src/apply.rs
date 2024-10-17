@@ -4,9 +4,10 @@ use clap::Args;
 use crate::config::Config;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
+use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 
-use crate::skate::{ConfigFileArgs, SupportedResources};
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
 

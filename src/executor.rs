@@ -7,7 +7,7 @@ use crate::controllers::pod::PodController;
 use crate::controllers::secret::SecretController;
 use crate::controllers::service::ServiceController;
 use crate::filestore::FileStore;
-use crate::skate::SupportedResources;
+use crate::resource::SupportedResources;
 use crate::errors::SkateError;
 
 pub trait Executor {

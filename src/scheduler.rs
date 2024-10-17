@@ -14,7 +14,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
 
-use crate::skate::SupportedResources;
+use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
@@ -755,13 +755,9 @@ impl DefaultScheduler {
 
         remove_result
     }
-
-
-    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
-        let plan = Self::plan(state, &object)?;
-        if plan.actions.is_empty() {
-            return Err(anyhow!("failed to schedule resources, no planned actions").into());
-        }
+    
+    
+    async fn apply(plan: ApplyPlan,  conns: &SshClients, mut state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
         let mut result: Vec<ScheduledOperation> = vec!();
 
@@ -873,8 +869,17 @@ impl DefaultScheduler {
                 }
             }
         }
-
         Ok(result)
+    }
+
+
+    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+        let plan = Self::plan(state, &object)?;
+        if plan.actions.is_empty() {
+            return Err(anyhow!("failed to schedule resources, no planned actions").into());
+        }
+        
+        Self::apply(plan, conns, state, dry_run).await
     }
 }
 
