@@ -433,13 +433,13 @@ impl DefaultScheduler {
         }
 
 
-        // existing pods with same name (duplicates if more than 1)
-        // sort by replicas descending
         let existing_pods = state.locate_pods(&name.name, &name.namespace);
 
 
+        // existing pods with same name (duplicates if more than 1)
+        // sort by replicas descending
         let cull_actions: Vec<_> = match existing_pods.len() {
-            0 | 1 => vec!(),
+            0 | 1 => vec!(), // none or 1 already, that's ok
             _ => existing_pods.as_slice()[1..].iter().map(|(pod_info, node)|
                 ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod_info.clone().into()))
                     .node((**node).clone())

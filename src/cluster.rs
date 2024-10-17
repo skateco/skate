@@ -86,7 +86,6 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
     let deployments: Vec<_> = donor_sys_info.deployments.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
     let daemonsets: Vec<_> = donor_sys_info.daemonsets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
     let cronjobs: Vec<_> = state.locate_objects(None, |s| s.cronjobs.clone(), None,None).into_iter().filter_map(|c| c.0.manifest).collect();
-    // TODO - do we want to do cronjobs too?
     let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
 
     let all_manifests: Vec<_> = [services, secrets, deployments, daemonsets, ingresses, cronjobs].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
