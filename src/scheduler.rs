@@ -343,7 +343,7 @@ impl DefaultScheduler {
         // regardless what happens, overwrite the deployment manifest to reflect the current one
 
 
-        let existing_pods = state.locate_deployment(&deployment_name, &ns);
+        let existing_pods = state.locate_deployment_pods(&deployment_name, &ns);
 
         let existing_pods: Vec<_> = existing_pods.into_iter().map(|(dp, node)| {
             let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();

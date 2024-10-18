@@ -143,7 +143,7 @@ impl SupportedResources {
                 // remove the pod ip from dns on deployed node
                 let ips: Vec<_> = match conns.find(&node.node_name).unwrap()
                     .execute(&format!("sudo skatelet dns remove --pod-id {}", &pod.metadata.name.clone().unwrap())).await {
-                    Ok((ips)) => {
+                    Ok(ips) => {
                         let ips: Vec<_> = ips.lines().map(|l| l.to_string()).collect();
                         ips
                     }

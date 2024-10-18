@@ -487,7 +487,7 @@ impl ClusterState {
     }
 
 
-    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
+    pub fn locate_deployment_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
         self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
     }
