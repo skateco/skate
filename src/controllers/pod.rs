@@ -1,7 +1,8 @@
 use std::error::Error;
 use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Pod;
-use crate::skate::{exec_cmd, SupportedResources};
+use crate::resource::SupportedResources;
+use crate::skate::exec_cmd;
 use crate::util::apply_play;
 
 pub struct PodController {

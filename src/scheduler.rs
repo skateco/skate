@@ -14,7 +14,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
 
-use crate::skate::SupportedResources;
+use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
@@ -343,7 +343,7 @@ impl DefaultScheduler {
         // regardless what happens, overwrite the deployment manifest to reflect the current one
 
 
-        let existing_pods = state.locate_deployment(&deployment_name, &ns);
+        let existing_pods = state.locate_deployment_pods(&deployment_name, &ns);
 
         let existing_pods: Vec<_> = existing_pods.into_iter().map(|(dp, node)| {
             let replica = dp.labels.get("skate.io/replica").unwrap_or(&"0".to_string()).clone();
@@ -433,13 +433,13 @@ impl DefaultScheduler {
         }
 
 
-        // existing pods with same name (duplicates if more than 1)
-        // sort by replicas descending
         let existing_pods = state.locate_pods(&name.name, &name.namespace);
 
 
+        // existing pods with same name (duplicates if more than 1)
+        // sort by replicas descending
         let cull_actions: Vec<_> = match existing_pods.len() {
-            0 | 1 => vec!(),
+            0 | 1 => vec!(), // none or 1 already, that's ok
             _ => existing_pods.as_slice()[1..].iter().map(|(pod_info, node)|
                 ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod_info.clone().into()))
                     .node((**node).clone())
@@ -491,7 +491,7 @@ impl DefaultScheduler {
 
         let existing_cron = state.locate_objects(None, |si| {
             si.clone().cronjobs
-        }, &name.name, &name.namespace).first().cloned();
+        }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
         let op_types = match existing_cron {
             Some(c) => {
@@ -539,7 +539,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_secrets = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().secrets
-            }, &ns_name.name, &ns_name.namespace);
+            }, Some(&ns_name.name), Some(&ns_name.namespace));
             let existing_secret = existing_secrets.first();
 
 
@@ -592,7 +592,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_service = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().services
-            }, &name.name, &name.namespace).first().cloned();
+            }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
             let op_types = match existing_service {
                 Some(c) => {
@@ -640,7 +640,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_ingress = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().ingresses
-            }, &name.name, &name.namespace).first().cloned();
+            }, Some(&name.name), Some(&name.namespace)).first().cloned();
 
             let op_types = match existing_ingress {
                 Some(c) => {
@@ -687,7 +687,7 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing = state.locate_objects(Some(&node.node_name), |si| {
                 si.clone().cluster_issuers
-            }, &ns_name.name, "skate").first().cloned();
+            }, Some(&ns_name.name), Some("skate")).first().cloned();
 
             let op_types = match existing {
                 Some(c) => {
@@ -755,13 +755,9 @@ impl DefaultScheduler {
 
         remove_result
     }
-
-
-    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
-        let plan = Self::plan(state, &object)?;
-        if plan.actions.is_empty() {
-            return Err(anyhow!("failed to schedule resources, no planned actions").into());
-        }
+    
+    
+    async fn apply(plan: ApplyPlan,  conns: &SshClients, mut state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
         let mut result: Vec<ScheduledOperation> = vec!();
 
@@ -873,8 +869,17 @@ impl DefaultScheduler {
                 }
             }
         }
-
         Ok(result)
+    }
+
+
+    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+        let plan = Self::plan(state, &object)?;
+        if plan.actions.is_empty() {
+            return Err(anyhow!("failed to schedule resources, no planned actions").into());
+        }
+        
+        Self::apply(plan, conns, state, dry_run).await
     }
 }
 

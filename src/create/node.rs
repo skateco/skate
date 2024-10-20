@@ -13,8 +13,9 @@ use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::oci;
 use crate::refresh::refreshed_state;
+use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
-use crate::skate::{ConfigFileArgs, Distribution, SupportedResources};
+use crate::skate::{ConfigFileArgs, Distribution};
 use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
@@ -213,6 +214,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
         filename: vec![coredns_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     // nginx ingress
@@ -226,6 +228,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
         filename: vec![nginx_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     Ok(())

@@ -17,7 +17,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use strum_macros::Display;
 use tabled::Tabled;
 
-use crate::skate::SupportedResources;
+use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;
@@ -472,13 +472,13 @@ impl ClusterState {
     }
 
 
-    pub fn locate_objects(&self, node: Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: &str, namespace: &str) -> Vec<(ObjectListItem, &NodeState)> {
+    pub fn locate_objects(&self, node: Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: Option<&str>, namespace: Option<&str>) -> Vec<(ObjectListItem, &NodeState)> {
         self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).filter_map(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {
                     selector(&i).and_then(|p| {
                         p.clone().into_iter().find(|p| {
-                            p.name.name == name && p.name.namespace == namespace
+                            (name.is_none() || p.name.name == name.unwrap()) && (namespace.is_none() || p.name.namespace == namespace.unwrap())
                         }).map(|o| (o, n))
                     })
                 })
@@ -487,9 +487,8 @@ impl ClusterState {
     }
 
 
-    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
+    pub fn locate_deployment_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
         self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
     }
-
 }

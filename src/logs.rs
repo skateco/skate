@@ -2,10 +2,11 @@ use anyhow::anyhow;
 use clap::Args;
 use futures::stream::FuturesUnordered;
 use crate::config::Config;
-use crate::skate::{ConfigFileArgs, ResourceType};
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
 use futures::StreamExt;
 use crate::errors::SkateError;
+use crate::resource::ResourceType;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
