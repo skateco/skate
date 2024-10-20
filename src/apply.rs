@@ -4,9 +4,10 @@ use clap::Args;
 use crate::config::Config;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
+use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 
-use crate::skate::{ConfigFileArgs, SupportedResources};
+use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
 
@@ -20,15 +21,17 @@ immediate shutdown.")]
     pub grace_period: i32,
     #[command(flatten)]
     pub config: ConfigFileArgs,
+    #[arg(long, long_help = "Will not affect the cluster if set to true")]
+    pub dry_run: bool,
 }
 
 pub async fn apply(args: ApplyArgs) -> Result<(), SkateError> {
     let config = Config::load(Some(args.config.skateconfig))?;
     let objects = crate::skate::read_manifests(args.filename)?;
-    apply_supported_resources(&config, objects).await
+    apply_supported_resources(&config, objects, args.dry_run).await
 }
 
-pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>) -> Result<(), SkateError> {
+pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<SupportedResources>, dry_run: bool) -> Result<(), SkateError> {
     let cluster = config.active_cluster(config.current_context.clone())?;
     let (conns, errors) = ssh::cluster_connections(cluster).await;
     if let Some(e) = errors {
@@ -49,7 +52,7 @@ pub(crate) async fn apply_supported_resources(config: &Config, resources: Vec<Su
     let mut state = refreshed_state(&cluster.name, &conns, config).await.expect("failed to refresh state");
 
     let scheduler = DefaultScheduler {};
-    match scheduler.schedule(&conns, &mut state, objects, false).await {
+    match scheduler.schedule(&conns, &mut state, objects, dry_run).await {
         Ok(_) => {}
         Err(e) => {
             eprintln!("{}", e);

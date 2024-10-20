@@ -3,8 +3,8 @@ use std::io;
 use std::io::Read;
 use clap::{Args, Subcommand};
 use crate::executor::{DefaultExecutor, Executor};
-use crate::skate::SupportedResources;
-use crate::skate::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
+use crate::resource::SupportedResources;
+use crate::resource::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use crate::skatelet::apply::StdinCommand;
 
 use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;

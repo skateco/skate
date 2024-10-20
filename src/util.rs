@@ -15,7 +15,8 @@ use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use serde::{Deserialize, Serialize};
-use crate::skate::{exec_cmd, SupportedResources};
+use crate::resource::SupportedResources;
+use crate::skate::exec_cmd;
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
