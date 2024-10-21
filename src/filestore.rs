@@ -36,6 +36,7 @@ pub struct ObjectListItem {
     pub manifest_hash: String,
     #[tabled(skip)]
     pub manifest: Option<Value>,
+    pub updated_at: DateTime<Local>,
     pub created_at: DateTime<Local>,
     pub path: String,
 }
@@ -48,6 +49,7 @@ impl ObjectListItem {
             manifest_hash: res.metadata().labels.as_ref().and_then(|l| l.get("skate.io/hash")).cloned().unwrap_or("".to_string()),
             manifest: Some(serde_yaml::to_value(res).expect("failed to serialize kubernetes object")),
             created_at: Local::now(),
+            updated_at: Local::now(),
             path: path.unwrap_or_default().to_string(),
         };
         obj
@@ -83,14 +85,19 @@ impl TryFrom<&str> for ObjectListItem {
             Ok(result) => Some(serde_yaml::from_str(&result).unwrap())
         };
 
-        let metadata = std::fs::metadata(dir).map_err(|e| anyhow!(e).context(format!("failed to get metadata for {}", dir)))?;
+        let dir_metadata = std::fs::metadata(dir).map_err(|e| anyhow!(e).context(format!("failed to get metadata for {}", dir)))?;
+        let created_at = dir_metadata.created()?;
+        let updated_at = match std::fs::metadata(&manifest_file_name) {
+            Ok(m) => m.modified()?,
+            Err(_) => created_at.clone()
+        };
 
-        let created_at = metadata.created()?;
         Ok(ObjectListItem {
             name: ns_name,
             manifest_hash: hash,
             manifest,
             created_at: DateTime::from(created_at),
+            updated_at: DateTime::from(updated_at),
             path: dir.to_string(),
         })
     }
