@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use podman::PodmanPodInfo;
 use crate::errors::SkateError;
 use crate::filestore::{FileStore, ObjectListItem};
-
+use crate::resource::ResourceType;
 use crate::skate::{Distribution, exec_cmd, Platform};
 use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::system::podman::PodmanSecret;
@@ -199,6 +199,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
 
 
         Some(ObjectListItem {
+            resource_type: ResourceType::Secret,
             name: NamespacedName::from(s.spec.name.as_str()),
             manifest_hash: hash.unwrap_or("".to_string()),
             manifest: Some(yaml),

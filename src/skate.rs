@@ -117,7 +117,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
             for document in serde_yaml::Deserializer::from_str(&str_file) {
                 let value = Value::deserialize(document).expect("failed to read document");
                 if let Value::Mapping(mapping) = &value {
-                    result.push(SupportedResources::try_from(value)?)
+                    result.push(SupportedResources::try_from(&value)?)
                 }
             }
         };

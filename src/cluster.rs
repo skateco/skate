@@ -3,9 +3,11 @@ use crate::skate::ConfigFileArgs;
 use crate::ssh::{cluster_connections, SshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
+use std::ops::Deref;
+use itertools::Itertools;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
-use crate::resource::SupportedResources;
+use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::state::state::ClusterState;
 
@@ -61,35 +63,18 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
 
 async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &mut ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
 
-    // get all resources from the cluster
-    // - secrets
-    // - deployments
-    // - daemonsets
-    // - services
-    // - ingress
-
-    // for each one, do an `apply`
-
-    // TODO - search all nodes, not just one random
-    let donor_state = match state.nodes.iter().find(|n|
-        (exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap())
-            && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
-        Some(n) => n,
-        None => return Ok(())
-    };
     
+    let catalogue = state.catalogue(None, &[
+        ResourceType::Ingress,
+        ResourceType::Service,
+        ResourceType::Secret,
+        ResourceType::ClusterIssuer,
+    ]);
+
+    let all_manifests: Result<Vec<SupportedResources>, _> = catalogue.iter().map(|item| SupportedResources::try_from(item.object.deref())).collect();
+    let all_manifests = all_manifests?;
 
 
-    let donor_sys_info = donor_state.host_info.as_ref().and_then(|h| h.system_info.as_ref()).unwrap();
-
-    let services: Vec<_> = donor_sys_info.services.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let secrets: Vec<_> = donor_sys_info.secrets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let deployments: Vec<_> = donor_sys_info.deployments.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let daemonsets: Vec<_> = donor_sys_info.daemonsets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let cronjobs: Vec<_> = state.locate_objects(None, |s| s.cronjobs.clone(), None,None).into_iter().filter_map(|c| c.0.manifest).collect();
-    let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-
-    let all_manifests: Vec<_> = [services, secrets, deployments, daemonsets, ingresses, cronjobs].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
 
     let mut filtered_state = state.clone();
     filtered_state.nodes = filtered_state.nodes.into_iter().filter(|n|

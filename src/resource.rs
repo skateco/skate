@@ -9,7 +9,8 @@ use std::error::Error;
 use anyhow::anyhow;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::HashMap;
-use k8s_openapi::Resource;
+use k8s_openapi::{ClusterResourceScope, Resource};
+use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::NodeState;
@@ -57,10 +58,21 @@ pub enum SupportedResources {
 
 }
 
-impl TryFrom<Value> for SupportedResources {
+impl TryFrom<&ObjectListItem> for SupportedResources {
     type Error = Box<dyn Error>;
 
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
+    fn try_from(value: &ObjectListItem) -> Result<SupportedResources, Self::Error> {
+        if value.manifest.is_none() {
+            return Err(anyhow!("manifest was empty").into());
+        }
+        Ok(SupportedResources::try_from(value.manifest.as_ref().unwrap())?)
+    }
+}
+
+impl TryFrom<&Value> for SupportedResources {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
         let api_version_key = Value::String("apiVersion".to_owned());
         let kind_key = Value::String("kind".to_owned());
 

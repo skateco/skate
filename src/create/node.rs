@@ -9,11 +9,12 @@ use itertools::Itertools;
 use std::io::Write;
 use base64::Engine;
 use std::net::ToSocketAddrs;
+use std::ops::Deref;
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::oci;
 use crate::refresh::refreshed_state;
-use crate::resource::SupportedResources;
+use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
 use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
@@ -155,7 +156,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
     install_cluster_manifests(&args.config, &cluster).await?;
 
-    propagate_exsting_resources(&config, all_conns, &node, &mut state).await?;
+    propagate_static_resources(&config, all_conns, &node, &mut state).await?;
 
     Ok(())
 }
@@ -164,20 +165,16 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
 // could be to take only resources that are the same on all nodes, log others
-async fn propagate_exsting_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
-    let donor_state = match state.nodes.iter().find(|n| n.node_name != node.name && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
-        Some(n) => n,
-        None => return Ok(())
-    };
+async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
+
+    
+    let catalogue = state.catalogue(None, &[ResourceType::Ingress, ResourceType::Service, ResourceType::Secret]);
 
 
-    let donor_sys_info = donor_state.host_info.as_ref().and_then(|h| h.system_info.as_ref()).unwrap();
 
-    let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let services: Vec<_> = donor_sys_info.services.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let secrets: Vec<_> = donor_sys_info.secrets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-
-    let all_manifests: Vec<_> = [ingresses, services, secrets].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
+    let all_manifests: Result<Vec<_>, _> = catalogue.into_iter().map(|item| SupportedResources::try_from(item.object.deref())).collect();
+    let all_manifests = all_manifests?;
+    
     println!("propagating {} resources", all_manifests.len());
 
 

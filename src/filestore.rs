@@ -2,10 +2,11 @@ use std::error::Error;
 use std::fs::{create_dir_all, DirEntry};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::{Metadata};
+use k8s_openapi::{kind, Metadata, Resource};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Secret, Service};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tabled::Tabled;
 use crate::errors::SkateError;
+use crate::resource::{ResourceType, SupportedResources};
 use crate::spec::cert::ClusterIssuer;
 use crate::util::{metadata_name, NamespacedName};
 
@@ -32,6 +34,7 @@ pub struct FileStore {
 #[derive(Tabled, Debug, Clone, Deserialize, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ObjectListItem {
+    pub resource_type: ResourceType,
     pub name: NamespacedName,
     pub manifest_hash: String,
     #[tabled(skip)]
@@ -42,9 +45,12 @@ pub struct ObjectListItem {
 }
 
 impl ObjectListItem {
-    fn from_k8s_resource(res:  &(impl Metadata<Ty=ObjectMeta> + Serialize), path: Option<&str>) -> Self {
+    fn from_k8s_resource(res:  &(impl Metadata<Ty=ObjectMeta> + Resource + Serialize), path: Option<&str>) -> Self {
 
+        let kind = kind(res);
+        
         let obj = ObjectListItem{
+            resource_type: ResourceType::from_str(kind).expect("unexpected resource type"),
             name: metadata_name(res),
             manifest_hash: res.metadata().labels.as_ref().and_then(|l| l.get("skate.io/hash")).cloned().unwrap_or("".to_string()),
             manifest: Some(serde_yaml::to_value(res).expect("failed to serialize kubernetes object")),
@@ -56,12 +62,16 @@ impl ObjectListItem {
     }
 }
 
+
 impl TryFrom<&str> for ObjectListItem {
     type Error = Box<dyn Error>;
 
     fn try_from(dir: &str) -> Result<Self, Self::Error> {
 
-        let file_name = Path::new(dir).file_name().ok_or(anyhow!("failed to get file name"))?;
+        let dir_path = Path::new(dir);
+        let file_name = dir_path.file_name().ok_or(anyhow!("failed to get file name"))?;
+        let parent = dir_path.parent().ok_or(anyhow!("failed to get parent dir"))?.file_name().ok_or(anyhow!("failed to get parent dir"))?;
+        let parent = parent.to_str().unwrap();
 
         let ns_name = NamespacedName::from(file_name.to_str().unwrap());
 
@@ -93,6 +103,7 @@ impl TryFrom<&str> for ObjectListItem {
         };
 
         Ok(ObjectListItem {
+            resource_type: ResourceType::from_str(parent)?,
             name: ns_name,
             manifest_hash: hash,
             manifest,

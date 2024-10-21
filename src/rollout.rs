@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
+use std::ops::Deref;
 use std::str::FromStr;
 use anyhow::anyhow;
 use async_ssh2_tokio::ToSocketAddrsWithHostname;
@@ -119,15 +120,11 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
 
     let mut state = &mut refreshed_state(&cluster.name, &conns, &config).await?;
 
-    let mut catalogue = state.catalogue(None);
+    let mut catalogue = state.catalogue(None, &[]);
     
     let resources = catalogue.iter_mut().filter_map(|item| {
-        if item.resource_type == resource_type && item.object.manifest.is_some() {
-            let deserialized = match resource_type {
-                ResourceType::Deployment => serde_yaml::from_value::<Deployment>(item.object.manifest.clone().unwrap()).ok().map(|d| SupportedResources::Deployment(d)),
-                ResourceType::DaemonSet => serde_yaml::from_value::<DaemonSet>(item.object.manifest.clone().unwrap()).ok().map(|d| SupportedResources::DaemonSet(d)),
-                _ => panic!("unreachable")
-            };
+        if item.object.resource_type == resource_type && item.object.manifest.is_some() {
+            let deserialized =  SupportedResources::try_from(item.object.deref()).ok();
             // invalidate current state hash
             item.object.manifest_hash = "".to_string();
             // invalidate current state hash
