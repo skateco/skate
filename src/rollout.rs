@@ -163,64 +163,41 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
 
     let conns = conns.ok_or("failed to get cluster connections".to_string())?;
 
-    let mut state = refreshed_state(&cluster.name, &conns, &config).await?;
+    let mut state = &mut refreshed_state(&cluster.name, &conns, &config).await?;
 
-    // fetch and clone the existing resources as to_deploy
-    // alter the hash on the original state objects
-    // this will ensure a redeploy of everything since the hashes will not match
-    // and next deploy will work as normal
-
-
-    // ask question if all deployments or all daemonsets
-    let resources: Vec<SupportedResources> = match resource_type {
-        ResourceType::Deployment => {
-            let objects= get_objects(&state, |si|si.deployments.clone(), name.as_deref(), Some(&args.namespace));
-            let objects = objects.into_iter().map( |v| serde_yaml::from_value::<Deployment>(v.manifest.unwrap()).ok()).flatten().map(|d| SupportedResources::Deployment(d)).collect_vec();
-            let names = objects.iter().map(|o| o.name()).collect_vec();
-            taint_objects(
-                &mut state,
-                |si| si.deployments.as_deref_mut(),
-                names.clone()
-            );
-
-            taint_pods(
-                &mut state,
-                |o| {
-                    NamespacedName{
-                        name: o.labels.get("skate.io/deployment").unwrap_or(&"".to_string()).clone(),
-                        namespace: o.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone(),
-                    }
-                },
-                names
-            );
-
-
-            objects
+    let mut catalogue = state.catalogue(None);
+    
+    let resources = catalogue.iter_mut().filter_map(|item| {
+        if item.resource_type == resource_type && item.object.manifest.is_some() {
+            let deserialized = match resource_type {
+                ResourceType::Deployment => serde_yaml::from_value::<Deployment>(item.object.manifest.clone().unwrap()).ok().map(|d| SupportedResources::Deployment(d)),
+                ResourceType::DaemonSet => serde_yaml::from_value::<DaemonSet>(item.object.manifest.clone().unwrap()).ok().map(|d| SupportedResources::DaemonSet(d)),
+                _ => panic!("unreachable")
+            };
+            // invalidate current state hash
+            item.object.manifest_hash = "".to_string();
+            // invalidate current state hash
+            item.object.manifest = item.object.manifest.clone().and_then(|m| Some(taint_manifest(m)));
+            deserialized
+        } else {
+            None
+        }
+    }).collect_vec();
+    
+    let names = resources.iter().map(|s| s.name().clone()).collect_vec();
+    
+    taint_pods(
+        state,
+        |o| {
+            NamespacedName{
+                name: o.labels.get(&format!("skate.io/{}" , resource_type.to_string().to_ascii_lowercase())).unwrap_or(&"".to_string()).clone(),
+                namespace: o.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone(),
+            }
         },
-        ResourceType::DaemonSet => {
-            let objects= get_objects(&state, |si|si.daemonsets.clone(), name.as_deref(), Some(&args.namespace));
-            let objects = objects.into_iter().map( |v| serde_yaml::from_value::<DaemonSet>(v.manifest.unwrap()).ok()).flatten().map(|d| SupportedResources::DaemonSet(d)).collect_vec();
-            let names = objects.iter().map(|o| o.name()).collect_vec();
-            taint_objects(
-                &mut state,
-                |si| si.daemonsets.as_deref_mut(),
-                names.clone()
-            );
+        names,
+    );
+    
 
-            taint_pods(
-                &mut state,
-                |o| {
-                    NamespacedName{
-                        name: o.labels.get("skate.io/daemonset").unwrap_or(&"".to_string()).clone(),
-                        namespace: o.labels.get("skate.io/namespace").unwrap_or(&"".to_string()).clone(),
-                    }
-                },
-                names
-            );
-            objects
-        },
-        _ => panic!("unreachable")
-    };
     if resources.len() == 0 {
         return Err("No resources found".to_string().into())
     }

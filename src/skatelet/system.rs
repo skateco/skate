@@ -203,6 +203,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             manifest_hash: hash.unwrap_or("".to_string()),
             manifest: Some(yaml),
             created_at: s.created_at,
+            updated_at: s.updated_at,
             path: "".to_string(),
         })
     }).collect();

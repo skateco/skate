@@ -18,21 +18,21 @@ use crate::util::{metadata_name, NamespacedName};
 #[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString,PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum ResourceType {
-    #[strum(serialize="pod", serialize="pods")]
+    #[strum(serialize="pods", serialize="pod", to_string="pod")]
     Pod,
-    #[strum(serialize="deployment", serialize="deployments")]
+    #[strum(serialize="deployments", serialize="deployment", to_string="deployment")]
     Deployment,
-    #[strum(serialize="daemonset", serialize="daemonsets")]
+    #[strum(serialize="daemonsets", serialize="daemonset", to_string="daemonset")]
     DaemonSet,
-    #[strum(serialize="ingress")]
+    #[strum(serialize="ingress", to_string="ingress")]
     Ingress,
-    #[strum(serialize="cronjob", serialize="cronjobs")]
+    #[strum(serialize="cronjobs", serialize="cronjob", to_string="cronjob")]
     CronJob,
-    #[strum(serialize="secret", serialize="secrets")]
+    #[strum(serialize="secrets", serialize="secret", to_string="secret")]
     Secret,
-    #[strum(serialize="service", serialize="services")]
+    #[strum(serialize="services", serialize="service", to_string="service")]
     Service,
-    #[strum(serialize="clusterissuer", serialize="clusterissuers")]
+    #[strum(serialize="clusterissuers", serialize="clusterissuer", to_string="clusterissuer")]
     ClusterIssuer,
 }
 
