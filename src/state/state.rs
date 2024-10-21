@@ -461,9 +461,6 @@ impl ClusterState {
         res
     }
 
-    pub fn locate_daemonset(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
-        self.filter_pods(&|p| p.name == name && p.namespace() == namespace && p.labels.contains_key("skate.io/daemonset"))
-    }
 
     pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         // the pod manifest name is what podman will use to name the pod, thus has the namespace in it as a suffix

@@ -60,15 +60,6 @@ pub struct RestartArgs {
     pub yes: bool,
 }
 
-fn get_objects(state: &ClusterState,  selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: Option<&str>, namespace: Option<&str>) -> Vec<ObjectListItem> {
-    let objects = state.locate_objects(None, selector, name.as_deref(), namespace);
-    objects.iter().unique_by(|i| i.0.name.clone()).flat_map(|(o, _)| {
-        match &o.manifest {
-            Some(m) => Some(o.clone()),
-            None => None
-        }
-    }).collect()
-}
 
 fn taint_manifest(mut v: Value) -> Value {
     v["metadata"]["labels"]["skate.io/hash"] = Value::from("");
@@ -108,43 +99,6 @@ fn taint_pods(mut state: &mut ClusterState, name_selector: impl Fn(&PodmanPodInf
 
 }
 
-fn taint_objects(mut state: &mut ClusterState, object_selector: impl Fn(&mut SystemInfo) -> Option<&mut[ObjectListItem]>, names: Vec<NamespacedName>) {
-
-    state.nodes.iter_mut().for_each(|n|
-        match n.host_info.as_mut() {
-            Some(hi) => {
-                match hi.system_info.as_mut() {
-                    Some(si) => {
-                        let objects  = object_selector(si);
-                        match objects {
-                            Some(v) => {
-                                v.iter_mut().for_each(|item|
-                                    for name in &names {
-                                        if &item.name != name {
-                                            return
-                                        }
-
-                                        match &item.manifest {
-                                            Some(manifest) =>
-                                                item.manifest = Some(taint_manifest(manifest.clone())),
-                                            None => {}
-                                        }
-
-                                    }
-                                );
-                            }
-                            None => {}
-                        }
-                    },
-                    None => {}
-                };
-
-            }
-            None =>{}
-        }
-    )
-
-}
 
 pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
     let (resource_type, name) = args.resource.parse()?;
