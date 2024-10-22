@@ -19,7 +19,7 @@ use crate::resource::ResourceType;
 use crate::skate::{Distribution, exec_cmd, Platform};
 use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::system::podman::PodmanSecret;
-use crate::util::{hash_k8s_resource, NamespacedName};
+use crate::util::NamespacedName;
 
 
 #[derive(Debug, Args)]
@@ -181,7 +181,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
             Err(_) => return None
         };
         
-        let hash = manifest.metadata.labels.as_ref().and_then(|l| l.get("skate.io/hash").and_then(|hash|Some(hash.clone())));
+        let hash = manifest.metadata.labels.as_ref().and_then(|l| l.get("skate.io/hash").cloned());
 
         // if we want to redact the secret values.
         // removing for now since we don't store the state anyway.

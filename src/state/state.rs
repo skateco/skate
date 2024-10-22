@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fs::File;
-use std::ops::DerefMut;
 use std::path::Path;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
@@ -289,9 +288,7 @@ impl NodeState {
         }
 
         self.host_info.as_ref().and_then(|hi|
-            hi.system_info.as_ref().and_then(|si|
-                Some(!si.cordoned)
-            )).unwrap_or(true)
+            hi.system_info.as_ref().map(|si| !si.cordoned)).unwrap_or(true)
     }
 }
 
@@ -493,12 +490,9 @@ impl ClusterState {
     pub fn catalogue_mut(&mut self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem> {
         self.nodes.iter_mut()
             .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
-            .map(|n| n.host_info.as_mut().and_then(
-                |hi| hi.system_info.as_mut().and_then(
-                    |si|
-                        Some(extract_mut_catalog(&n.node_name, si, filter_types))
-                )
-            )).flatten().flatten()
+            .filter_map(|n| n.host_info.as_mut().and_then(
+                |hi| hi.system_info.as_mut().map(|si| extract_mut_catalog(&n.node_name, si, filter_types))
+            )).flatten()
             // sort by time descending
             .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
             // will ignore duplicates,
@@ -508,12 +502,9 @@ impl ClusterState {
     pub fn catalogue(&self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
         self.nodes.iter()
             .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
-            .map(|n| n.host_info.as_ref().and_then(
-                |hi| hi.system_info.as_ref().and_then(
-                    |si|
-                        Some(extract_catalog(&n.node_name, si, filter_types))
-                )
-            )).flatten().flatten()
+            .filter_map(|n| n.host_info.as_ref().and_then(
+                |hi| hi.system_info.as_ref().map(|si| extract_catalog(&n.node_name, si, filter_types))
+            )).flatten()
             // sort by time descending
             .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
             // will ignore duplicates,
@@ -542,12 +533,10 @@ fn extract_mut_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[Reso
             }
         )
         .flatten()
-        .map(|list|
+        .flat_map(|list|
             list.iter_mut()
                 .map(|o| MutCatalogueItem { object: o, node: n.to_string() })
-                .collect_vec()
-        )
-        .flatten().collect()
+                .collect_vec()).collect()
 }
 
 fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType]) -> Vec<CatalogueItem<'a>> {
@@ -571,12 +560,10 @@ fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType
             }
         )
         .flatten()
-        .map(|list|
+        .flat_map(|list|
             list.iter()
                 .map(|o| CatalogueItem { object: o, node: n.to_string() })
-                .collect_vec()
-        )
-        .flatten().collect()
+                .collect_vec()).collect()
 }
 
 // holds references to a resource

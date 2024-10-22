@@ -1,24 +1,20 @@
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::ops::Deref;
 use std::str::FromStr;
 use anyhow::anyhow;
-use async_ssh2_tokio::ToSocketAddrsWithHostname;
 use crate::config::Config;
 use crate::skate::ConfigFileArgs;
 use crate::ssh::cluster_connections;
 use clap::{Args, Subcommand};
 use dialoguer::Confirm;
 use itertools::Itertools;
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use serde_yaml::Value;
 use crate::errors::SkateError;
-use crate::filestore::ObjectListItem;
 use crate::refresh::refreshed_state;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skatelet::system::podman::PodmanPodInfo;
-use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use crate::util::NamespacedName;
 
@@ -67,34 +63,28 @@ fn taint_manifest(mut v: Value) -> Value {
     v
 }
 
-fn taint_pods(mut state: &mut ClusterState, name_selector: impl Fn(&PodmanPodInfo) -> NamespacedName, names: Vec<NamespacedName>) {
+fn taint_pods(state: &mut ClusterState, name_selector: impl Fn(&PodmanPodInfo) -> NamespacedName, names: Vec<NamespacedName>) {
 
     state.nodes.iter_mut().for_each(|n|
-        match n.host_info.as_mut() {
-            Some(hi) => {
-                match hi.system_info.as_mut() {
-                    Some(si) => {
-                        match &mut si.pods {
-                            Some(v) => {
-                                v.iter_mut().for_each(|item|
-                                    for name in &names {
-                                        if &name_selector(item) != name {
-                                            return
-                                        }
-                                        let mut labels=  item.labels.clone();
-                                        labels.insert("skate.io/hash".to_string(), "".to_string());
-                                        item.labels = labels;
-                                    }
-                                );
+        if let Some(hi) = n.host_info.as_mut() {
+            if let Some(si) = hi.system_info.as_mut() {
+                match &mut si.pods {
+                    Some(v) => {
+                        v.iter_mut().for_each(|item|
+                            for name in &names {
+                                if &name_selector(item) != name {
+                                    return
+                                }
+                                let mut labels=  item.labels.clone();
+                                labels.insert("skate.io/hash".to_string(), "".to_string());
+                                item.labels = labels;
                             }
-                            None => {}
-                        }
-                    },
+                        );
+                    }
                     None => {}
-                };
+                }
+            };
 
-            }
-            None =>{}
         }
     )
 
@@ -114,11 +104,11 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
 
     let cluster = config.active_cluster(config.current_context.clone())?;
 
-    let (conns, _) = cluster_connections(&cluster).await;
+    let (conns, _) = cluster_connections(cluster).await;
 
     let conns = conns.ok_or("failed to get cluster connections".to_string())?;
 
-    let mut state = &mut refreshed_state(&cluster.name, &conns, &config).await?;
+    let state = &mut refreshed_state(&cluster.name, &conns, &config).await?;
 
     let mut catalogue = state.catalogue_mut(None, &[]);
     
@@ -128,7 +118,7 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
             // invalidate current state hash
             item.object.manifest_hash = "".to_string();
             // invalidate current state hash
-            item.object.manifest = item.object.manifest.clone().and_then(|m| Some(taint_manifest(m)));
+            item.object.manifest = item.object.manifest.clone().map(taint_manifest);
             deserialized
         } else {
             None
@@ -149,11 +139,11 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
     );
     
 
-    if resources.len() == 0 {
+    if resources.is_empty() {
         return Err("No resources found".to_string().into())
     }
 
-    if resources.len() > 0 {
+    if !resources.is_empty() {
 
         println!("{} {} resources found\n", resources.len(), resource_type);
         for r in &resources {
@@ -177,7 +167,7 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
 
         let scheduler = DefaultScheduler{};
 
-        let _ = scheduler.schedule(&conns, &mut state, resources, args.dry_run).await?;
+        let _ = scheduler.schedule(&conns, state, resources, args.dry_run).await?;
     }
 
 
@@ -196,18 +186,18 @@ impl From<OsString> for ResourceArg {
 impl ResourceArg {
     pub fn parse(&self) -> Result<(ResourceType, Option<String>), Box<dyn Error>> {
         let parts = self.0.splitn(2, "/").collect_vec();
-        if parts.len() == 0 || parts.len() > 2 {
+        if parts.is_empty() || parts.len() > 2 {
             return Err(anyhow!("invalid resource format").into())
         }
 
         let resource= parts[0];
 
         let name = if parts.len() == 2 {
-            parts.last().and_then(|s| Some(s.to_string()))
+            parts.last().map(|s| s.to_string())
         }else { None};
 
 
-        let resource = ResourceType::from_str(&resource)?;
+        let resource = ResourceType::from_str(resource)?;
 
         Ok((resource, name))
     }

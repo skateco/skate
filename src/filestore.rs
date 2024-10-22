@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::{kind, Metadata, Resource};
+use k8s_openapi::{kind, Metadata};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Secret, Service};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use tabled::Tabled;
 use crate::errors::SkateError;
-use crate::resource::{ResourceType, SupportedResources};
+use crate::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::{metadata_name, NamespacedName};
 
@@ -45,7 +45,7 @@ pub struct ObjectListItem {
 }
 
 impl ObjectListItem {
-    fn from_k8s_resource(res:  &(impl Metadata<Ty=ObjectMeta> + Resource + Serialize), path: Option<&str>) -> Self {
+    fn from_k8s_resource(res:  &(impl Metadata<Ty=ObjectMeta> + Serialize), path: Option<&str>) -> Self {
 
         let kind = kind(res);
         
@@ -99,7 +99,7 @@ impl TryFrom<&str> for ObjectListItem {
         let created_at = dir_metadata.created()?;
         let updated_at = match std::fs::metadata(&manifest_file_name) {
             Ok(m) => m.modified()?,
-            Err(_) => created_at.clone()
+            Err(_) => created_at
         };
 
         Ok(ObjectListItem {

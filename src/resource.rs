@@ -9,7 +9,7 @@ use std::error::Error;
 use anyhow::anyhow;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::HashMap;
-use k8s_openapi::{ClusterResourceScope, Resource};
+use k8s_openapi::Resource;
 use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
@@ -65,7 +65,7 @@ impl TryFrom<&ObjectListItem> for SupportedResources {
         if value.manifest.is_none() {
             return Err(anyhow!("manifest was empty").into());
         }
-        Ok(SupportedResources::try_from(value.manifest.as_ref().unwrap())?)
+        SupportedResources::try_from(value.manifest.as_ref().unwrap())
     }
 }
 
@@ -290,7 +290,7 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let mut extra_labels = HashMap::from([
+                let extra_labels = HashMap::from([
                     ("skate.io/cronjob".to_string(), original_name)
                 ]);
                 c.metadata = Self::fixup_metadata(c.metadata.clone(), None)?;
@@ -330,7 +330,7 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let mut extra_labels = HashMap::from([]);
+                let extra_labels = HashMap::from([]);
 
                 i.metadata = Self::fixup_metadata(i.metadata.clone(), Some(extra_labels))?;
                 // set name to be name.namespace
@@ -359,7 +359,7 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let mut extra_labels = HashMap::from([
+                let extra_labels = HashMap::from([
                     ("skate.io/deployment".to_string(), original_name.clone())
                 ]);
                 d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
@@ -393,7 +393,7 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let mut extra_labels = HashMap::from([
+                let extra_labels = HashMap::from([
                     ("skate.io/daemonset".to_string(), original_name.clone())
                 ]);
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
@@ -446,7 +446,7 @@ impl SupportedResources {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    use crate::cron::cron_to_systemd;
+    
     use crate::resource::ResourceType;
 
     #[test]

@@ -72,7 +72,7 @@ pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Co
         }
     );
 
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         return Err(SkateError::Multi(errors));
     }
 

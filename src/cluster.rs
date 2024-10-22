@@ -3,8 +3,6 @@ use crate::skate::ConfigFileArgs;
 use crate::ssh::{cluster_connections, SshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
-use std::ops::Deref;
-use itertools::Itertools;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::resource::{ResourceType, SupportedResources};
@@ -50,7 +48,7 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
 
     let cluster = config.active_cluster(config.current_context.clone())?;
 
-    let (conns, _) = cluster_connections(&cluster).await;
+    let (conns, _) = cluster_connections(cluster).await;
 
     let conns = conns.ok_or("failed to get cluster connections".to_string())?;
 
@@ -71,15 +69,14 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
         ResourceType::ClusterIssuer,
     ]);
 
-    let all_manifests: Result<Vec<SupportedResources>, _> = catalogue.iter().map(|item| SupportedResources::try_from(item.object.deref())).collect();
+    let all_manifests: Result<Vec<SupportedResources>, _> = catalogue.iter().map(|item| SupportedResources::try_from(item.object)).collect();
     let all_manifests = all_manifests?;
 
 
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = filtered_state.nodes.into_iter().filter(|n|
-        exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap()
-    ).collect();
+    filtered_state.nodes.retain(|n|
+        exclude_donor_node.is_none() || n.node_name != exclude_donor_node.unwrap());
     
     println!("rescheduling {} resources across {} nodes", all_manifests.len(), filtered_state.nodes.len());
 

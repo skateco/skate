@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
@@ -19,7 +18,7 @@ use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, EQUAL_EMOJI, hash_k8s_resource, INFO_EMOJI, metadata_name, NamespacedName};
+use crate::util::{CROSS_EMOJI, hash_k8s_resource, metadata_name, NamespacedName};
 
 
 #[derive(Debug)]
@@ -757,7 +756,7 @@ impl DefaultScheduler {
     }
     
     
-    async fn apply(plan: ApplyPlan,  conns: &SshClients, mut state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn apply(plan: ApplyPlan,  conns: &SshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
         let mut result: Vec<ScheduledOperation> = vec!();
 
@@ -873,7 +872,7 @@ impl DefaultScheduler {
     }
 
 
-    async fn schedule_one(conns: &SshClients, mut state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
@@ -885,15 +884,15 @@ impl DefaultScheduler {
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: &SshClients, mut state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
+    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(conns, &mut state, object.clone(), dry_run).await {
+            match Self::schedule_one(conns, state, object.clone(), dry_run).await {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }
                 Err(err) => {
-                    println!("{} failed to schedule {} {} : {}", CROSS_EMOJI, object.to_string(), object.name(), err);
+                    println!("{} failed to schedule {} {} : {}", CROSS_EMOJI, object, object.name(), err);
                     results.placements = [results.placements, vec![ScheduledOperation::new(
                         OpType::Info,
                         object.clone()

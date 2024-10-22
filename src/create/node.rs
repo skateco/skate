@@ -9,7 +9,6 @@ use itertools::Itertools;
 use std::io::Write;
 use base64::Engine;
 use std::net::ToSocketAddrs;
-use std::ops::Deref;
 use crate::apply::{apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::oci;
@@ -172,7 +171,7 @@ async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node
 
 
 
-    let all_manifests: Result<Vec<_>, _> = catalogue.into_iter().map(|item| SupportedResources::try_from(item.object.deref())).collect();
+    let all_manifests: Result<Vec<_>, _> = catalogue.into_iter().map(|item| SupportedResources::try_from(item.object)).collect();
     let all_manifests = all_manifests?;
     
     println!("propagating {} resources", all_manifests.len());
