@@ -10,7 +10,6 @@
     - [ ] Respect terminationGracePeriodSeconds when killing pods.
       Possibly already done by podman.
     - [ ] Deployment, Daemonset labels arent respected, need to somehow be added to pods, perhaps prefixed
-    - [ ] Drain node
 - Pods
     - [ ] Store manifest in store so CNI plugin can get access
 - CronJob
