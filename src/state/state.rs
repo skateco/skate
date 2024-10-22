@@ -489,7 +489,9 @@ impl ClusterState {
     // does not include pods created due to another resource being applied
     pub fn catalogue_mut(&mut self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem> {
         self.nodes.iter_mut()
-            .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
+            .filter(|n|
+                filter_node.is_none() || n.node_name == filter_node.unwrap()
+            )
             .filter_map(|n| n.host_info.as_mut().and_then(
                 |hi| hi.system_info.as_mut().map(|si| extract_mut_catalog(&n.node_name, si, filter_types))
             )).flatten()
@@ -501,7 +503,9 @@ impl ClusterState {
     
     pub fn catalogue(&self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
         self.nodes.iter()
-            .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
+            .filter(|n|
+                filter_node.is_none() || n.node_name == filter_node.unwrap()
+            )
             .filter_map(|n| n.host_info.as_ref().and_then(
                 |hi| hi.system_info.as_ref().map(|si| extract_catalog(&n.node_name, si, filter_types))
             )).flatten()
@@ -512,17 +516,24 @@ impl ClusterState {
     }
 }
 
+macro_rules! extract_mappings {
+    ($si: ident, $suffixFunc: ident) => {
+        vec!(
+            (ResourceType::DaemonSet, $si.daemonsets.$suffixFunc()),
+            (ResourceType::Deployment, $si.deployments.$suffixFunc()),
+            (ResourceType::CronJob, $si.cronjobs.$suffixFunc()),
+            (ResourceType::Ingress, $si.ingresses.$suffixFunc()),
+            (ResourceType::Service, $si.services.$suffixFunc()),
+            (ResourceType::Secret, $si.secrets.$suffixFunc()),
+            (ResourceType::ClusterIssuer, $si.cluster_issuers.$suffixFunc()),
+            )
+    };
+}
+
 fn extract_mut_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = vec!(
-        (ResourceType::DaemonSet, si.daemonsets.as_mut()),
-        (ResourceType::Deployment, si.deployments.as_mut()),
-        (ResourceType::CronJob, si.cronjobs.as_mut()),
-        (ResourceType::Ingress, si.ingresses.as_mut()),
-        (ResourceType::Service, si.services.as_mut()),
-        (ResourceType::Secret, si.secrets.as_mut()),
-    );
+    let mapping = extract_mappings!(si, as_mut);
 
 
     mapping.into_iter()
@@ -542,14 +553,7 @@ fn extract_mut_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[Reso
 fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType]) -> Vec<CatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = vec!(
-        (ResourceType::DaemonSet, si.daemonsets.as_ref()),
-        (ResourceType::Deployment, si.deployments.as_ref()),
-        (ResourceType::CronJob, si.cronjobs.as_ref()),
-        (ResourceType::Ingress, si.ingresses.as_ref()),
-        (ResourceType::Service, si.services.as_ref()),
-        (ResourceType::Secret, si.secrets.as_ref()),
-    );
+    let mapping = extract_mappings!(si, as_ref);
 
 
     mapping.into_iter()
