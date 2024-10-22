@@ -63,10 +63,6 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
 
     
     let catalogue = state.catalogue(None, &[
-        ResourceType::Ingress,
-        ResourceType::Service,
-        ResourceType::Secret,
-        ResourceType::ClusterIssuer,
     ]);
 
     let all_manifests: Result<Vec<SupportedResources>, _> = catalogue.iter().map(|item| SupportedResources::try_from(item.object)).collect();
