@@ -120,7 +120,7 @@ pub async fn restart(args: RestartArgs) -> Result<(), SkateError> {
 
     let mut state = &mut refreshed_state(&cluster.name, &conns, &config).await?;
 
-    let mut catalogue = state.catalogue(None, &[]);
+    let mut catalogue = state.catalogue_mut(None, &[]);
     
     let resources = catalogue.iter_mut().filter_map(|item| {
         if item.object.resource_type == resource_type && item.object.manifest.is_some() {

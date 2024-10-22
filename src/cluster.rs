@@ -54,14 +54,14 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
 
     let conns = conns.ok_or("failed to get cluster connections".to_string())?;
 
-    let mut state = refreshed_state(&cluster.name, &conns, &config).await?;
+    let state = refreshed_state(&cluster.name, &conns, &config).await?;
 
-    propagate_existing_resources(&conns, None, &mut state, args.dry_run).await?;
+    propagate_existing_resources(&conns, None, &state, args.dry_run).await?;
 
     Ok(())
 }
 
-async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &mut ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
+async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
 
     
     let catalogue = state.catalogue(None, &[

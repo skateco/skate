@@ -1,12 +1,15 @@
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use itertools::Itertools;
 use node::CreateNodeArgs;
 use crate::config::{Cluster, Config};
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
+use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::JobArgs;
 use crate::ssh;
+use crate::util::NamespacedName;
 
 mod node;
 
@@ -124,13 +127,21 @@ async fn create_job(args: CreateJobArgs) -> Result<(), SkateError> {
         Some(c) => c
     };
 
-    let state = refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
+    let state = &refreshed_state(&cluster.name, &conns, &config).await.expect("failed to refresh state");
+    
+    
 
-    let cjobs = state.locate_objects(None, |si| { si.cronjobs.clone() }, Some(from_name), Some(&args.namespace));
+    let search_name = NamespacedName{name:from_name.to_string(), namespace: args.namespace.clone()};
+    
+    let cjobs = state.catalogue(None, &[ResourceType::CronJob]).into_iter().filter(|c| c.object.name == search_name).collect_vec();
+    
     if cjobs.is_empty() {
         return Err(anyhow!("no cronjobs found by name of {} in namespace {}", args.args.from, args.namespace).into());
     }
-    let (_info, node) = cjobs.first().unwrap();
+    
+    let cjob = cjobs.first().unwrap();
+    
+    let node = state.nodes.iter().find(|n| n.node_name == cjob.node).unwrap();
 
     let conn = conns.find(&node.node_name).unwrap();
 

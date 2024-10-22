@@ -152,11 +152,11 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     // Refresh state so that we can apply coredns later
-    let mut state = refreshed_state(&cluster.name, all_conns, &config).await?;
+    let state = refreshed_state(&cluster.name, all_conns, &config).await?;
 
     install_cluster_manifests(&args.config, &cluster).await?;
 
-    propagate_static_resources(&config, all_conns, &node, &mut state).await?;
+    propagate_static_resources(&config, all_conns, &node, &state).await?;
 
     Ok(())
 }
@@ -165,7 +165,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
 // could be to take only resources that are the same on all nodes, log others
-async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
+async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &ClusterState) -> Result<(), Box<dyn Error>> {
 
     
     let catalogue = state.catalogue(None, &[ResourceType::Ingress, ResourceType::Service, ResourceType::Secret]);

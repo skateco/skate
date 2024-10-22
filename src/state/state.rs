@@ -490,11 +490,26 @@ impl ClusterState {
 
     // the catalogue is the list of 'applied' resources. 
     // does not include pods created due to another resource being applied
-    pub fn catalogue(&mut self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
+    pub fn catalogue_mut(&mut self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem> {
         self.nodes.iter_mut()
             .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
             .map(|n| n.host_info.as_mut().and_then(
                 |hi| hi.system_info.as_mut().and_then(
+                    |si|
+                        Some(extract_mut_catalog(&n.node_name, si, filter_types))
+                )
+            )).flatten().flatten()
+            // sort by time descending
+            .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
+            // will ignore duplicates,
+            .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name)).collect()
+    }
+    
+    pub fn catalogue(&self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
+        self.nodes.iter()
+            .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
+            .map(|n| n.host_info.as_ref().and_then(
+                |hi| hi.system_info.as_ref().and_then(
                     |si|
                         Some(extract_catalog(&n.node_name, si, filter_types))
                 )
@@ -506,7 +521,7 @@ impl ClusterState {
     }
 }
 
-fn extract_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[ResourceType]) -> Vec<CatalogueItem<'a>> {
+fn extract_mut_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
     let mapping = vec!(
@@ -529,6 +544,35 @@ fn extract_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[Resource
         .flatten()
         .map(|list|
             list.iter_mut()
+                .map(|o| MutCatalogueItem { object: o, node: n.to_string() })
+                .collect_vec()
+        )
+        .flatten().collect()
+}
+
+fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType]) -> Vec<CatalogueItem<'a>> {
+    let all_types = filter_types.is_empty();
+
+    let mapping = vec!(
+        (ResourceType::DaemonSet, si.daemonsets.as_ref()),
+        (ResourceType::Deployment, si.deployments.as_ref()),
+        (ResourceType::CronJob, si.cronjobs.as_ref()),
+        (ResourceType::Ingress, si.ingresses.as_ref()),
+        (ResourceType::Service, si.services.as_ref()),
+        (ResourceType::Secret, si.secrets.as_ref()),
+    );
+
+
+    mapping.into_iter()
+        .filter_map(|c|
+            match all_types || filter_types.contains(&c.0) {
+                true => Some(c.1),
+                false => None
+            }
+        )
+        .flatten()
+        .map(|list|
+            list.iter()
                 .map(|o| CatalogueItem { object: o, node: n.to_string() })
                 .collect_vec()
         )
@@ -536,8 +580,13 @@ fn extract_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[Resource
 }
 
 // holds references to a resource
-pub struct CatalogueItem<'a> {
+pub struct MutCatalogueItem<'a> {
     pub object: &'a mut ObjectListItem,
+    pub node: String,
+}
+
+pub struct CatalogueItem<'a> {
+    pub object: &'a ObjectListItem,
     pub node: String,
 }
 
