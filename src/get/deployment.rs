@@ -41,8 +41,8 @@ impl Lister<DeploymentListItem> for DeploymentLister {
                 }
 
                 let res = {
-                    let filterable: Box<dyn NameFilters> = Box::new(&p);
-                    filterable.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
+                    let pref = &p;
+                    pref.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
                 }; if res {
                     let pod_ns = p.labels.get("skate.io/namespace").unwrap_or(&"default".to_string()).clone();
                     return Some((NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()), p));

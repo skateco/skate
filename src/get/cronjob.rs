@@ -33,8 +33,7 @@ impl NameFilters for CronListItem {
 impl Lister<CronListItem> for CronjobsLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<CronListItem> {
         si.cronjobs.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
-            let filterable: Box<dyn NameFilters> = Box::new(*j);
-            filterable.filter_names(id, ns)
+            j.filter_names(id, ns)
         }).map(|item| {
             let item = item.clone();
             let cronjob: CronJob = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();

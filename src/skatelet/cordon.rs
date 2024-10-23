@@ -20,7 +20,9 @@ pub struct UncordonArgs{}
 
 pub fn uncordon(_args: UncordonArgs) -> Result<(), SkateError> {
     let path = PathBuf::from(VAR_PATH).join("CORDON");
-    std::fs::remove_file(path)?;
+    if path.exists() {
+        std::fs::remove_file(path)?;
+    }
     Ok(())
 }
 
