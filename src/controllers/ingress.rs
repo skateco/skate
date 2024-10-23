@@ -1,24 +1,26 @@
-use std::error::Error;
-use std::io::Write;
-use std::{fs, process};
-use std::process::Stdio;
+use crate::exec::{ShellExec};
+use crate::filestore::Store;
+use crate::spec::cert::ClusterIssuer;
+use crate::util::metadata_name;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
-use crate::filestore::{FileStore, Store};
-use crate::skate::exec_cmd;
-use crate::spec::cert::ClusterIssuer;
-use crate::util::metadata_name;
+use std::error::Error;
+use std::io::Write;
+use std::process::Stdio;
+use std::{fs, process};
 
 pub struct IngressController {
-    store: Box<dyn Store>
+    store: Box<dyn Store>,
+    execer: Box<dyn ShellExec>,
 }
 
 impl IngressController {
-    pub fn new(store: Box<dyn Store>) -> Self {
+    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
         IngressController {
-            store
+            store,
+            execer,
         }
     }
 
@@ -26,7 +28,7 @@ impl IngressController {
         let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
         let name = &metadata_name(&ingress).to_string();
 
-        exec_cmd("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
+        self.execer.exec("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
 
         // manifest goes into store
         self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
@@ -69,7 +71,7 @@ impl IngressController {
             }
         }
 
-        Self::reload()?;
+        self.reload()?;
 
         Ok(())
     }
@@ -84,22 +86,22 @@ impl IngressController {
 
         self.store.remove_object("ingress", &ns_name.to_string())?;
 
-        Self::reload()?;
+        self.reload()?;
 
         Ok(())
     }
 
-    pub fn reload() -> Result<(), Box<dyn Error>> {
+    pub fn reload(&self) -> Result<(), Box<dyn Error>> {
 
         // trigger SIGHUP to ingress container
         // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
-        let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
+        let id = self.execer.exec("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
 
         if id.is_empty() {
             return Err(anyhow!("no ingress container found").into());
         }
 
-        let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
+        let _ = self.execer.exec("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
         Ok(())
     }
 

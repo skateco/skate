@@ -4,6 +4,7 @@ use clap::{Args, Subcommand};
 
 use crate::controllers::cronjob::CronjobController;
 use crate::errors::SkateError;
+use crate::exec::RealExec;
 use crate::filestore::FileStore;
 
 #[derive(Debug, Args, Clone)]
@@ -52,7 +53,7 @@ pub fn create_job(create_args: CreateArgs, args: JobArgs) -> Result<(), SkateErr
 pub fn create_job_cronjob(create_args: CreateArgs, args: JobArgs, from_name:&str) -> Result<(), SkateError> {
     // the pod.yaml is already in the store, so we can just run that
 
-    let ctrl = CronjobController::new(Box::new(FileStore::new()));
+    let ctrl = CronjobController::new(Box::new(FileStore::new()), Box::new(RealExec{}));
 
     ctrl.run(from_name, &create_args.namespace, args.wait)?;
     Ok(())

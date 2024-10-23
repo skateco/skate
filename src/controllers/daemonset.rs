@@ -1,18 +1,22 @@
 use crate::controllers::pod::PodController;
-use crate::skate::exec_cmd;
+use crate::exec::ShellExec;
+use crate::filestore::Store;
+use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use std::error::Error;
-use crate::filestore::{FileStore, Store};
-use crate::util::metadata_name;
 
 pub struct DaemonSetController {
-    store: Box<dyn Store>
+    store: Box<dyn Store>,
+    execer: Box<dyn ShellExec>,
+    pod_controller: PodController
 }
 
 impl DaemonSetController {
-    pub fn new(store: Box<dyn Store>) -> Self {
+    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>, pod_controller: PodController) -> Self {
         DaemonSetController {
             store,
+            execer,
+            pod_controller,
         }
     }
 
@@ -32,12 +36,11 @@ impl DaemonSetController {
         let name = ds.metadata.name.clone().unwrap();
         let ns = ds.metadata.namespace.clone().unwrap_or("default".to_string());
 
-        let ids = exec_cmd("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
+        let ids = self.execer.exec("podman", &["pod", "ls", "--filter", &format!("label=skate.io/namespace={}", ns), "--filter", &format!("label=skate.io/daemonset={}", name), "-q"])?;
         let ids = ids.split("\n").map(|l| l.trim()).filter(|l| !l.is_empty()).collect::<Vec<&str>>();
 
-        let pod_ctrl = PodController::new();
 
-        pod_ctrl.delete_podman_pods(ids, grace_period)?;
+        self.pod_controller.delete_podman_pods(ids, grace_period)?;
         let _ = self.store.remove_object("daemonset", &metadata_name(&ds).to_string())?;
         Ok(())
     }

@@ -10,7 +10,7 @@ use crate::util::{lock_file, spawn_orphan_process};
 use std::io::prelude::*;
 use serde_json::Value;
 use crate::errors::SkateError;
-use crate::skate::exec_cmd;
+use crate::exec::{RealExec, ShellExec};
 use crate::skatelet::skatelet::log_panic;
 
 #[derive(Debug, Subcommand)]
@@ -114,13 +114,15 @@ pub fn add_misc_host(ip: String, domain: String, tag: String) -> Result<(), Skat
 pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), SkateError> {
     ensure_skatelet_dns_conf_dir();
     let log_tag = format!("{}::add", container_id);
+    
+    let execer = RealExec{};
 
     info!("{} dns add for {} {:?}", log_tag, container_id, supplied_ip);
 
     // TODO - store pod info in store, if no info, break retry loop
     let (extracted_ip, json) = retry(10, || {
         debug!("{} inspecting container {}",log_tag, container_id);
-        let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()]).map_err(|e| (true, e))?;
+        let output = execer.exec("timeout", &["0.2", "podman", "inspect", container_id.as_str()]).map_err(|e| (true, e))?;
         let container_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e)).map_err(|e| (false, e.into()))?;
         let is_infra = container_json[0]["IsInfra"].as_bool().unwrap();
         if !is_infra {
@@ -138,7 +140,7 @@ pub fn add(container_id: String, supplied_ip: Option<String>) -> Result<(), Skat
 
 
         debug!("{} inspecting pod", log_tag);
-        let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()]).map_err(|e| (true, e))?;
+        let output = execer.exec("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()]).map_err(|e| (true, e))?;
         let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e)).map_err(|e| (false, e.into()))?;
         Ok((ip, pod_json))
     })?;
@@ -230,9 +232,10 @@ fn extract_skate_ip(json: Value) -> Option<String> {
 }
 
 pub fn wait_and_enable_healthy(container_id: String) -> Result<(), SkateError> {
+    let execer = RealExec{};
     let log_tag = format!("{}::enable", container_id);
     debug!("{} inspecting container {}",log_tag, container_id);
-    let output = exec_cmd("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
+    let output = execer.exec("timeout", &["0.2", "podman", "inspect", container_id.as_str()])?;
     let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
     let pod = json[0]["Pod"].as_str();
     if pod.is_none() {
@@ -241,7 +244,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), SkateError> {
     }
 
     debug!("{} inspecting pod", log_tag);
-    let output = exec_cmd("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
+    let output = execer.exec("timeout", &["0.2", "podman", "pod", "inspect", pod.unwrap()])?;
     let pod_json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
 
     let containers: Vec<_> = pod_json["Containers"].as_array().ok_or_else(|| anyhow!("no containers found"))?.iter().map(|c|
@@ -253,7 +256,7 @@ pub fn wait_and_enable_healthy(container_id: String) -> Result<(), SkateError> {
     let mut healthy = false;
     for _ in 0..60 {
         debug!("{} inspecting all pod containers",log_tag);
-        let output = exec_cmd("timeout", &args)?;
+        let output = execer.exec("timeout", &args)?;
         let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
 
         // Check json for [*].State.Health.Status == "healthy"
@@ -333,12 +336,13 @@ pub struct RemoveArgs {
 
 // remove prints the ip of any dns entry that the container or pod had
 pub fn remove(args: RemoveArgs) -> Result<(), SkateError> {
+    let execer = RealExec{};
     let tag = {
         if args.container_id.is_some() {
             args.container_id.unwrap()
         } else if args.pod_id.is_some() {
             // get infra container
-            let output = exec_cmd("podman", &["pod", "inspect", &args.pod_id.unwrap()])?;
+            let output = execer.exec("podman", &["pod", "inspect", &args.pod_id.unwrap()])?;
             let json: serde_json::Value = serde_json::from_str(&output).map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
             let infra_container_id = json["InfraContainerID"].as_str().ok_or_else(|| anyhow!("no infra container found"))?;
             infra_container_id.to_string()
@@ -396,13 +400,14 @@ pub fn remove(args: RemoveArgs) -> Result<(), SkateError> {
 }
 
 pub fn reload() -> Result<(), SkateError> {
-    let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=coredns", "-q"])?;
+    let execer = RealExec{};
+    let id = execer.exec("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=coredns", "-q"])?;
 
     if id.is_empty() {
         return Err(anyhow!("no coredns container found").into());
     }
 
     // doesn't seem to work
-    let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &id])?;
+    let _ = execer.exec("podman", &["kill", "--signal", "HUP", &id])?;
     Ok(())
 }

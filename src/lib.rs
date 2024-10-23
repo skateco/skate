@@ -30,6 +30,7 @@ pub mod errors;
 mod cluster;
 mod rollout;
 mod resource;
+mod exec;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

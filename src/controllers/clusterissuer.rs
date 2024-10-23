@@ -36,7 +36,7 @@ impl ClusterIssuerController {
         }
         // need to retemplate nginx.conf
         self.ingress_controller.render_nginx_conf()?;
-        IngressController::reload()?;
+        self.ingress_controller.reload()?;
 
         Ok(())
     }
@@ -48,7 +48,7 @@ impl ClusterIssuerController {
 
         // need to retemplate nginx.conf
         self.ingress_controller.render_nginx_conf()?;
-        IngressController::reload()?;
+        self.ingress_controller.reload()?;
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::skate::exec_cmd;
+use crate::exec::{RealExec, ShellExec};
 use crate::util::NamespacedName;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
@@ -130,7 +130,8 @@ pub fn sync(args: SyncArgs) -> Result<(), SkateError> {
     }
 
     // reload keepalived
-    let _ = exec_cmd("systemctl", &["reload", "keepalived"])?;
+    let execer = RealExec{};
+    let _ = execer.exec("systemctl", &["reload", "keepalived"])?;
     Ok(())
 }
 
