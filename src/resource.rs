@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use k8s_openapi::Resource;
 use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::SshClients;
+use crate::ssh::{SshClient, SshClients};
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
 

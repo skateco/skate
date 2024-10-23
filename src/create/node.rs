@@ -16,7 +16,7 @@ use crate::refresh::refreshed_state;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
-use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
+use crate::ssh::{cluster_connections, node_connection, RealSsh, SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -231,7 +231,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 }
 
 // TODO don't run things unless they need to be
-async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &RealSsh, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
@@ -327,7 +327,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     Ok(())
 }
 
-async fn setup_cni(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+async fn setup_cni(conn: &RealSsh, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
     conn.execute_stdout("sudo apt-get install -y containernetworking-plugins", true, true).await?;
 
     let cni = include_str!("../resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
@@ -347,7 +347,7 @@ async fn setup_cni(conn: &SshClient, gateway: String, subnet_cidr: String) -> Re
     Ok(())
 }
 
-async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
+async fn install_oci_hooks(conn: &RealSsh) -> Result<(), Box<dyn Error>> {
     conn.execute_stdout("sudo mkdir -p /usr/share/containers/oci/hooks.d", true, true).await?;
 
     let oci_poststart_hook = oci::HookConfig {
@@ -393,7 +393,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+async fn setup_netavark(conn: &RealSsh, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
     println!("installing netavark");
     // // The netavark plugin isn't actually used right now but we'll put it there just in case.
     // // We'll use an oci hook instead.
@@ -417,7 +417,7 @@ async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) 
     Ok(())
 }
 
-async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
+async fn create_replace_routes_file(conn: &RealSsh, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo mkdir -p /etc/skate";
     conn.execute_stdout(cmd, true, true).await?;
 

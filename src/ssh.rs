@@ -21,20 +21,32 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use crate::resource::ResourceType;
 
+pub trait SshClient {
+    async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>>;
+    async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>>;
+    async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>>;
+    async fn remove_resource(&self, resource_type: ResourceType, name: &str, namespace: &str) -> Result<(String, String), Box<dyn Error>>;
+    async fn remove_resource_by_manifest(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>>;
+    async fn execute_stdout(&self, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>>;
+    // TODO-merge this into execute_stdout
+    async fn execute_noisy(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
+    async fn execute(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
+}
+
 #[derive(Clone)]
-pub struct SshClient {
+pub struct RealSsh {
     pub node_name: String,
     pub client: Client,
 }
 
-impl Debug for SshClient {
+impl Debug for RealSsh {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("SshClient").field("node_name", &self.node_name).finish()
     }
 }
 
 pub struct SshClients {
-    pub clients: Vec<SshClient>,
+    pub clients: Vec<RealSsh>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,8 +80,25 @@ impl HostInfo {
     }
 }
 
-impl SshClient {
-    pub async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>> {
+impl RealSsh {
+    fn print_crypto_vec(self: &RealSsh, data: &CryptoVec, prefix_output: bool, prev_last_char: char) -> char {
+        let binding = data.to_vec();
+        let s = String::from_utf8_lossy(&binding);
+        if prefix_output && prev_last_char == '\n' {
+            print!("{} | {}", self.node_name, s);
+        } else {
+            print!("{}", s);
+        }
+        if s.len() > 0 {
+            s.chars().last().unwrap()
+        } else {
+            prev_last_char
+        }
+    }
+}
+
+impl SshClient for RealSsh {
+    async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>> {
         let command = r#"
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
@@ -128,7 +157,6 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     },
                     "sys" => {
                         if !v.is_empty() {
-
                             match general_purpose::STANDARD.decode(v) {
                                 Ok(v) => {
                                     if let Ok(sys_info) = serde_json::from_slice(&v) {
@@ -136,12 +164,10 @@ echo ovs="$(cat /tmp/ovs-$$)";
                                     }
                                 }
                                 Err(e) => {
-                                // TODO
+                                    // TODO
                                 }
                             };
-
                         }
-
                     }
                     "ovs" => host_info.ovs_version = match v {
                         "" => None,
@@ -170,8 +196,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
 
         Ok(host_info)
     }
-
-    pub async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
+    async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
 
         // TODO - download from bucket etc
 
@@ -204,7 +229,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
 
         Ok(())
     }
-    pub async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
+    async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
         let base64_manifest = general_purpose::STANDARD.encode(manifest);
         let result = self.client.execute(&format!("echo '{}'| base64 --decode|sudo skatelet apply -", base64_manifest)).await?;
         match result.exit_status {
@@ -220,8 +245,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
             }
         }
     }
-
-    pub async fn remove_resource(&self, resource_type: ResourceType, name: &str, namespace: &str) -> Result<(String, String), Box<dyn Error>> {
+    async fn remove_resource(&self, resource_type: ResourceType, name: &str, namespace: &str) -> Result<(String, String), Box<dyn Error>> {
         let result = self.client.execute(&format!("sudo skatelet delete {} --name {} --namespace {}", resource_type.to_string().to_lowercase(), name, namespace)).await?;
         match result.exit_status {
             0 => {
@@ -236,8 +260,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
             }
         }
     }
-
-    pub async fn remove_resource_by_manifest(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
+    async fn remove_resource_by_manifest(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>> {
         let base64_manifest = general_purpose::STANDARD.encode(manifest);
         let result = self.client.execute(&format!("echo '{}' |base64  --decode|sudo skatelet delete -", base64_manifest)).await?;
         match result.exit_status {
@@ -253,23 +276,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
             }
         }
     }
-
-    fn print_crypto_vec(self: &SshClient, data: &CryptoVec, prefix_output: bool, prev_last_char: char) -> char {
-        let binding = data.to_vec();
-        let s = String::from_utf8_lossy(&binding);
-        if prefix_output && prev_last_char == '\n' {
-            print!("{} | {}", self.node_name, s);
-        } else {
-            print!("{}", s);
-        }
-        if s.len() > 0 {
-            s.chars().last().unwrap()
-        } else {
-            prev_last_char
-        }
-    }
-
-    pub async fn execute_stdout(self: &SshClient, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>> {
+    async fn execute_stdout(self: &RealSsh, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>> {
         if print_command {
             cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
         }
@@ -310,15 +317,12 @@ echo ovs="$(cat /tmp/ovs-$$)";
         }
         Err(anyhow!("exit status {}", result.unwrap()).into())
     }
-
-
     // TODO-merge this into execute_stdout
-    pub async fn execute_noisy(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+    async fn execute_noisy(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
         cmd.lines().for_each(|l| println!("{} | > {}", self.node_name, l.green()));
         self.execute(cmd).await
     }
-
-    pub async fn execute(self: &SshClient, cmd: &str) -> Result<String, Box<dyn Error>> {
+    async fn execute(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
         let result = self.client.execute(cmd).await.
             map_err(|e| anyhow!(e).context(format!("{} failed", cmd)))?;
         if result.exit_status > 0 {
@@ -372,7 +376,7 @@ impl Node {
     }
 }
 
-pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<SshClient, SshError> {
+pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<RealSsh, SshError> {
     let node = node.with_cluster_defaults(cluster);
     match connect_node(&node).await {
         Ok(c) => Ok(c),
@@ -387,7 +391,7 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
 
 
     let results: Vec<_> = fut.collect().await;
-    let (clients, errs): (Vec<SshClient>, Vec<SshError>) = results.into_iter().partition_map(|r| match r {
+    let (clients, errs): (Vec<RealSsh>, Vec<SshError>) = results.into_iter().partition_map(|r| match r {
         Ok(client) => Either::Left(client),
         Err(err) => Either::Right(err)
     });
@@ -405,7 +409,7 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
     )
 }
 
-async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {
+async fn connect_node(node: &Node) -> Result<RealSsh, Box<dyn Error>> {
     let default_key = "";
     let key = node.key.clone().unwrap_or(default_key.to_string());
     let key = shellexpand::tilde(&key).to_string();
@@ -426,11 +430,11 @@ async fn connect_node(node: &Node) -> Result<SshClient, Box<dyn Error>> {
 
     let ssh_client = result?;
 
-    Ok(SshClient { node_name: node.name.clone(), client: ssh_client })
+    Ok(RealSsh { node_name: node.name.clone(), client: ssh_client })
 }
 
 impl SshClients {
-    pub fn find(&self, node_name: &str) -> Option<&SshClient> {
+    pub fn find(&self, node_name: &str) -> Option<&RealSsh> {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
 
