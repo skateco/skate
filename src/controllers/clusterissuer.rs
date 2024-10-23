@@ -1,19 +1,22 @@
 use std::error::Error;
 use anyhow::anyhow;
 use crate::controllers::ingress::IngressController;
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, Store};
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
 
 pub struct ClusterIssuerController {
-    store: FileStore,
+    store: Box< dyn Store>,
+    ingress_controller: IngressController,
 }
 
 impl ClusterIssuerController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>, ingress_controller: IngressController) -> Self {
         ClusterIssuerController {
-            store: file_store,
+            store,
+            ingress_controller,
         }
+        
     }
 
 
@@ -32,8 +35,7 @@ impl ClusterIssuerController {
             self.store.write_file("clusterissuer", &ns_name.to_string(), "hash", hash.as_bytes())?;
         }
         // need to retemplate nginx.conf
-        let ingress_ctrl = IngressController::new(self.store.clone());
-        ingress_ctrl.render_nginx_conf()?;
+        self.ingress_controller.render_nginx_conf()?;
         IngressController::reload()?;
 
         Ok(())
@@ -45,8 +47,7 @@ impl ClusterIssuerController {
         let _ = self.store.remove_object("clusterissuer", &ns_name.to_string())?;
 
         // need to retemplate nginx.conf
-        let ingress_ctrl = IngressController::new(self.store.clone());
-        ingress_ctrl.render_nginx_conf()?;
+        self.ingress_controller.render_nginx_conf()?;
         IngressController::reload()?;
 
         Ok(())

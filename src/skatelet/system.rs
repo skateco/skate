@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
 use crate::errors::SkateError;
-use crate::filestore::{FileStore, ObjectListItem};
+use crate::filestore::{FileStore, ObjectListItem, Store};
 use crate::resource::ResourceType;
 use crate::skate::{Distribution, exec_cmd, Platform};
 use crate::skatelet::cordon::is_cordoned;

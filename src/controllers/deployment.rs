@@ -2,17 +2,17 @@ use crate::controllers::pod::PodController;
 use crate::skate::exec_cmd;
 use k8s_openapi::api::apps::v1::Deployment;
 use std::error::Error;
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, Store};
 use crate::util::metadata_name;
 
 pub struct DeploymentController {
-    store: FileStore
+    store: Box<dyn Store>
 }
 
 impl DeploymentController {
-    pub fn new(store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>) -> Self {
         DeploymentController {
-            store,
+            store
         }
     }
     

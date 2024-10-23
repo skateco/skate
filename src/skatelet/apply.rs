@@ -5,7 +5,7 @@ use std::{io};
 
 use std::io::{Read};
 use crate::errors::SkateError;
-use crate::executor::{DefaultExecutor, Executor};
+use crate::executor::{DefaultExecutor};
 
 
 

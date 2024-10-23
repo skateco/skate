@@ -6,19 +6,19 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, Store};
 use crate::skate::exec_cmd;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
 
 pub struct IngressController {
-    store: FileStore
+    store: Box<dyn Store>
 }
 
 impl IngressController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>) -> Self {
         IngressController {
-            store: file_store
+            store
         }
     }
 

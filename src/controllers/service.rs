@@ -1,4 +1,4 @@
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, Store};
 use crate::skate::exec_cmd;
 use crate::skatelet::dns;
 use crate::skatelet::dns::RemoveArgs;
@@ -14,11 +14,11 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 pub struct ServiceController {
-    store: FileStore
+    store: Box<dyn Store>
 }
 
 impl ServiceController {
-    pub fn new(store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>) -> Self {
         ServiceController {
             store,
         }

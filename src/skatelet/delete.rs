@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::io::Read;
 use clap::{Args, Subcommand};
-use crate::executor::{DefaultExecutor, Executor};
+use crate::executor::{DefaultExecutor };
 use crate::resource::SupportedResources;
 use crate::resource::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use crate::skatelet::apply::StdinCommand;

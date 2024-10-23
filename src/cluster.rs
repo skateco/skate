@@ -3,6 +3,7 @@ use crate::skate::ConfigFileArgs;
 use crate::ssh::{cluster_connections, SshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
+use itertools::Itertools;
 use crate::errors::SkateError;
 use crate::refresh::refreshed_state;
 use crate::resource::{ResourceType, SupportedResources};
@@ -62,8 +63,7 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
 async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
 
     
-    let catalogue = state.catalogue(None, &[
-    ]);
+    let catalogue = state.catalogue(None, &[]);
 
     let all_manifests: Result<Vec<SupportedResources>, _> = catalogue.iter().map(|item| SupportedResources::try_from(item.object)).collect();
     let all_manifests = all_manifests?;
@@ -77,7 +77,7 @@ async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node
     println!("rescheduling {} resources across {} nodes", all_manifests.len(), filtered_state.nodes.len());
 
     let scheduler = DefaultScheduler {};
-
+    
     scheduler.schedule(all_conns, &mut filtered_state, all_manifests, dry_run).await?;
 
     Ok(())

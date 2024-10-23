@@ -1,5 +1,5 @@
 use crate::cron::cron_to_systemd;
-use crate::filestore::FileStore;
+use crate::filestore::{FileStore, Store};
 use crate::skate::{exec_cmd, exec_cmd_stdout};
 use crate::template;
 use crate::util::metadata_name;
@@ -13,13 +13,13 @@ use std::io::Write;
 use crate::errors::SkateError;
 
 pub struct CronjobController {
-    store: FileStore,
+    store: Box<dyn Store>
 }
 
 impl CronjobController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>) -> Self {
         CronjobController {
-            store: file_store
+            store
         }
     }
 
