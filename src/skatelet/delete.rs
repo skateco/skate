@@ -74,7 +74,7 @@ fn deletion_metadata(resource_args: DeleteResourceArgs) -> ObjectMeta {
 pub fn delete_ingress(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(Ingress(K8sIngress {
+    executor.manifest_delete(&Ingress(K8sIngress {
         metadata: deletion_metadata(resource_args),
         spec: None,
         status: None,
@@ -84,7 +84,7 @@ pub fn delete_ingress(delete_args: DeleteArgs, resource_args: DeleteResourceArgs
 pub fn delete_service(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(Service(K8sService {
+    executor.manifest_delete(&Service(K8sService {
         metadata: deletion_metadata(resource_args),
         spec: None,
         status: None,
@@ -94,7 +94,7 @@ pub fn delete_service(delete_args: DeleteArgs, resource_args: DeleteResourceArgs
 pub fn delete_cluster_issuer(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(ClusterIssuer(spec::cert::ClusterIssuer {
+    executor.manifest_delete(&ClusterIssuer(spec::cert::ClusterIssuer {
         metadata: deletion_metadata(resource_args),
         spec: None,
     }), delete_args.termination_grace_period)
@@ -103,7 +103,7 @@ pub fn delete_cluster_issuer(delete_args: DeleteArgs, resource_args: DeleteResou
 pub fn delete_cronjob(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(CronJob(K8sCronJob {
+    executor.manifest_delete(&CronJob(K8sCronJob {
         metadata: deletion_metadata(resource_args),
         spec: None,
         status: None,
@@ -113,7 +113,7 @@ pub fn delete_cronjob(delete_args: DeleteArgs, resource_args: DeleteResourceArgs
 pub fn delete_secret(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(SupportedResources::Secret(Secret {
+    executor.manifest_delete(&SupportedResources::Secret(Secret {
         data: None,
         immutable: None,
         metadata: deletion_metadata(resource_args),
@@ -132,13 +132,13 @@ pub fn delete_stdin(args: DeleteArgs) -> Result<(), SkateError> {
 
     let executor = DefaultExecutor::new();
     let object: SupportedResources = serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
-    executor.manifest_delete(object, args.termination_grace_period)
+    executor.manifest_delete(&object, args.termination_grace_period)
 }
 
 pub fn delete_deployment(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(SupportedResources::Deployment(k8s_openapi::api::apps::v1::Deployment {
+    executor.manifest_delete(&SupportedResources::Deployment(k8s_openapi::api::apps::v1::Deployment {
         metadata: deletion_metadata(resource_args),
         spec: None,
         status: None,
@@ -148,7 +148,7 @@ pub fn delete_deployment(delete_args: DeleteArgs, resource_args: DeleteResourceA
 pub fn delete_daemonset(delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
     let executor = DefaultExecutor::new();
 
-    executor.manifest_delete(SupportedResources::DaemonSet(k8s_openapi::api::apps::v1::DaemonSet {
+    executor.manifest_delete(&SupportedResources::DaemonSet(k8s_openapi::api::apps::v1::DaemonSet {
         metadata: deletion_metadata(resource_args),
         spec: None,
         status: None,

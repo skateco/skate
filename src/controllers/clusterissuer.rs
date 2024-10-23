@@ -20,12 +20,12 @@ impl ClusterIssuerController {
     }
 
 
-    pub fn apply(&self, cluster_issuer: ClusterIssuer) -> Result<(), Box<dyn Error>> {
+    pub fn apply(&self, cluster_issuer: &ClusterIssuer) -> Result<(), Box<dyn Error>> {
         // only thing special about this is must only have namespace 'skate'
         // and name 'default'
-        let ingress_string = serde_yaml::to_string(&cluster_issuer).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let ingress_string = serde_yaml::to_string(cluster_issuer).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
-        let ns_name = metadata_name(&cluster_issuer);
+        let ns_name = metadata_name(cluster_issuer);
         // manifest goes into store
         self.store.write_file("clusterissuer", &ns_name.to_string(), "manifest.yaml", ingress_string.as_bytes())?;
 
@@ -40,8 +40,8 @@ impl ClusterIssuerController {
 
         Ok(())
     }
-    pub fn delete(&self, cluster_issuer: ClusterIssuer) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&cluster_issuer);
+    pub fn delete(&self, cluster_issuer: &ClusterIssuer) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(cluster_issuer);
 
 
         let _ = self.store.remove_object("clusterissuer", &ns_name.to_string())?;

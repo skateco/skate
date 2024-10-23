@@ -26,10 +26,10 @@ impl CronjobController {
     }
 
 
-    pub fn apply(&self, cron_job: CronJob) -> Result<(), Box<dyn Error>> {
-        let cron_job_string = serde_yaml::to_string(&cron_job).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+    pub fn apply(&self, cron_job: &CronJob) -> Result<(), Box<dyn Error>> {
+        let cron_job_string = serde_yaml::to_string(cron_job).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
-        let ns_name = metadata_name(&cron_job);
+        let ns_name = metadata_name(cron_job);
 
         self.store.write_file("cronjob", &ns_name.to_string(), "manifest.yaml", cron_job_string.as_bytes())?;
 
@@ -115,8 +115,8 @@ impl CronjobController {
     }
 
     // TODO - warn about failures
-    pub fn delete(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&cron);
+    pub fn delete(&self, cron: &CronJob) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(cron);
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
         // systemctl stop skate-cronjob-{}
         let _ = self.execer.exec("systemctl", &["stop", &unit_name]);

@@ -23,12 +23,11 @@ impl DefaultExecutor {
 }
 
 impl DefaultExecutor {
-    pub fn apply(&self, manifest: &str) -> Result<(),SkateError> {
-        
+    pub fn apply(&self, object: &SupportedResources) -> Result<(),SkateError> {
+
         let store = Box::new(FileStore::new());
         let execer = Box::new(RealExec{});
-        // just to check
-        let object: SupportedResources = serde_yaml::from_str(manifest).expect("failed to deserialize manifest");
+        
         match object {
             SupportedResources::Deployment(deployment) => {
                 let pod_controller = PodController::new(execer.clone());
@@ -70,11 +69,11 @@ impl DefaultExecutor {
     }
 
 
-    pub fn manifest_delete(&self, object: SupportedResources, grace_period: Option<usize>) -> Result<(), SkateError> {
+    pub fn manifest_delete(&self, object: &SupportedResources, grace_period: Option<usize>) -> Result<(), SkateError> {
 
         let store = Box::new(FileStore::new());
         let execer = Box::new(RealExec{});
-        
+
         match object {
             SupportedResources::Pod(p) => {
                 let ctrl = PodController::new(execer);

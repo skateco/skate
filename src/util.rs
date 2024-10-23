@@ -232,8 +232,8 @@ fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
 }
 
 
-pub fn apply_play(execer: &Box<dyn ShellExec>, object: SupportedResources) -> Result<(), Box<dyn Error>> {
-    let file_path = write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
+pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> Result<(), Box<dyn Error>> {
+    let file_path = write_manifest_to_file(&serde_yaml::to_string(object)?)?;
 
     let mut args = vec!["play", "kube", &file_path, "--start"];
     if !object.host_network() {

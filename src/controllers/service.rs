@@ -26,9 +26,9 @@ impl ServiceController {
         }
     }
 
-    pub fn apply(&self, service: Service) -> Result<(), Box<dyn Error>> {
-        let manifest_string = serde_yaml::to_string(&service).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(&service).to_string();
+    pub fn apply(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+        let manifest_string = serde_yaml::to_string(service).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(service).to_string();
 
         // manifest goes into store
         let yaml_path = self.store.write_file("service", name, "manifest.yaml", manifest_string.as_bytes())?;
@@ -109,8 +109,8 @@ impl ServiceController {
         Ok(())
     }
 
-    pub fn delete(&self, service: Service) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&service);
+    pub fn delete(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(service);
         dns::remove(RemoveArgs { container_id: Some(format!("{}.svc.cluster.skate", ns_name)), pod_id: None })?;
 
         let res = self.execer.exec("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);

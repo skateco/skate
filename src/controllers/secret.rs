@@ -15,13 +15,13 @@ impl SecretController {
         }
     }
 
-    pub fn apply(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
-        apply_play(&self.execer, SupportedResources::Secret(secret))
+    pub fn apply(&self, secret: &Secret) -> Result<(), Box<dyn Error>> {
+        apply_play(&self.execer, &SupportedResources::Secret(secret.clone()))
     }
 
 
-    pub fn delete(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
-        let name = metadata_name(&secret);
+    pub fn delete(&self, secret: &Secret) -> Result<(), Box<dyn Error>> {
+        let name = metadata_name(secret);
         let output = self.execer.exec("podman", &["secret", "rm", &name.to_string()])?;
 
         if !output.is_empty() {

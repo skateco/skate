@@ -24,9 +24,9 @@ impl IngressController {
         }
     }
 
-    pub fn apply(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(&ingress).to_string();
+    pub fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+        let ingress_string = serde_yaml::to_string(ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(ingress).to_string();
 
         self.execer.exec("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
 
@@ -41,7 +41,7 @@ impl IngressController {
 
         self.render_nginx_conf()?;
 
-        let _ns_name = metadata_name(&ingress);
+        let _ns_name = metadata_name(ingress);
 
         ////////////////////////////////////////////////////
         // Template service nginx confs for http/https
@@ -76,8 +76,8 @@ impl IngressController {
         Ok(())
     }
 
-    pub fn delete(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&ingress);
+    pub fn delete(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(ingress);
         let dir = format!("/var/lib/skate/ingress/services/{}", ns_name);
         let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {

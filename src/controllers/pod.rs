@@ -16,13 +16,13 @@ impl PodController {
         }
     }
 
-    pub fn apply(&self, pod: Pod) -> Result<(), Box<dyn Error>> {
-        apply_play(&self.execer, SupportedResources::Pod(pod))
+    pub fn apply(&self, pod: &Pod) -> Result<(), Box<dyn Error>> {
+        apply_play(&self.execer, &SupportedResources::Pod(pod.clone()))
     }
 
-    pub fn delete(&self, pod: Pod, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
-        let name = pod.metadata.name.unwrap();
-        self.delete_podman_pod(&name, grace_period)
+    pub fn delete(&self, pod: &Pod, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+        let name = pod.metadata.name.as_ref().unwrap();
+        self.delete_podman_pod(name, grace_period)
     }
 
     pub fn delete_podman_pods(&self, ids: Vec<&str>, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {

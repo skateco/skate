@@ -20,11 +20,11 @@ impl DaemonSetController {
         }
     }
 
-    pub fn apply(&self, ds: DaemonSet) -> Result<(), Box<dyn Error>> {
+    pub fn apply(&self, ds: &DaemonSet) -> Result<(), Box<dyn Error>> {
         
-        self.store.write_file("daemonset", &metadata_name(&ds).to_string(), "manifest.yaml", serde_yaml::to_string(&ds)?.as_bytes())?;
+        self.store.write_file("daemonset", &metadata_name(ds).to_string(), "manifest.yaml", serde_yaml::to_string(&ds)?.as_bytes())?;
 
-        let ns_name = metadata_name(&ds);
+        let ns_name = metadata_name(ds);
         let hash = ds.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
         if !hash.is_empty() {
             self.store.write_file("daemonset", &ns_name.to_string(), "hash", hash.as_bytes())?;
@@ -32,7 +32,7 @@ impl DaemonSetController {
         Ok(())
     }
 
-    pub fn delete(&self, ds: DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+    pub fn delete(&self, ds: &DaemonSet, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
         let name = ds.metadata.name.clone().unwrap();
         let ns = ds.metadata.namespace.clone().unwrap_or("default".to_string());
 
@@ -41,7 +41,7 @@ impl DaemonSetController {
 
 
         self.pod_controller.delete_podman_pods(ids, grace_period)?;
-        let _ = self.store.remove_object("daemonset", &metadata_name(&ds).to_string())?;
+        let _ = self.store.remove_object("daemonset", &metadata_name(ds).to_string())?;
         Ok(())
     }
 }

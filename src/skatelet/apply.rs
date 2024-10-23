@@ -6,13 +6,7 @@ use std::{io};
 use std::io::{Read};
 use crate::errors::SkateError;
 use crate::executor::{DefaultExecutor};
-
-
-
-
-
-
-
+use crate::resource::SupportedResources;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -45,6 +39,8 @@ pub fn apply(apply_args: ApplyArgs) -> Result<(), SkateError> {
     };
 
     let executor = DefaultExecutor::new();
-    executor.apply(&manifest)
+
+    let object: SupportedResources = serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
+    executor.apply(&object)
 }
 
