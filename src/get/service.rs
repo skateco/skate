@@ -32,8 +32,7 @@ impl NameFilters for ServiceListItem {
 impl Lister<ServiceListItem> for ServiceLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<ServiceListItem> {
         si.services.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
-            let filterable: Box<dyn NameFilters> = Box::new(*j);
-            filterable.filter_names(id, ns)
+            j.filter_names(id, ns)
         }).map(|item| {
             let ingress: Service = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();
             let spec = ingress.spec.unwrap_or_default();

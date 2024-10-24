@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use k8s_openapi::Resource;
 use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::SshClients;
+use crate::ssh::{SshClient, RealSshClients};
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
 
@@ -148,7 +148,7 @@ impl SupportedResources {
         }
     }
 
-    pub async fn pre_remove_hook(&self, node: &NodeState, conns: &SshClients) -> Result<(), Box<dyn Error>> {
+    pub async fn pre_remove_hook(&self, node: &NodeState, conns: &RealSshClients) -> Result<(), Box<dyn Error>> {
         match self {
             SupportedResources::Pod(pod) => {
                 let mut errs = vec!();

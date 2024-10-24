@@ -2,15 +2,13 @@
 
 use std::error::Error;
 use clap::{Args, Parser, Subcommand};
-use k8s_openapi::Metadata;
 use serde::{Deserialize, Serialize};
 use crate::apply::{apply, ApplyArgs};
 use crate::refresh::{refresh, RefreshArgs};
 use strum_macros::{Display, EnumString};
-use std::{fs, io, process};
+use std::{fs, io};
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use anyhow::anyhow;
 use serde_yaml::Value;
 use crate::config;
 use crate::cluster::{cluster, ClusterArgs};
@@ -184,31 +182,6 @@ impl From<&str> for Distribution {
             _ => Unknown
         }
     }
-}
-
-
-pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
-    let output = process::Command::new(command)
-        .args(args)
-        .output().map_err(|e| anyhow!(e).context("failed to run command"))?;
-    if !output.status.success() {
-        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).context(format!("{} {} failed", command, args.join(" "))).into());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
-}
-
-pub(crate) fn exec_cmd_stdout(command: &str, args: &[&str]) -> Result<(), Box<dyn Error>> {
-    let output = process::Command::new(command)
-        .args(args)
-        .stdout(process::Stdio::inherit())
-        .stderr(process::Stdio::inherit())
-        .status().map_err(|e| anyhow!(e).context("failed to run command"))?;
-    if !output.success() {
-        return Err(anyhow!("exit code {}", output).context(format!("{} {} failed", command, args.join(" "))).into());
-    }
-
-    Ok(())
 }
 
 

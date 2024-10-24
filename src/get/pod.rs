@@ -45,8 +45,7 @@ impl NameFilters for PodListItem {
 impl Lister<PodListItem> for PodLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<PodListItem> {
         si.pods.as_ref().unwrap_or(&vec!()).iter().filter(|p| {
-            let filterable: Box<dyn NameFilters> = Box::new(*p);
-            filterable.filter_names(id, ns)
+            p.filter_names(id, ns)
         }).map(|pod| {
             let num_containers = pod.containers.clone().unwrap_or_default().len();
             let healthy_containers = pod.containers.clone().unwrap_or_default().iter().filter(|c| {

@@ -44,8 +44,8 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
                 }
 
                 let res = {
-                    let filterable: Box<dyn NameFilters> = Box::new(&p);
-                    filterable.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
+                    let pref = &p;
+                    pref.filter_names(&args.id.clone().unwrap_or_default(), &args.namespace.clone().unwrap_or_default())
                 }; if res {
                     return Some((state.nodes.len(), daemonset, p));
                 }

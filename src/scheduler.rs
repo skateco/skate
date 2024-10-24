@@ -16,7 +16,7 @@ use k8s_openapi::Metadata;
 use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClients};
+use crate::ssh::{SshClient, RealSshClients};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CROSS_EMOJI, hash_k8s_resource, metadata_name, NamespacedName};
 
@@ -28,7 +28,7 @@ pub struct ScheduleResult {
 
 #[async_trait(? Send)]
 pub trait Scheduler {
-    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>>;
+    async fn schedule(&self, conns: &RealSshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
 pub struct DefaultScheduler {}
@@ -739,7 +739,7 @@ impl DefaultScheduler {
         }
     }
 
-    async fn remove_existing(conns: &SshClients, resource: ScheduledOperation) -> Result<(String, String), Box<dyn Error>> {
+    async fn remove_existing(conns: &RealSshClients, resource: ScheduledOperation) -> Result<(String, String), Box<dyn Error>> {
         let hook_result = resource.resource.pre_remove_hook(resource.node.as_ref().unwrap(), conns).await;
 
 
@@ -756,7 +756,7 @@ impl DefaultScheduler {
     }
     
     
-    async fn apply(plan: ApplyPlan,  conns: &SshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn apply(plan: ApplyPlan, conns: &RealSshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
         let mut result: Vec<ScheduledOperation> = vec!();
 
@@ -872,7 +872,7 @@ impl DefaultScheduler {
     }
 
 
-    async fn schedule_one(conns: &SshClients, state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn schedule_one(conns: &RealSshClients, state: &mut ClusterState, object: SupportedResources, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let plan = Self::plan(state, &object)?;
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
@@ -884,7 +884,7 @@ impl DefaultScheduler {
 
 #[async_trait(? Send)]
 impl Scheduler for DefaultScheduler {
-    async fn schedule(&self, conns: &SshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
+    async fn schedule(&self, conns: &RealSshClients, state: &mut ClusterState, objects: Vec<SupportedResources>, dry_run: bool) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
             match Self::schedule_one(conns, state, object.clone(), dry_run).await {

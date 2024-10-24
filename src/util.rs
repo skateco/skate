@@ -16,7 +16,7 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use serde::{Deserialize, Serialize};
 use crate::resource::SupportedResources;
-use crate::skate::exec_cmd;
+use crate::exec::{ShellExec};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -232,15 +232,15 @@ fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
 }
 
 
-pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
-    let file_path = write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
+pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> Result<(), Box<dyn Error>> {
+    let file_path = write_manifest_to_file(&serde_yaml::to_string(object)?)?;
 
     let mut args = vec!["play", "kube", &file_path, "--start"];
     if !object.host_network() {
         args.push("--network=skate")
     }
 
-    let result = exec_cmd("podman", &args)?;
+    let result = execer.exec("podman", &args)?;
 
     if !result.is_empty() {
         println!("{}", result);

@@ -6,6 +6,7 @@ use crate::errors::SkateError;
 use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
+use crate::ssh::SshClient;
 use crate::util::CHECKBOX_EMOJI;
 
 #[derive(Debug, Args)]

@@ -1,7 +1,7 @@
-use crate::filestore::FileStore;
-use crate::skate::exec_cmd;
+use crate::filestore::{FileStore, Store};
+use crate::exec::{ShellExec};
 use crate::skatelet::dns;
-use crate::skatelet::dns::RemoveArgs;
+use crate::skatelet::dns::{Dns, RemoveArgs};
 use crate::template;
 use crate::util::{lock_file, metadata_name};
 use anyhow::anyhow;
@@ -12,21 +12,25 @@ use std::error::Error;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use crate::deps::Deps;
+use crate::skatelet::services::dns::DnsService;
 
 pub struct ServiceController {
-    store: FileStore
+    store: Box<dyn Store>,
+    execer: Box<dyn ShellExec>
 }
 
 impl ServiceController {
-    pub fn new(store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
         ServiceController {
             store,
+            execer,
         }
     }
 
-    pub fn apply(&self, service: Service) -> Result<(), Box<dyn Error>> {
-        let manifest_string = serde_yaml::to_string(&service).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(&service).to_string();
+    pub fn apply(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+        let manifest_string = serde_yaml::to_string(service).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(service).to_string();
 
         // manifest goes into store
         let yaml_path = self.store.write_file("service", name, "manifest.yaml", manifest_string.as_bytes())?;
@@ -97,46 +101,48 @@ impl ServiceController {
         handlebars.render_to_write("timer", &json, file)?;
         let unit_name = format!("skate-ipvsmon-{}", &name);
 
-        exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["enable", "--now", &unit_name])?;
-        exec_cmd("systemctl", &["reset-failed", &unit_name])?;
+        self.execer.exec("systemctl", &["daemon-reload"])?;
+        self.execer.exec("systemctl", &["enable", "--now", &unit_name])?;
+        self.execer.exec("systemctl", &["reset-failed", &unit_name])?;
 
         let domain = format!("{}.svc.cluster.skate", name);
-        dns::add_misc_host(ip, domain.clone(), domain)?;
+        let dns = DnsService::new("/var/lib/skate/dns", &self.execer);
+        dns.add_misc_host(ip, domain.clone(), domain)?;
 
         Ok(())
     }
 
-    pub fn delete(&self, service: Service) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&service);
-        dns::remove(RemoveArgs { container_id: Some(format!("{}.svc.cluster.skate", ns_name)), pod_id: None })?;
+    pub fn delete(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(service);
+        let dns = DnsService::new("/var/lib/skate/dns", &self.execer);
+        dns.remove(Some(format!("{}.svc.cluster.skate", ns_name)), None )?;
 
-        let res = exec_cmd("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
+        let res = self.execer.exec("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
         if res.is_err() {
             error!("failed to stop {} ipvsmon: {}", ns_name, res.unwrap_err());
         }
 
-        let res = exec_cmd("systemctl", &["disable", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
+        let res = self.execer.exec("systemctl", &["disable", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
         if res.is_err() {
             error!("failed to disable {} ipvsmon: {}", ns_name, res.unwrap_err());
         }
 
-        let res = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &ns_name.to_string())]);
+        let res = self.execer.exec("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.service", &ns_name.to_string())]);
         if res.is_err() {
             error!("failed to remove {} ipvsmon service: {}", ns_name, res.unwrap_err());
         }
-        let res = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &ns_name.to_string())]);
+        let res = self.execer.exec("rm", &[&format!("/etc/systemd/system/skate-ipvsmon-{}.timer", &ns_name.to_string())]);
         if res.is_err() {
             error!("failed to remove {} ipvsmon timer: {}", ns_name, res.unwrap_err());
         }
 
-        let res = exec_cmd("rm", &[&format!("/var/lib/skate/keepalived/{}.conf", &ns_name.to_string())]);
+        let res = self.execer.exec("rm", &[&format!("/var/lib/skate/keepalived/{}.conf", &ns_name.to_string())]);
         if res.is_err() {
             error!("failed to remove {} keepalived conf: {}", ns_name, res.unwrap_err());
         }
 
-        exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["reset-failed"])?;
+        self.execer.exec("systemctl", &["daemon-reload"])?;
+        self.execer.exec("systemctl", &["reset-failed"])?;
 
         self.store.remove_object("service", &ns_name.to_string())?;
 

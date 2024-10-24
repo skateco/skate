@@ -1,6 +1,5 @@
 use crate::cron::cron_to_systemd;
-use crate::filestore::FileStore;
-use crate::skate::{exec_cmd, exec_cmd_stdout};
+use crate::filestore::Store;
 use crate::template;
 use crate::util::metadata_name;
 use anyhow::anyhow;
@@ -11,23 +10,26 @@ use std::error::Error;
 use std::fs;
 use std::io::Write;
 use crate::errors::SkateError;
+use crate::exec::{ShellExec};
 
 pub struct CronjobController {
-    store: FileStore,
+    store: Box<dyn Store>,
+    execer: Box<dyn ShellExec>
 }
 
 impl CronjobController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
         CronjobController {
-            store: file_store
+            store,
+            execer,
         }
     }
 
 
-    pub fn apply(&self, cron_job: CronJob) -> Result<(), Box<dyn Error>> {
-        let cron_job_string = serde_yaml::to_string(&cron_job).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+    pub fn apply(&self, cron_job: &CronJob) -> Result<(), Box<dyn Error>> {
+        let cron_job_string = serde_yaml::to_string(cron_job).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
-        let ns_name = metadata_name(&cron_job);
+        let ns_name = metadata_name(cron_job);
 
         self.store.write_file("cronjob", &ns_name.to_string(), "manifest.yaml", cron_job_string.as_bytes())?;
 
@@ -62,7 +64,7 @@ impl CronjobController {
         let pod_yaml_path = self.store.write_file("cronjob", &ns_name.to_string(), "pod.yaml", pod_string.as_bytes())?;
 
         // create the pod to test that it's valid
-        exec_cmd("podman", &["kube", "play", "--start=false", "--replace", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
+        self.execer.exec("podman", &["kube", "play", "--start=false", "--replace", &pod_yaml_path]).map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
 
         let mut handlebars = template::new();
         ////////////////////////////////////////////////////
@@ -104,30 +106,30 @@ impl CronjobController {
         file.write_all(output.as_bytes())?;
 
 
-        exec_cmd("systemctl", &["daemon-reload"])?;
-        exec_cmd("systemctl", &["enable", &format!("{}.timer", &unit_name)])?;
-        exec_cmd("systemctl", &["start", &format!("{}.timer", &unit_name)])?;
-        let _ = exec_cmd("systemctl", &["reset-failed", &unit_name]);
+        self.execer.exec("systemctl", &["daemon-reload"])?;
+        self.execer.exec("systemctl", &["enable", &format!("{}.timer", &unit_name)])?;
+        self.execer.exec("systemctl", &["start", &format!("{}.timer", &unit_name)])?;
+        let _ = self.execer.exec("systemctl", &["reset-failed", &unit_name]);
 
         Ok(())
     }
 
     // TODO - warn about failures
-    pub fn delete(&self, cron: CronJob) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&cron);
+    pub fn delete(&self, cron: &CronJob) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(cron);
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
         // systemctl stop skate-cronjob-{}
-        let _ = exec_cmd("systemctl", &["stop", &unit_name]);
+        let _ = self.execer.exec("systemctl", &["stop", &unit_name]);
 
         // systemctl disable skate-cronjob-{}
-        let _ = exec_cmd("systemctl", &["disable", &unit_name]);
+        let _ = self.execer.exec("systemctl", &["disable", &unit_name]);
         // rm /etc/systemd/system/skate-cronjob-{}.service
-        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
-        let _ = exec_cmd("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
+        let _ = self.execer.exec("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.service", &ns_name.to_string())]);
+        let _ = self.execer.exec("rm", &[&format!("/etc/systemd/system/skate-cronjob-{}.timer", &ns_name.to_string())]);
         // systemctl daemon-reload
-        let _ = exec_cmd("systemctl", &["daemon-reload"])?;
+        let _ = self.execer.exec("systemctl", &["daemon-reload"])?;
         // systemctl reset-failed
-        let _ = exec_cmd("systemctl", &["reset-failed"])?;
+        let _ = self.execer.exec("systemctl", &["reset-failed"])?;
         let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
         Ok(())
     }
@@ -142,7 +144,7 @@ impl CronjobController {
             args.to_vec()
         };
 
-        exec_cmd_stdout("podman", &args)?;
+        self.execer.exec_stdout("podman", &args)?;
         Ok(())
     }
 }
