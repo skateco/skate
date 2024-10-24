@@ -4,7 +4,7 @@ use std::{io};
 
 
 use std::io::{Read};
-use crate::container::{With, WithRef};
+use crate::deps::{With, WithRef};
 use crate::controllers::clusterissuer::ClusterIssuerController;
 use crate::controllers::cronjob::CronjobController;
 use crate::controllers::daemonset::DaemonSetController;
@@ -56,9 +56,9 @@ pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateEr
     apply_supported_resource(deps, &object)
 }
 
-fn apply_supported_resource<D: ApplyDeps>(deps: D, object: &SupportedResources) -> Result<(),SkateError> {
-    let execer  = With::<dyn ShellExec>::construct;
-    let store  = With::<dyn Store>::construct;
+fn apply_supported_resource< D: ApplyDeps>(deps: D, object: &SupportedResources) -> Result<(),SkateError> {
+    let execer  = With::<dyn ShellExec>::get;
+    let store  = With::<dyn Store>::get;
 
 
     match object {

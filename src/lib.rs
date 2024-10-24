@@ -30,7 +30,7 @@ mod cluster;
 mod rollout;
 mod resource;
 mod exec;
-mod container;
+mod deps;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

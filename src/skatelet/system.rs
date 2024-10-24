@@ -13,7 +13,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
-use crate::container::With;
+use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::{RealExec, ShellExec};
 use crate::filestore::{FileStore, ObjectListItem, Store};
@@ -41,7 +41,7 @@ pub trait SystemDeps: With<dyn ShellExec>{}
 
 pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
-        SystemCommands::Info => info(With::<dyn ShellExec>::construct(&deps)).await?
+        SystemCommands::Info => info(With::<dyn ShellExec>::get(&deps)).await?
     }
     Ok(())
 }

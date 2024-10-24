@@ -16,8 +16,9 @@ use std::{process, thread};
 use anyhow::anyhow;
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
-use crate::container::{Deps};
+use crate::deps::{Deps};
 use crate::errors::SkateError;
+use crate::filestore::FileStore;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 
@@ -99,7 +100,9 @@ pub async fn skatelet() -> Result<(), SkateError> {
         .map(|()| log::set_max_level(LevelFilter::Debug)).map_err(|e| anyhow!(e))?;
 
     
-    let deps = Deps{};
+    let deps = Deps{
+        store: Box::new(FileStore::new())
+    };
 
     let result = match args.command {
         Commands::Apply(args) => apply::apply(deps, args),
