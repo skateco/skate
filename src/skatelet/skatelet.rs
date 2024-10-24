@@ -3,7 +3,7 @@ use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
 use crate::skatelet::create::{create, CreateArgs, CreateDeps};
 use crate::skatelet::delete::{DeleteArgs, DeleteDeps, Deleter};
-use crate::skatelet::dns::{dns, DnsArgs};
+use crate::skatelet::dns::{Dns, DnsArgs, DnsDeps};
 use crate::skatelet::ipvs::{ipvs, IpvsArgs};
 use crate::skatelet::oci::{oci, OciArgs};
 use crate::skatelet::system::{system, SystemArgs, SystemDeps};
@@ -79,6 +79,7 @@ impl ApplyDeps for Deps{}
 impl SystemDeps for Deps{}
 impl CreateDeps for Deps{}
 impl DeleteDeps for Deps{}
+impl DnsDeps for Deps{}
 
 pub async fn skatelet() -> Result<(), SkateError> {
 
@@ -112,7 +113,10 @@ pub async fn skatelet() -> Result<(), SkateError> {
             deleter.delete(args)
         },
         Commands::Template(args) => template(args),
-        Commands::Dns(args) => dns(args),
+        Commands::Dns(args) => {
+            let dns = Dns{deps};
+            dns.dns(args)
+        },
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => ipvs(args),
         Commands::Create(args) => create(deps, args),

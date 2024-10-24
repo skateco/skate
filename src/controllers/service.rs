@@ -1,7 +1,7 @@
 use crate::filestore::{FileStore, Store};
 use crate::exec::{ShellExec};
 use crate::skatelet::dns;
-use crate::skatelet::dns::RemoveArgs;
+use crate::skatelet::dns::{Dns, RemoveArgs};
 use crate::template;
 use crate::util::{lock_file, metadata_name};
 use anyhow::anyhow;
@@ -12,6 +12,8 @@ use std::error::Error;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
+use crate::deps::Deps;
+use crate::skatelet::services::dns::DnsService;
 
 pub struct ServiceController {
     store: Box<dyn Store>,
@@ -104,14 +106,16 @@ impl ServiceController {
         self.execer.exec("systemctl", &["reset-failed", &unit_name])?;
 
         let domain = format!("{}.svc.cluster.skate", name);
-        dns::add_misc_host(ip, domain.clone(), domain)?;
+        let dns = DnsService::new("/var/lib/skate/dns", &self.execer);
+        dns.add_misc_host(ip, domain.clone(), domain)?;
 
         Ok(())
     }
 
     pub fn delete(&self, service: &Service) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(service);
-        dns::remove(RemoveArgs { container_id: Some(format!("{}.svc.cluster.skate", ns_name)), pod_id: None })?;
+        let dns = DnsService::new("/var/lib/skate/dns", &self.execer);
+        dns.remove(Some(format!("{}.svc.cluster.skate", ns_name)), None )?;
 
         let res = self.execer.exec("systemctl", &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())]);
         if res.is_err() {

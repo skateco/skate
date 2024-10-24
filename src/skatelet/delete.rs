@@ -96,7 +96,7 @@ impl<D: DeleteDeps> Deleter<D> {
         meta
     }
 
-    pub fn delete_ingress(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_ingress(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&Ingress(K8sIngress {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
@@ -104,7 +104,7 @@ impl<D: DeleteDeps> Deleter<D> {
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_service(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_service(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&Service(K8sService {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
@@ -112,14 +112,14 @@ impl<D: DeleteDeps> Deleter<D> {
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_cluster_issuer(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_cluster_issuer(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&ClusterIssuer(spec::cert::ClusterIssuer {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_cronjob(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_cronjob(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&CronJob(K8sCronJob {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
@@ -127,7 +127,7 @@ impl<D: DeleteDeps> Deleter<D> {
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_secret(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_secret(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&SupportedResources::Secret(Secret {
             data: None,
             immutable: None,
@@ -137,7 +137,7 @@ impl<D: DeleteDeps> Deleter<D> {
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_stdin(&self, args: DeleteArgs) -> Result<(), SkateError> {
+    fn delete_stdin(&self, args: DeleteArgs) -> Result<(), SkateError> {
         let manifest = {
             let mut stdin = io::stdin();
             let mut buffer = String::new();
@@ -149,7 +149,7 @@ impl<D: DeleteDeps> Deleter<D> {
         self.manifest_delete(&object, args.termination_grace_period)
     }
 
-    pub fn delete_deployment(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_deployment(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&SupportedResources::Deployment(k8s_openapi::api::apps::v1::Deployment {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
@@ -157,7 +157,7 @@ impl<D: DeleteDeps> Deleter<D> {
         }), delete_args.termination_grace_period)
     }
 
-    pub fn delete_daemonset(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
+    fn delete_daemonset(&self, delete_args: DeleteArgs, resource_args: DeleteResourceArgs) -> Result<(), SkateError> {
         self.manifest_delete(&SupportedResources::DaemonSet(k8s_openapi::api::apps::v1::DaemonSet {
             metadata: Self::deletion_metadata(resource_args),
             spec: None,
