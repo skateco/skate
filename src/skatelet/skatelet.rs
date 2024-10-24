@@ -1,5 +1,5 @@
 use crate::skatelet::apply;
-use crate::skatelet::apply::ApplyArgs;
+use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
 use crate::skatelet::cni::cni;
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
 use crate::skatelet::create::{create, CreateArgs};
@@ -7,7 +7,7 @@ use crate::skatelet::delete::{delete, DeleteArgs};
 use crate::skatelet::dns::{dns, DnsArgs};
 use crate::skatelet::ipvs::{ipvs, IpvsArgs};
 use crate::skatelet::oci::{oci, OciArgs};
-use crate::skatelet::system::{system, SystemArgs};
+use crate::skatelet::system::{system, SystemArgs, SystemDeps};
 use crate::skatelet::template::{template, TemplateArgs};
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
@@ -16,6 +16,7 @@ use std::{process, thread};
 use anyhow::anyhow;
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
+use crate::container::{Deps};
 use crate::errors::SkateError;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
@@ -75,6 +76,9 @@ pub fn log_panic(info: &PanicInfo) {
     }
 }
 
+impl ApplyDeps for Deps{}
+impl SystemDeps for Deps{}
+
 pub async fn skatelet() -> Result<(), SkateError> {
 
     let args = Cli::parse();
@@ -94,10 +98,12 @@ pub async fn skatelet() -> Result<(), SkateError> {
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
         .map(|()| log::set_max_level(LevelFilter::Debug)).map_err(|e| anyhow!(e))?;
 
+    
+    let deps = Deps{};
 
     let result = match args.command {
-        Commands::Apply(args) => apply::apply(args),
-        Commands::System(args) => system(args).await,
+        Commands::Apply(args) => apply::apply(deps, args),
+        Commands::System(args) => system(deps, args).await,
         Commands::Delete(args) => delete(args),
         Commands::Template(args) => template(args),
         Commands::Cni => {

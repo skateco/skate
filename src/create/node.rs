@@ -16,7 +16,7 @@ use crate::refresh::refreshed_state;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
-use crate::ssh::{cluster_connections, node_connection, RealSsh, SshClient, SshClients};
+use crate::ssh::{cluster_connections, node_connection, RealSsh, SshClient, RealSshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -135,7 +135,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let _ = conn.execute_stdout(cmd, true, true).await;
 
     let (all_conns, _) = cluster_connections(&cluster).await;
-    let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
+    let all_conns = &all_conns.unwrap_or(RealSshClients { clients: vec!() });
 
     let skate_dirs = [
         "ingress",
@@ -164,7 +164,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
 // could be to take only resources that are the same on all nodes, log others
-async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &ClusterState) -> Result<(), Box<dyn Error>> {
+async fn propagate_static_resources(_conf: &Config, all_conns: &RealSshClients, node: &Node, state: &ClusterState) -> Result<(), Box<dyn Error>> {
 
     
     let catalogue = state.catalogue(None, &[ResourceType::Ingress, ResourceType::Service, ResourceType::Secret]);
@@ -231,7 +231,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 }
 
 // TODO don't run things unless they need to be
-async fn setup_networking(conn: &RealSsh, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &RealSsh, all_conns: &RealSshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;

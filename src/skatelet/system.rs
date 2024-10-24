@@ -13,6 +13,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
+use crate::container::With;
 use crate::errors::SkateError;
 use crate::exec::{RealExec, ShellExec};
 use crate::filestore::{FileStore, ObjectListItem, Store};
@@ -36,9 +37,11 @@ pub enum SystemCommands {
     Info,
 }
 
-pub async fn system(args: SystemArgs) -> Result<(), SkateError> {
+pub trait SystemDeps: With<dyn ShellExec>{}
+
+pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
-        SystemCommands::Info => info().await?
+        SystemCommands::Info => info(With::<dyn ShellExec>::construct(&deps)).await?
     }
     Ok(())
 }
@@ -80,7 +83,7 @@ pub struct SystemInfo {
 // TODO - have more generic ObjectMeta type for explaining existing resources
 
 // returns (external, internal)
-fn internal_ip(execer: &RealExec) -> Result<Option<String>, Box<dyn Error>> {
+fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Error>> {
     let iface_cmd = match execer.exec("which", &["ifconfig"]) {
         Ok(_) => Some(r#"ifconfig -a | awk '
 /^[a-zA-Z0-9_\-]+:/ {
@@ -121,8 +124,9 @@ fn internal_ip(execer: &RealExec) -> Result<Option<String>, Box<dyn Error>> {
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
 
-async fn info() -> Result<(), Box<dyn Error>> {
-    let execer = RealExec{};
+async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
+    
+    
     let sys = System::new_with_specifics(RefreshKind::new()
         .with_cpu(CpuRefreshKind::everything())
         .with_memory(MemoryRefreshKind::everything())
@@ -212,7 +216,7 @@ async fn info() -> Result<(), Box<dyn Error>> {
     }).collect();
 
 
-    let internal_ip_addr = internal_ip(&execer).unwrap_or_else(|e| {
+    let internal_ip_addr = internal_ip(execer).unwrap_or_else(|e| {
         eprintln!("failed to get interface ipv4 addresses: {}", e);
         None
     });

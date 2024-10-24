@@ -6,7 +6,7 @@ use crate::errors::SkateError;
 use crate::skate::ConfigFileArgs;
 use crate::ssh;
 
-use crate::ssh::SshClients;
+use crate::ssh::RealSshClients;
 use crate::state::state::{NodeStatus, ClusterState};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -63,7 +63,7 @@ pub async fn refresh(args: RefreshArgs) -> Result<(), SkateError> {
 }
 
 
-pub async fn refreshed_state(cluster_name: &str, conns: &SshClients, config: &Config) -> Result<ClusterState, SkateError> {
+pub async fn refreshed_state(cluster_name: &str, conns: &RealSshClients, config: &Config) -> Result<ClusterState, SkateError> {
     let host_infos = conns.get_nodes_system_info().await;
     let (healthy_host_infos, errors): (Vec<_>, Vec<SkateError>) = host_infos.into_iter().partition_map(|r|
         match r {

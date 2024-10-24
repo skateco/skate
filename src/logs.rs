@@ -86,7 +86,7 @@ pub async fn logs(args: LogArgs) -> Result<(), SkateError> {
     }
 }
 
-pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), SkateError> {
+pub async fn log_pod(conns: &ssh::RealSshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), SkateError> {
     let mut cmd = args.to_podman_log_args();
 
     cmd.push(name.to_string());
@@ -108,7 +108,7 @@ pub async fn log_pod(conns: &ssh::SshClients, name: &str, _ns: String, args: &Lo
     Ok(())
 }
 
-pub async fn log_child_pods(conns: &ssh::SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
+pub async fn log_child_pods(conns: &ssh::RealSshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
     let mut cmd = args.to_podman_log_args();
 
     cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q)", resource_type.to_string().to_lowercase(), name, ns));

@@ -13,7 +13,6 @@ mod delete;
 
 mod state;
 mod get;
-mod executor;
 
 mod describe;
 mod filestore;
@@ -31,6 +30,7 @@ mod cluster;
 mod rollout;
 mod resource;
 mod exec;
+mod container;
 
 pub use skate::skate;
 pub use skatelet::skatelet;

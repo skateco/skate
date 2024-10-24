@@ -19,7 +19,7 @@ impl DeploymentController {
             pod_controller
         }
     }
-    
+
     pub fn apply(&self, deployment: &Deployment) -> Result<(), Box<dyn Error>> {
         // store the deployment manifest on the node basically
         self.store.write_file("deployment", &metadata_name(deployment).to_string(), "manifest.yaml", serde_yaml::to_string(&deployment)?.as_bytes())?;

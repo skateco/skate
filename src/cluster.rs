@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::skate::ConfigFileArgs;
-use crate::ssh::{cluster_connections, SshClients};
+use crate::ssh::{cluster_connections, RealSshClients};
 use clap::{Args, Subcommand};
 use std::error::Error;
 use itertools::Itertools;
@@ -60,7 +60,7 @@ pub async fn reschedule(args: RescheduleArgs) -> Result<(), SkateError> {
     Ok(())
 }
 
-async fn propagate_existing_resources(all_conns: &SshClients, exclude_donor_node: Option<&str>, state: &ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
+async fn propagate_existing_resources(all_conns: &RealSshClients, exclude_donor_node: Option<&str>, state: &ClusterState, dry_run: bool) -> Result<(), Box<dyn Error>> {
 
     
     let catalogue = state.catalogue(None, &[]);

@@ -31,6 +31,8 @@ pub trait SshClient {
     // TODO-merge this into execute_stdout
     async fn execute_noisy(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
     async fn execute(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
+    
+    async fn connect(c: &Cluster,n: &Node) -> Result<Self, SshError> where Self: Sized;
 }
 
 #[derive(Clone)]
@@ -45,8 +47,12 @@ impl Debug for RealSsh {
     }
 }
 
-pub struct SshClients {
+pub struct RealSshClients {
     pub clients: Vec<RealSsh>,
+}
+
+trait SshClients {
+    async fn connect(cluster: &Cluster) -> (Option<Self>,Option<SshErrors>) where Self: Sized;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +104,17 @@ impl RealSsh {
 }
 
 impl SshClient for RealSsh {
+
+    async fn connect(cluster: &Cluster, node: &Node) -> Result<RealSsh, SshError> {
+        let node = node.with_cluster_defaults(cluster);
+        match connect_node(&node).await {
+            Ok(c) => Ok(c),
+            Err(err) => {
+                Err(SshError { node_name: node.name.clone(), error: err })
+            }
+        }
+    }
+    
     async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>> {
         let command = r#"
 hostname > /tmp/hostname-$$ &
@@ -376,6 +393,7 @@ impl Node {
     }
 }
 
+
 pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<RealSsh, SshError> {
     let node = node.with_cluster_defaults(cluster);
     match connect_node(&node).await {
@@ -386,7 +404,7 @@ pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<RealSsh, 
     }
 }
 
-pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Option<SshErrors>) {
+pub async fn cluster_connections(cluster: &Cluster) -> (Option<RealSshClients>, Option<SshErrors>) {
     let fut: FuturesUnordered<_> = cluster.nodes.iter().map(|n| node_connection(cluster, n)).collect();
 
 
@@ -400,7 +418,7 @@ pub async fn cluster_connections(cluster: &Cluster) -> (Option<SshClients>, Opti
     (
         match clients.len() {
             0 => None,
-            _ => Some(SshClients { clients })
+            _ => Some(RealSshClients { clients })
         },
         match errs.len() {
             0 => None,
@@ -433,7 +451,33 @@ async fn connect_node(node: &Node) -> Result<RealSsh, Box<dyn Error>> {
     Ok(RealSsh { node_name: node.name.clone(), client: ssh_client })
 }
 
-impl SshClients {
+impl SshClients for RealSshClients {
+
+    async fn connect(cluster: &Cluster) -> (Option<RealSshClients>, Option<SshErrors>) {
+        let fut: FuturesUnordered<_> = cluster.nodes.iter().map(|n| node_connection(cluster, n)).collect();
+
+
+        let results: Vec<_> = fut.collect().await;
+        let (clients, errs): (Vec<RealSsh>, Vec<SshError>) = results.into_iter().partition_map(|r| match r {
+            Ok(client) => Either::Left(client),
+            Err(err) => Either::Right(err)
+        });
+
+
+        (
+            match clients.len() {
+                0 => None,
+                _ => Some(RealSshClients { clients })
+            },
+            match errs.len() {
+                0 => None,
+                _ => Some(SshErrors { errors: errs })
+            }
+        )
+    }
+}
+
+impl RealSshClients {
     pub fn find(&self, node_name: &str) -> Option<&RealSsh> {
         self.clients.iter().find(|c| c.node_name == node_name)
     }
