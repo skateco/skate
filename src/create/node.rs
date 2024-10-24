@@ -264,8 +264,7 @@ async fn setup_networking(conn: &RealSsh, all_conns: &RealSshClients, cluster_co
 
     match network_backend {
         "cni" => {
-            println!("WARNING: cni is deprecated, use netavark");
-            setup_cni(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
+            return Err(anyhow!("cni is deprecated, use netavark").into());
         }
         "netavark" => {
             setup_netavark(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
@@ -324,26 +323,6 @@ async fn setup_networking(conn: &RealSsh, all_conns: &RealSshClients, cluster_co
     let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
     conn.execute_stdout(cmd, true, true).await?;
 
-    Ok(())
-}
-
-async fn setup_cni(conn: &RealSsh, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout("sudo apt-get install -y containernetworking-plugins", true, true).await?;
-
-    let cni = include_str!("../resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
-        .replace("%%gateway%%", &gateway);
-
-    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    conn.execute_stdout(&cmd, true, true).await?;
-
-    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet cni < /dev/stdin
-    ");
-
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
-    conn.execute_stdout(&cmd, true, true).await?;
     Ok(())
 }
 

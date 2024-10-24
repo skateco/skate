@@ -12,7 +12,6 @@ pub trait WithRef<'a, T: ?Sized> {
 
 
 pub struct Deps {
-    pub store: Box<dyn Store>
 }
 
 impl With<dyn Store> for Deps {

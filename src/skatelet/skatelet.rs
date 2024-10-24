@@ -1,9 +1,8 @@
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
-use crate::skatelet::cni::cni;
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
-use crate::skatelet::create::{create, CreateArgs};
-use crate::skatelet::delete::{delete, DeleteArgs};
+use crate::skatelet::create::{create, CreateArgs, CreateDeps};
+use crate::skatelet::delete::{DeleteArgs, DeleteDeps, Deleter};
 use crate::skatelet::dns::{dns, DnsArgs};
 use crate::skatelet::ipvs::{ipvs, IpvsArgs};
 use crate::skatelet::oci::{oci, OciArgs};
@@ -37,7 +36,6 @@ enum Commands {
     Delete(DeleteArgs),
     Template(TemplateArgs),
     Dns(DnsArgs),
-    Cni,
     Oci(OciArgs),
     Ipvs(IpvsArgs),
     Create(CreateArgs),
@@ -79,6 +77,8 @@ pub fn log_panic(info: &PanicInfo) {
 
 impl ApplyDeps for Deps{}
 impl SystemDeps for Deps{}
+impl CreateDeps for Deps{}
+impl DeleteDeps for Deps{}
 
 pub async fn skatelet() -> Result<(), SkateError> {
 
@@ -101,22 +101,21 @@ pub async fn skatelet() -> Result<(), SkateError> {
 
     
     let deps = Deps{
-        store: Box::new(FileStore::new())
     };
+    
 
     let result = match args.command {
         Commands::Apply(args) => apply::apply(deps, args),
         Commands::System(args) => system(deps, args).await,
-        Commands::Delete(args) => delete(args),
-        Commands::Template(args) => template(args),
-        Commands::Cni => {
-            cni();
-            Ok(())
+        Commands::Delete(args) => {
+            let deleter = Deleter{deps};
+            deleter.delete(args)
         },
+        Commands::Template(args) => template(args),
         Commands::Dns(args) => dns(args),
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => ipvs(args),
-        Commands::Create(args) => create(args),
+        Commands::Create(args) => create(deps, args),
         Commands::Cordon(args) => cordon(args),
         Commands::Uncordon(args) => uncordon(args),
         // _ => Ok(())

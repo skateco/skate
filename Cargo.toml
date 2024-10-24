@@ -40,4 +40,3 @@ syslog = "7.0.0"
 tabled = "0.16.0"
 dialoguer = "0.11.0"
 [target.'cfg(target_os = "linux")'.dependencies]
-netavark = "1.12.1"

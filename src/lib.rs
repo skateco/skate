@@ -1,7 +1,6 @@
 mod skate;
 mod skatelet;
 #[cfg(target_os = "linux")]
-mod netavark;
 mod apply;
 mod refresh;
 mod ssh;
@@ -34,5 +33,3 @@ mod deps;
 
 pub use skate::skate;
 pub use skatelet::skatelet;
-#[cfg(target_os = "linux")]
-pub use netavark::netavark;
