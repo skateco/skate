@@ -1,7 +1,6 @@
 mod skate;
 mod skatelet;
 #[cfg(target_os = "linux")]
-mod netavark;
 mod apply;
 mod refresh;
 mod ssh;
@@ -13,7 +12,6 @@ mod delete;
 
 mod state;
 mod get;
-mod executor;
 
 mod describe;
 mod filestore;
@@ -30,8 +28,8 @@ pub mod errors;
 mod cluster;
 mod rollout;
 mod resource;
+mod exec;
+mod deps;
 
 pub use skate::skate;
 pub use skatelet::skatelet;
-#[cfg(target_os = "linux")]
-pub use netavark::netavark;

@@ -34,8 +34,7 @@ impl NameFilters for IngressListItem {
 impl Lister<IngressListItem> for IngressLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<IngressListItem> {
         si.ingresses.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
-            let filterable: Box<dyn NameFilters> = Box::new(*j);
-            filterable.filter_names(id, ns)
+            j.filter_names(id, ns)
         }).map(|item| {
             let ingress: Ingress = serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();
             let spec = ingress.spec.unwrap_or_default();

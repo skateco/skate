@@ -9,14 +9,16 @@ use itertools::Itertools;
 use std::io::Write;
 use base64::Engine;
 use std::net::ToSocketAddrs;
-use crate::apply::{apply, ApplyArgs};
+use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
+use crate::create::CreateDeps;
+use crate::deps::SshManager;
 use crate::oci;
-use crate::refresh::refreshed_state;
+use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
-use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
+use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -42,7 +44,8 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
-pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+
+pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
     let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
@@ -77,8 +80,9 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 
 
     config.persist(Some(args.config.skateconfig.clone()))?;
+    
 
-    let conn = node_connection(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
+    let conn = deps.get().node_connect(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
     let info = conn.get_node_system_info().await?;
 
     println!("{:}", &info.platform);
@@ -113,14 +117,16 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
                 Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
                     let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'";
                     println!("installing podman with command {}", command);
-                    let result = conn.client.execute(command).await?;
-                    if result.exit_status > 0 {
-                        let mut lines = result.stderr.lines();
-                        println!("failed to install podman {} :\n{}", CROSS_EMOJI, lines.join("\n"));
-                        false
-                    } else {
-                        println!("podman installed successfully {} ", CHECKBOX_EMOJI);
-                        true
+                    let result = conn.execute(command).await;
+                    match result {
+                        Ok(output) => {
+                            println!("podman installed successfully {} ", CHECKBOX_EMOJI);
+                            true
+                        },
+                        Err(e) => {
+                            println!("failed to install podman {} :\n{}", CROSS_EMOJI, e);
+                            false
+                        }
                     }
                 }
             };
@@ -134,7 +140,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
     let _ = conn.execute_stdout(cmd, true, true).await;
 
-    let (all_conns, _) = cluster_connections(&cluster).await;
+    let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
     let skate_dirs = [
@@ -151,9 +157,9 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     // Refresh state so that we can apply coredns later
-    let state = refreshed_state(&cluster.name, all_conns, &config).await?;
+    let state = Refresh::<D>::refreshed_state(&cluster.name, all_conns, &config).await?;
 
-    install_cluster_manifests(&args.config, &cluster).await?;
+    install_cluster_manifests(deps, &args.config, &cluster).await?;
 
     propagate_static_resources(&config, all_conns, &node, &state).await?;
 
@@ -189,7 +195,7 @@ async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node
     Ok(())
 }
 
-pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
+pub async fn install_cluster_manifests<D: CreateDeps>(deps: &D, args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
     println!("applying cluster manifests");
     // COREDNS
     // coredns listens on port 53 and 5533
@@ -206,7 +212,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
     file.write_all(coredns_yaml.as_bytes())?;
 
 
-    apply(ApplyArgs {
+    Apply::<D>::apply(deps, ApplyArgs {
         filename: vec![coredns_yaml_path],
         grace_period: 0,
         config: args.clone(),
@@ -220,7 +226,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
     file.write_all(INGRESS_MANIFEST.as_bytes())?;
 
 
-    apply(ApplyArgs {
+    Apply::<D>::apply(deps, ApplyArgs {
         filename: vec![nginx_yaml_path],
         grace_period: 0,
         config: args.clone(),
@@ -231,7 +237,7 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 }
 
 // TODO don't run things unless they need to be
-async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
@@ -264,8 +270,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
 
     match network_backend {
         "cni" => {
-            println!("WARNING: cni is deprecated, use netavark");
-            setup_cni(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
+            return Err(anyhow!("cni is deprecated, use netavark").into());
         }
         "netavark" => {
             setup_netavark(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
@@ -327,27 +332,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     Ok(())
 }
 
-async fn setup_cni(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout("sudo apt-get install -y containernetworking-plugins", true, true).await?;
-
-    let cni = include_str!("../resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
-        .replace("%%gateway%%", &gateway);
-
-    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    conn.execute_stdout(&cmd, true, true).await?;
-
-    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet cni < /dev/stdin
-    ");
-
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
-    conn.execute_stdout(&cmd, true, true).await?;
-    Ok(())
-}
-
-async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
+async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
     conn.execute_stdout("sudo mkdir -p /usr/share/containers/oci/hooks.d", true, true).await?;
 
     let oci_poststart_hook = oci::HookConfig {
@@ -393,7 +378,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+async fn setup_netavark(conn: &Box<dyn SshClient>, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
     println!("installing netavark");
     // // The netavark plugin isn't actually used right now but we'll put it there just in case.
     // // We'll use an oci hook instead.
@@ -417,11 +402,11 @@ async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) 
     Ok(())
 }
 
-async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
+async fn create_replace_routes_file(conn: &Box<dyn SshClient>, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo mkdir -p /etc/skate";
     conn.execute_stdout(cmd, true, true).await?;
 
-    let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name).collect();
+    let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name()).collect();
 
     let mut route_file = "#!/bin/bash
 ".to_string();

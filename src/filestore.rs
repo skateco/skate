@@ -31,6 +31,7 @@ pub struct FileStore {
     base_path: String,
 }
 
+
 #[derive(Tabled, Debug, Clone, Deserialize, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ObjectListItem {
@@ -170,9 +171,11 @@ impl FileStore {
         path.extend(parts);
         path.to_string_lossy().to_string()
     }
+}
 
+impl Store for FileStore {
     // will clobber
-    pub fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String,SkateError> {
+    fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String, SkateError> {
         let dir = self.get_path(&[object_type, object_name]);
         create_dir_all(&dir).map_err(|e| anyhow!(e).context(format!("failed to create directory {}", dir)))?;
         let file_path = format!("{}/{}/{}/{}", self.base_path, object_type, object_name, file_name);
@@ -183,8 +186,7 @@ impl FileStore {
             Ok(mut file) => Ok(file.write_all(file_contents).map(|_| file_path)?)
         }
     }
-
-    pub fn remove_file(&self, object_type: &str, object_name: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
+    fn remove_file(&self, object_type: &str, object_name: &str, file_name: &str) -> Result<(), Box<dyn Error>> {
         let file_path = self.get_path(&[object_type, object_name, file_name]);
         let result = std::fs::remove_file(&file_path).map_err(|e| anyhow!(e).context(format!("failed to remove file {}", file_path)));
         if result.is_err() {
@@ -192,14 +194,12 @@ impl FileStore {
         }
         Ok(())
     }
-
-    pub fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool {
+    fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool {
         let file_path = self.get_path(&[object_type, object_name, file_name]);
         std::path::Path::new(&file_path).exists()
     }
-
     // returns true if the object was removed, false if it didn't exist
-    pub fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>> {
+    fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>> {
         let dir = self.get_path(&[object_type, object_name]);
         match std::fs::remove_dir_all(&dir) {
             Err(err) => match err.kind() {
@@ -209,16 +209,13 @@ impl FileStore {
             Ok(_) => Ok(true)
         }
     }
-
-    pub fn get_object(&self, object_type: &str, object_name: &str) -> Result<ObjectListItem, Box<dyn Error>> {
+    fn get_object(&self, object_type: &str, object_name: &str) -> Result<ObjectListItem, Box<dyn Error>> {
         let dir = self.get_path(&[object_type, object_name]);
 
         let obj = ObjectListItem::try_from(dir.as_str())?;
         Ok(obj)
     }
-
-
-    pub fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>> {
+    fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>> {
         let dir = self.get_path(&[object_type]);
         let entries = match std::fs::read_dir(&dir) {
             Err(e) => match e.kind() {
@@ -236,4 +233,15 @@ impl FileStore {
         }
         Ok(result)
     }
+}
+
+pub trait Store {
+    // will clobber
+    fn write_file(&self, object_type: &str, object_name: &str, file_name: &str, file_contents: &[u8]) -> Result<String, SkateError>;
+    fn remove_file(&self, object_type: &str, object_name: &str, file_name: &str) -> Result<(), Box<dyn Error>>;
+    fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool;
+    // returns true if the object was removed, false if it didn't exist
+    fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>>;
+    fn get_object(&self, object_type: &str, object_name: &str) -> Result<ObjectListItem, Box<dyn Error>>;
+    fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>>;
 }
