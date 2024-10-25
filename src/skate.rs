@@ -2,28 +2,27 @@
 
 use std::error::Error;
 use clap::{Args, Parser, Subcommand};
-use k8s_openapi::Metadata;
 use serde::{Deserialize, Serialize};
-use crate::apply::{apply, ApplyArgs};
-use crate::refresh::{refresh, RefreshArgs};
+use crate::apply::{Apply, ApplyArgs, ApplyDeps};
+use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
 use strum_macros::{Display, EnumString};
-use std::{fs, io, process};
+use std::{fs, io};
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use anyhow::anyhow;
 use serde_yaml::Value;
 use crate::config;
-use crate::cluster::{cluster, ClusterArgs};
+use crate::cluster::{Cluster, ClusterArgs, ClusterDeps};
 use crate::config_cmd::ConfigArgs;
-use crate::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
-use crate::create::{create, CreateArgs};
-use crate::delete::{delete, DeleteArgs};
-use crate::get::{get, GetArgs};
-use crate::describe::{describe, DescribeArgs};
+use crate::cordon::{Cordon, CordonArgs, CordonDeps, UncordonArgs};
+use crate::create::{Create, CreateArgs, CreateDeps};
+use crate::delete::{Delete, DeleteArgs, DeleteDeps};
+use crate::deps::Deps;
+use crate::get::{Get, GetArgs, GetDeps};
+use crate::describe::{Describe, DescribeArgs, DescribeDeps};
 use crate::errors::SkateError;
-use crate::logs::{logs, LogArgs};
+use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::resource::SupportedResources;
-use crate::rollout::{rollout, RolloutArgs};
+use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::util::TARGET;
 
@@ -38,29 +37,29 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    #[command(long_about="Create resources")]
+    #[command(long_about = "Create resources")]
     Create(CreateArgs),
-    #[command(long_about="Delete resources")]
+    #[command(long_about = "Delete resources")]
     Delete(DeleteArgs),
-    #[command(long_about="Apply kubernetes manifest files")]
+    #[command(long_about = "Apply kubernetes manifest files")]
     Apply(ApplyArgs),
-    #[command(long_about="Refresh cluster state")]
+    #[command(long_about = "Refresh cluster state")]
     Refresh(RefreshArgs),
-    #[command(long_about="List resources")]
+    #[command(long_about = "List resources")]
     Get(GetArgs),
-    #[command(long_about="View a resource")]
+    #[command(long_about = "View a resource")]
     Describe(DescribeArgs),
-    #[command(long_about="View resource logs")]
+    #[command(long_about = "View resource logs")]
     Logs(LogArgs),
-    #[command(long_about="Configuration actions")]
+    #[command(long_about = "Configuration actions")]
     Config(ConfigArgs),
-    #[command(long_about="Taint a node as unschedulable")]
+    #[command(long_about = "Taint a node as unschedulable")]
     Cordon(CordonArgs),
-    #[command(long_about="Remove unschedulable taint on a node")]
+    #[command(long_about = "Remove unschedulable taint on a node")]
     Uncordon(UncordonArgs),
-    #[command(long_about="Cluster actions")]
+    #[command(long_about = "Cluster actions")]
     Cluster(ClusterArgs),
-    #[command(long_about="Rollout actions")]
+    #[command(long_about = "Rollout actions")]
     Rollout(RolloutArgs),
 }
 
@@ -72,26 +71,72 @@ pub struct ConfigFileArgs {
     pub context: Option<String>,
 }
 
+impl ApplyDeps for Deps {}
+impl ClusterDeps for Deps {}
+impl CreateDeps for Deps {}
+impl DeleteDeps for Deps {}
+impl CordonDeps for Deps {}
+impl RefreshDeps for Deps{}
+impl GetDeps for Deps{}
+impl DescribeDeps for Deps{}
+impl LogsDeps for Deps{}
+impl RolloutDeps for Deps{}
+
+
 pub async fn skate() -> Result<(), SkateError> {
+    let deps = Deps {};
+
     config::ensure_config();
     let args = Cli::parse();
     match args.command {
-        Commands::Create(args) => create(args).await,
-        Commands::Delete(args) => delete(args).await,
+        Commands::Create(args) => {
+            let create = Create { deps };
+            create.create(args).await
+        }
+        Commands::Delete(args) => {
+            let delete = Delete { deps };
+            delete.delete(args).await
+        }
 
-        Commands::Apply(args) => apply(args).await,
-        Commands::Refresh(args) => refresh(args).await,
-        Commands::Get(args) => get(args).await,
-        Commands::Describe(args) => describe(args).await,
-        Commands::Logs(args) => logs(args).await,
+        Commands::Apply(args) => {
+            let apply = Apply { deps, };
+            apply.apply_self(args).await
+        }
+        Commands::Refresh(args) => {
+            let refresh = Refresh{deps};
+            refresh.refresh(args).await
+        },
+        Commands::Get(args) => {
+            let get= Get{deps};
+            get.get(args).await
+        },
+        Commands::Describe(args) => {
+            let describe = Describe{deps};
+            describe.describe(args).await
+        },
+        Commands::Logs(args) => {
+            let logs= Logs{deps};
+            logs.logs(args).await
+        },
         Commands::Config(args) => crate::config_cmd::config(args),
-        Commands::Cordon(args) => cordon(args).await,
-        Commands::Uncordon(args) => uncordon(args).await,
-        Commands::Cluster(args) => cluster(args).await,
-        Commands::Rollout(args) => rollout(args).await,
+        Commands::Cordon(args) => {
+            let cordon = Cordon {deps};
+            cordon.cordon(args).await
+        }
+        Commands::Uncordon(args) => {
+            let cordon = Cordon {deps };
+            cordon.uncordon(args).await
+        }
+        Commands::Cluster(args) => {
+            let cluster = Cluster { deps };
+            cluster.cluster(args).await
+        }
+        Commands::Rollout(args) => {
+            let rollout = Rollout{deps};
+            rollout.rollout(args).await
+        },
     }?;
     Ok(())
-    
 }
 
 
@@ -104,23 +149,23 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
     let num_filenames = filenames.len();
 
     for filename in filenames {
-            let str_file = {
-                if num_filenames == 1 && filename == "-" {
-                    let mut stdin = io::stdin();
-                    let mut buffer = String::new();
-                    stdin.read_to_string(&mut buffer)?;
-                    buffer
-                } else {
-                    fs::read_to_string(filename).expect("failed to read file")
-                }
-            };
-            for document in serde_yaml::Deserializer::from_str(&str_file) {
-                let value = Value::deserialize(document).expect("failed to read document");
-                if let Value::Mapping(mapping) = &value {
-                    result.push(SupportedResources::try_from(&value)?)
-                }
+        let str_file = {
+            if num_filenames == 1 && filename == "-" {
+                let mut stdin = io::stdin();
+                let mut buffer = String::new();
+                stdin.read_to_string(&mut buffer)?;
+                buffer
+            } else {
+                fs::read_to_string(filename).expect("failed to read file")
             }
         };
+        for document in serde_yaml::Deserializer::from_str(&str_file) {
+            let value = Value::deserialize(document).expect("failed to read document");
+            if let Value::Mapping(mapping) = &value {
+                result.push(SupportedResources::try_from(&value)?)
+            }
+        }
+    };
     Ok(result)
 }
 
@@ -184,31 +229,6 @@ impl From<&str> for Distribution {
             _ => Unknown
         }
     }
-}
-
-
-pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
-    let output = process::Command::new(command)
-        .args(args)
-        .output().map_err(|e| anyhow!(e).context("failed to run command"))?;
-    if !output.status.success() {
-        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).context(format!("{} {} failed", command, args.join(" "))).into());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
-}
-
-pub(crate) fn exec_cmd_stdout(command: &str, args: &[&str]) -> Result<(), Box<dyn Error>> {
-    let output = process::Command::new(command)
-        .args(args)
-        .stdout(process::Stdio::inherit())
-        .stderr(process::Stdio::inherit())
-        .status().map_err(|e| anyhow!(e).context("failed to run command"))?;
-    if !output.success() {
-        return Err(anyhow!("exit code {}", output).context(format!("{} {} failed", command, args.join(" "))).into());
-    }
-
-    Ok(())
 }
 
 

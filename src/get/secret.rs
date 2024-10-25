@@ -30,8 +30,7 @@ impl NameFilters for SecretListItem {
 impl Lister<SecretListItem> for SecretLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<SecretListItem> {
         si.secrets.as_ref().unwrap_or(&vec!()).iter().filter(|j| {
-            let filterable: Box<dyn NameFilters> = Box::new(*j);
-            filterable.filter_names(id, ns)
+            j.filter_names(id, ns)
         }).map(|item| {
             let data: usize = match item.manifest {
                 Some(ref m) => {

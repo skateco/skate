@@ -3,8 +3,8 @@ use clap::{Args, Subcommand};
 use log::{error, info};
 use strum_macros::EnumString;
 use crate::errors::SkateError;
-use crate::skatelet::dns;
-use crate::skatelet::dns::RemoveArgs;
+use crate::exec::{RealExec, ShellExec};
+use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
 use crate::util::spawn_orphan_process;
 
@@ -50,7 +50,9 @@ fn post_start() -> Result<(), SkateError> {
 fn post_stop() -> Result<(), SkateError> {
     info!("poststop");
     let id = container_id()?;
-    dns::remove(RemoveArgs { container_id: Some(id), pod_id: None })
+    let execer: Box<dyn ShellExec> = Box::new(RealExec{});
+    let dns = DnsService::new("/var/lib/skate/dns", &execer);
+    dns.remove(Some(id), None)
 }
 
 fn container_id() -> Result<String, SkateError> {

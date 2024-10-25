@@ -68,8 +68,7 @@ jobs:
           cd dist 
           cp ../target/$TARGET/release/skate .
           cp ../target/$TARGET/release/skatelet .
-          cp ../target/$TARGET/release/skatelet-netavark .
           tar -cvf skate-$TARGET.tar.gz skate
-          tar -cvf skatelet-$TARGET.tar.gz skatelet skatelet-netavark
+          tar -cvf skatelet-$TARGET.tar.gz skatelet
           gh release upload ${{github.ref_name}}  *.tar.gz
 

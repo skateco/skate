@@ -16,7 +16,7 @@ use k8s_openapi::Metadata;
 use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClients};
+use crate::ssh::{SshClient, SshClients};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CROSS_EMOJI, hash_k8s_resource, metadata_name, NamespacedName};
 
@@ -756,7 +756,7 @@ impl DefaultScheduler {
     }
     
     
-    async fn apply(plan: ApplyPlan,  conns: &SshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
+    async fn apply(plan: ApplyPlan, conns: &SshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
         let mut result: Vec<ScheduledOperation> = vec!();
 
