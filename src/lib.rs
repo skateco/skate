@@ -29,7 +29,9 @@ mod cluster;
 mod rollout;
 mod resource;
 mod exec;
-mod deps;
+pub mod deps;
+mod test_mocks;
 
 pub use skate::skate;
+pub use skate::AllDeps;
 pub use skatelet::skatelet;

@@ -1,6 +1,10 @@
 use anyhow::anyhow;
 use clap::Args;
-
+use std::error::Error;
+use serde_yaml::Value;
+use std::{fs, io};
+use std::io::Read;
+use serde::Deserialize;
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
@@ -33,7 +37,7 @@ pub struct Apply<D: ApplyDeps>{
 impl<D: ApplyDeps> Apply<D> {
     pub async fn apply(deps: &D, args: ApplyArgs) -> Result<(), SkateError> {
         let config = Config::load(Some(args.config.skateconfig))?;
-        let objects = crate::skate::read_manifests(args.filename)?;
+        let objects = read_manifests(args.filename)?;
         Self::apply_supported_resources(deps, &config, objects, args.dry_run).await
     }
     
@@ -73,4 +77,33 @@ impl<D: ApplyDeps> Apply<D> {
 
         Ok(())
     }
+}
+
+pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
+    let api_version_key = Value::String("apiVersion".to_owned());
+    let kind_key = Value::String("kind".to_owned());
+
+    let mut result: Vec<SupportedResources> = Vec::new();
+
+    let num_filenames = filenames.len();
+
+    for filename in filenames {
+        let str_file = {
+            if num_filenames == 1 && filename == "-" {
+                let mut stdin = io::stdin();
+                let mut buffer = String::new();
+                stdin.read_to_string(&mut buffer)?;
+                buffer
+            } else {
+                fs::read_to_string(filename).expect("failed to read file")
+            }
+        };
+        for document in serde_yaml::Deserializer::from_str(&str_file) {
+            let value = Value::deserialize(document).expect("failed to read document");
+            if let Value::Mapping(mapping) = &value {
+                result.push(SupportedResources::try_from(&value)?)
+            }
+        }
+    };
+    Ok(result)
 }

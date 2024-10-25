@@ -12,9 +12,9 @@ use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 #[derive(Debug, Args)]
 pub struct RefreshArgs {
     #[command(flatten)]
-    config: ConfigFileArgs,
+    pub config: ConfigFileArgs,
     #[arg(long, long_help = "print state as json to stdout")]
-    json: bool,
+    pub json: bool,
 }
 
 

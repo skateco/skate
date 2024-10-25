@@ -1,15 +1,11 @@
 #![allow(unused)]
 
-use std::error::Error;
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use crate::apply::{Apply, ApplyArgs, ApplyDeps};
 use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
-use strum_macros::{Display, EnumString};
-use std::{fs, io};
+use strum_macros::Display;
 use std::fmt::{Display, Formatter};
-use std::io::Read;
-use serde_yaml::Value;
 use crate::config;
 use crate::cluster::{Cluster, ClusterArgs, ClusterDeps};
 use crate::config_cmd::ConfigArgs;
@@ -21,12 +17,8 @@ use crate::get::{Get, GetArgs, GetDeps};
 use crate::describe::{Describe, DescribeArgs, DescribeDeps};
 use crate::errors::SkateError;
 use crate::logs::{LogArgs, Logs, LogsDeps};
-use crate::resource::SupportedResources;
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
-use crate::util::TARGET;
-
-
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
 #[command(about = "Skate CLI", long_about = None, arg_required_else_help = true, version)]
@@ -82,12 +74,12 @@ impl DescribeDeps for Deps{}
 impl LogsDeps for Deps{}
 impl RolloutDeps for Deps{}
 
+pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps{}
 
-pub async fn skate() -> Result<(), SkateError> {
-    let deps = Deps {};
+impl AllDeps for Deps{}
 
+async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateError> {
     config::ensure_config();
-    let args = Cli::parse();
     match args.command {
         Commands::Create(args) => {
             let create = Create { deps };
@@ -139,52 +131,11 @@ pub async fn skate() -> Result<(), SkateError> {
     Ok(())
 }
 
-
-pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
-    let api_version_key = Value::String("apiVersion".to_owned());
-    let kind_key = Value::String("kind".to_owned());
-
-    let mut result: Vec<SupportedResources> = Vec::new();
-
-    let num_filenames = filenames.len();
-
-    for filename in filenames {
-        let str_file = {
-            if num_filenames == 1 && filename == "-" {
-                let mut stdin = io::stdin();
-                let mut buffer = String::new();
-                stdin.read_to_string(&mut buffer)?;
-                buffer
-            } else {
-                fs::read_to_string(filename).expect("failed to read file")
-            }
-        };
-        for document in serde_yaml::Deserializer::from_str(&str_file) {
-            let value = Value::deserialize(document).expect("failed to read document");
-            if let Value::Mapping(mapping) = &value {
-                result.push(SupportedResources::try_from(&value)?)
-            }
-        }
-    };
-    Ok(result)
+pub async fn skate<D: AllDeps>(deps: D) -> Result<(), SkateError> {
+    let args = Cli::parse();
+    skate_with_args(deps, args).await
 }
 
-#[derive(Debug, Display, EnumString, Clone, Serialize, Deserialize)]
-pub enum Os {
-    Unknown,
-    Linux,
-    Darwin,
-}
-
-impl Os {
-    pub fn from_str_loose(s: &str) -> Self {
-        match s.to_lowercase() {
-            s if s.contains("linux") => Os::Linux,
-            s if s.contains("darwin") => Os::Darwin,
-            _ => Os::Unknown
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
@@ -195,20 +146,6 @@ pub struct Platform {
 impl Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("arch: {}, distribution: {}", self.arch, self.distribution))
-    }
-}
-
-impl Platform {
-    pub fn target() -> Self {
-        let parts: Vec<&str> = TARGET.split('-').collect();
-
-
-        let arch = parts.first().expect("failed to find arch");
-
-        let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
-        let distro = issue.split_whitespace().next().expect("no distribution found in /etc/issue");
-
-        Platform { arch: arch.to_string(), distribution: Distribution::from(distro) }
     }
 }
 
@@ -230,6 +167,62 @@ impl From<&str> for Distribution {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{skate, AllDeps};
+    use crate::apply::ApplyDeps;
+    use crate::cluster::ClusterDeps;
+    use crate::cordon::CordonDeps;
+    use crate::create::CreateDeps;
+    use crate::delete::DeleteDeps;
+    use crate::deps::{SshManager, With};
+    use crate::describe::DescribeDeps;
+    use crate::get::GetDeps;
+    use crate::logs::LogsDeps;
+    use crate::refresh::{RefreshArgs, RefreshDeps};
+    use crate::rollout::RolloutDeps;
+    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
+    use crate::skate::Commands::Refresh;
+    use crate::test_mocks::MockSshManager;
+
+    struct TestDeps{}
+
+    impl With<dyn SshManager> for TestDeps{
+        fn get(&self) -> Box<dyn SshManager> {
+            Box::new(MockSshManager{}) as Box<dyn SshManager>
+        }
+    }
+
+    impl ApplyDeps for TestDeps {}
+    impl RefreshDeps for TestDeps {}
+    impl ClusterDeps for TestDeps {}
+    impl CreateDeps for TestDeps {}
+    impl DeleteDeps for TestDeps {}
+    impl CordonDeps for TestDeps {}
+    impl GetDeps for TestDeps {}
+    impl DescribeDeps for TestDeps {}
+    impl LogsDeps for TestDeps {}
+    impl RolloutDeps for TestDeps {}
+
+    impl AllDeps for TestDeps{}
+
+    #[tokio::test]
+    async fn test_runs() {
+        let deps = TestDeps{};
+
+        skate_with_args(deps, Cli{ command: Refresh(RefreshArgs{
+            json: false,
+            config: ConfigFileArgs{
+                skateconfig: "".to_string(),
+                context: None,
+            },
+        }) }).await;
+
+    }
+}
+
+
 
 
 
