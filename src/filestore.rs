@@ -32,7 +32,7 @@ pub struct FileStore {
 }
 
 
-#[derive(Tabled, Debug, Clone, Deserialize, Serialize)]
+#[derive(Tabled, Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ObjectListItem {
     pub resource_type: ResourceType,

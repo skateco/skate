@@ -137,7 +137,7 @@ pub async fn skate<D: AllDeps>(deps: D) -> Result<(), SkateError> {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq,Default, Serialize, Deserialize)]
 pub struct Platform {
     pub arch: String,
     pub distribution: Distribution,
@@ -149,8 +149,9 @@ impl Display for Platform {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Display)]
 pub enum Distribution {
+    #[default]
     Unknown,
     Debian,
     Raspbian,
@@ -184,7 +185,7 @@ mod tests {
     use crate::rollout::RolloutDeps;
     use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
     use crate::skate::Commands::Refresh;
-    use crate::test_mocks::MockSshManager;
+    use crate::test_helpers::ssh_mocks::MockSshManager;
 
     struct TestDeps{}
 

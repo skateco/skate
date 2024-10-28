@@ -138,8 +138,8 @@ impl Display for NamespacedName {
 }
 
 impl NamespacedName {
-    pub fn new(name: String, namespace: String) -> Self {
-        NamespacedName { name, namespace }
+    pub fn new(name: &str, namespace: &str) -> Self {
+        NamespacedName { name: name.to_string(), namespace: namespace.to_string() }
     }
 }
 
@@ -159,7 +159,7 @@ pub fn metadata_name(obj: &impl Metadata<Ty=ObjectMeta>) -> NamespacedName
         panic!("metadata missing skate.io/namespace label")
     }
 
-    NamespacedName::new(name.unwrap().clone(), ns.unwrap().clone())
+    NamespacedName::new(name.unwrap(), ns.unwrap())
 }
 
 // hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it

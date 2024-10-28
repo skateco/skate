@@ -55,7 +55,7 @@ impl OpType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ScheduledOperation {
     pub resource: SupportedResources,
     pub node: Option<NodeState>,
@@ -88,6 +88,7 @@ impl ScheduledOperation {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ApplyPlan {
     pub actions: HashMap<NamespacedName, Vec<ScheduledOperation>>,
 }
@@ -215,7 +216,6 @@ impl DefaultScheduler {
                         actions.insert(name, vec!(op));
                     }
                 };
-
             }
         }
 
@@ -754,10 +754,9 @@ impl DefaultScheduler {
 
         remove_result
     }
-    
-    
-    async fn apply(plan: ApplyPlan, conns: &SshClients, state: &mut ClusterState, dry_run:bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
 
+
+    async fn apply(plan: ApplyPlan, conns: &SshClients, state: &mut ClusterState, dry_run: bool) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let mut result: Vec<ScheduledOperation> = vec!();
 
         for (_name, ops) in plan.actions {
@@ -877,7 +876,7 @@ impl DefaultScheduler {
         if plan.actions.is_empty() {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
-        
+
         Self::apply(plan, conns, state, dry_run).await
     }
 }
@@ -901,5 +900,87 @@ impl Scheduler for DefaultScheduler {
             }
         }
         Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use k8s_openapi::api::apps::v1::DeploymentSpec;
+    use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
+    use crate::test_helpers;
+    use super::*;
+
+    #[test]
+    fn test_plan_deployment() {
+
+        let state = ClusterState {
+            cluster_name: "test".to_string(),
+            nodes: vec!(
+                test_helpers::objects::node_state("node-1"),
+                test_helpers::objects::node_state("node-2"),
+            ),
+        };
+
+        let pod_template = PodTemplateSpec {
+            metadata: Some(NamespacedName::new("dpl-foo-1", "foo_namespace").into()),
+            spec: Some(PodSpec {
+                containers: vec![
+                    Container {
+                        args: Some(vec!("arg1".to_string())),
+                        command: Some(vec!("cmd".to_string())),
+                        name: "container1".to_string(),
+                        ..Default::default()
+                    }
+                ],
+                ..Default::default()
+            }),
+        };
+
+        let deployment = Deployment {
+            metadata: NamespacedName::new("foo", "foo-namespace").into(),
+            spec: Some(DeploymentSpec {
+                replicas: Some(2),
+                template: pod_template.clone(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+
+        let result = DefaultScheduler::plan_deployment(&state, &deployment);
+        assert_eq!(true, result.is_ok());
+
+        
+        let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
+
+        let result = &result.unwrap();
+        assert_eq!(1, result.actions.len());
+        
+        let ops = result.actions.get(&ns_name);
+        assert_eq!(true, ops.is_some());
+        
+        let ops = ops.unwrap();
+        assert_eq!(4, ops.len());
+
+        let deployment_ops =ops.iter().filter(|o| match o.resource {
+            SupportedResources::Deployment(_) => true,
+            _ => false,
+        }).collect_vec();
+        assert_eq!(2, deployment_ops.len());
+        assert_eq!(true, deployment_ops.iter().all(|o| 
+            o.operation == OpType::Create
+            && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
+        ));
+
+        let pod_ops =ops.iter().filter(|o| match o.resource {
+            SupportedResources::Pod(_) => true,
+            _ => false,
+        }).collect_vec();
+        assert_eq!(2, pod_ops.len());
+        assert_eq!(true, pod_ops.iter().all(|o|
+            o.operation == OpType::Create
+                && o.node.is_none()
+        ));
+        
     }
 }

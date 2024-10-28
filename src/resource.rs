@@ -37,7 +37,7 @@ pub enum ResourceType {
     ClusterIssuer,
 }
 
-#[derive(Debug, Serialize, Deserialize, Display, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Display, Clone)]
 pub enum SupportedResources {
     #[strum(serialize = "Pod")]
     Pod(Pod),

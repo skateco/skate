@@ -88,7 +88,6 @@ impl<D: RefreshDeps> Refresh<D> {
             Ok(state) => state,
             Err(_) => ClusterState {
                 cluster_name: cluster_name.to_string(),
-                hash: "".to_string(),
                 nodes: vec![],
             }
         };

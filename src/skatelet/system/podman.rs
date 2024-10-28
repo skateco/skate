@@ -67,7 +67,7 @@ impl PodmanPodStatus {
     }
 }
 
-#[derive(Tabled, Debug, Clone, Serialize, Deserialize)]
+#[derive(Tabled, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct PodmanPodInfo {
@@ -210,7 +210,7 @@ impl From<PodmanPodInfo> for Pod {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PodmanContainerInfo {
     pub id: String,

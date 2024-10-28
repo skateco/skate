@@ -22,16 +22,17 @@ use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
-use crate::util::{hash_string, metadata_name, slugify};
+use crate::util::{metadata_name, slugify};
 
-#[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
+    #[default]
     Unknown,
     Healthy,
     Unhealthy,
 }
 
-#[derive(Tabled, Serialize, Deserialize, Debug, Clone)]
+#[derive(Tabled, Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct NodeState {
     pub node_name: String,
@@ -292,10 +293,9 @@ impl NodeState {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ClusterState {
     pub cluster_name: String,
-    pub hash: String,
     pub nodes: Vec<NodeState>,
 }
 
@@ -351,7 +351,6 @@ impl ClusterState {
             Err(_e) => {
                 let state = ClusterState {
                     cluster_name: cluster_name.to_string(),
-                    hash: "".to_string(),
                     nodes: vec![],
                 };
                 Ok(state)
@@ -391,7 +390,6 @@ impl ClusterState {
 
     pub fn reconcile_all_nodes(&mut self, cluster_name: &str, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
         let cluster = config.active_cluster(Some(cluster_name.to_string()))?;
-        self.hash = hash_string(cluster);
 
         let state_hosts: HashSet<String> = self.nodes.iter().map(|n| n.node_name.clone()).collect();
 

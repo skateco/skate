@@ -55,7 +55,7 @@ pub struct SshClients {
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct HostInfo {
     pub node_name: String,
     pub hostname: String,

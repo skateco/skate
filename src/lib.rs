@@ -30,7 +30,7 @@ mod rollout;
 mod resource;
 mod exec;
 pub mod deps;
-mod test_mocks;
+mod test_helpers;
 
 pub use skate::skate;
 pub use skate::AllDeps;

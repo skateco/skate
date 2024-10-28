@@ -46,14 +46,14 @@ pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), Skat
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub available_space_mib: u64,
     pub total_space_mib: u64,
     pub disk_kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SystemInfo {
     pub platform: Platform,
     pub total_memory_mib: u64,
