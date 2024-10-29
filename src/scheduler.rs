@@ -287,6 +287,14 @@ impl DefaultScheduler {
 
     fn plan_deployment_rolling_update(state: &ClusterState, d: &Deployment, _: RollingUpdateDeployment) -> Result<ApplyPlan, Box<dyn Error>> {
         let actions = Self::plan_deployment_generic(state, d)?;
+        
+        // max unavailable = 25% == 75% must be available
+        // max surge = 25% == max 125% number of pods
+        // deploy 
+        // deploy to max surge
+        // delete to max unavail
+        // deploy to max surge
+        // etc
 
         // TODO - respect max surge and max unavailable
         // will require parallelism.

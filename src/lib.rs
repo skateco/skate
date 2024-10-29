@@ -1,6 +1,5 @@
 mod skate;
 mod skatelet;
-#[cfg(target_os = "linux")]
 mod apply;
 mod refresh;
 mod ssh;
