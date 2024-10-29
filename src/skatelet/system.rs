@@ -53,7 +53,7 @@ pub struct DiskInfo {
     pub disk_kind: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default,  Clone, PartialEq, Serialize, Deserialize)]
 pub struct SystemInfo {
     pub platform: Platform,
     pub total_memory_mib: u64,

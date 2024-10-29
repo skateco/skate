@@ -2,7 +2,6 @@ use futures::StreamExt;
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
-use crate::AllDeps;
 use crate::config::{Cluster, Node};
 use crate::exec::{RealExec, ShellExec};
 use crate::filestore::{FileStore, Store};

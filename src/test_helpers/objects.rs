@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::system::DiskInfo;
@@ -51,9 +52,32 @@ pub fn node_state(name: &str) -> NodeState{
     }
 }
 
+pub trait WithPod {
+    fn with_pod(self, pod: &Pod) -> Self;
+}
+
+impl WithPod for NodeState {
+    fn with_pod(self, pod: &Pod) -> Self {
+        let mut node  = self.clone();
+        if node.host_info.is_none() {
+            node.host_info = Some(HostInfo::default())
+        }
+        let hi = node.host_info.as_mut().unwrap();
+        if hi.system_info.is_none() {
+            hi.system_info = Some(SystemInfo::default());
+        }
+        
+        let si = hi.system_info.as_mut().unwrap();
+        si.pods = Some([ si.pods.clone().unwrap_or_default(), vec!(pod.clone().into())].concat());
+        node
+    }
+}
+
 impl From<NamespacedName> for ObjectMeta {
     fn from(ns_name: NamespacedName) -> Self {
         ObjectMeta{
+            name: Some(ns_name.name.clone()),
+            namespace: Some(ns_name.namespace.clone()),
             labels: Some(BTreeMap::from([
                 ("skate.io/name".to_string(), ns_name.name),
                 ("skate.io/namespace".to_string(), ns_name.namespace),

@@ -194,6 +194,10 @@ impl DefaultScheduler {
 
 
         let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
+
+        if daemonset_name.is_empty() {
+            return Err(anyhow!("no daemonset name").into());
+        }
         let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
 
 
@@ -269,13 +273,14 @@ impl DefaultScheduler {
 
         let is_rolling = match strategy.type_.clone().unwrap_or_default().as_str() {
             "RollingUpdate" => {
-                strategy.rolling_update.is_some()
+                true
             }
-            _ => false
+            "Recreate" => false,
+            _ => return Err(anyhow!("unrecognised strategy {}", strategy.type_.unwrap_or_default()).into())
         };
 
         if is_rolling {
-            return Self::plan_deployment_rolling_update(state, d, strategy.rolling_update.unwrap());
+            return Self::plan_deployment_rolling_update(state, d, strategy.rolling_update.unwrap_or_default());
         }
         Self::plan_deployment_recreate(state, d)
     }
@@ -329,6 +334,9 @@ impl DefaultScheduler {
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
 
         let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
+        if deployment_name.is_empty() {
+            return Err(anyhow!("no deployment name").into());
+        }
         let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
 
         let default_ops: Vec<_> = state.nodes.iter().map(|n|
@@ -905,74 +913,55 @@ impl Scheduler for DefaultScheduler {
 
 #[cfg(test)]
 mod tests {
-    use k8s_openapi::api::apps::v1::DeploymentSpec;
+    use k8s_openapi::api::apps::v1::{DeploymentSpec, DeploymentStrategy};
     use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     use crate::test_helpers;
+    use crate::test_helpers::objects::WithPod;
     use super::*;
 
     #[test]
-    fn test_plan_deployment() {
+    fn test_plan_deployment_clean_slate_recreate() {
+        let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
+        
+        let (pods, deployment) = create_deployment_fixtures(&ns_name, 0, "Recreate");
+
+        let node1 = test_helpers::objects::node_state("node-1");
+        let node2 = test_helpers::objects::node_state("node-2");
 
         let state = ClusterState {
             cluster_name: "test".to_string(),
             nodes: vec!(
-                test_helpers::objects::node_state("node-1"),
-                test_helpers::objects::node_state("node-2"),
+                node1,
+                node2,
             ),
-        };
-
-        let pod_template = PodTemplateSpec {
-            metadata: Some(NamespacedName::new("dpl-foo-1", "foo_namespace").into()),
-            spec: Some(PodSpec {
-                containers: vec![
-                    Container {
-                        args: Some(vec!("arg1".to_string())),
-                        command: Some(vec!("cmd".to_string())),
-                        name: "container1".to_string(),
-                        ..Default::default()
-                    }
-                ],
-                ..Default::default()
-            }),
-        };
-
-        let deployment = Deployment {
-            metadata: NamespacedName::new("foo", "foo-namespace").into(),
-            spec: Some(DeploymentSpec {
-                replicas: Some(2),
-                template: pod_template.clone(),
-                ..Default::default()
-            }),
-            ..Default::default()
         };
 
 
         let result = DefaultScheduler::plan_deployment(&state, &deployment);
         assert_eq!(true, result.is_ok());
 
-        
-        let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
 
         let result = &result.unwrap();
         assert_eq!(1, result.actions.len());
-        
+
         let ops = result.actions.get(&ns_name);
         assert_eq!(true, ops.is_some());
-        
+
         let ops = ops.unwrap();
         assert_eq!(4, ops.len());
 
-        let deployment_ops =ops.iter().filter(|o| match o.resource {
+        let deployment_ops = ops.iter().filter(|o| match o.resource {
             SupportedResources::Deployment(_) => true,
             _ => false,
         }).collect_vec();
         assert_eq!(2, deployment_ops.len());
-        assert_eq!(true, deployment_ops.iter().all(|o| 
+        assert_eq!(true, deployment_ops.iter().all(|o|
             o.operation == OpType::Create
-            && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
+                && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
         ));
 
-        let pod_ops =ops.iter().filter(|o| match o.resource {
+        let pod_ops = ops.iter().filter(|o| match o.resource {
             SupportedResources::Pod(_) => true,
             _ => false,
         }).collect_vec();
@@ -981,6 +970,192 @@ mod tests {
             o.operation == OpType::Create
                 && o.node.is_none()
         ));
-        
+
+        println!("{:?}", pod_ops.into_iter().map(|p| p.resource.name()).collect_vec())
+    }
+
+    fn create_deployment_fixtures(ns_name: &NamespacedName, existing_replicas: i8, strategy: &str) -> (Vec<Pod>, Deployment) {
+        let container = Container {
+            args: Some(vec!("arg1".to_string())),
+            command: Some(vec!("cmd".to_string())),
+            name: "container1".to_string(),
+            ..Default::default()
+        };
+
+
+        let mut pods = vec!();
+
+        for i in 0..existing_replicas {
+            let pod_name = format!("dpl-{}-{}", ns_name.name, i);
+
+            let mut pod_meta = ObjectMeta {
+                labels: Some(BTreeMap::from([
+                    ("skate.io/deployment".to_string(), ns_name.name.clone()),
+                    ("skate.io/name".to_string(), pod_name.clone()),
+                    ("skate.io/namespace".to_string(), ns_name.namespace.clone())
+                ])),
+                ..Default::default()
+            };
+            pod_meta.name = Some(format!("{}.{}", pod_name, ns_name.namespace));
+            let pod_spec = PodSpec {
+                containers: vec!(container.clone()),
+                ..Default::default()
+            };
+
+            pods.push(Pod {
+                metadata: pod_meta,
+                spec: Some(pod_spec),
+                status: None,
+            })
+        }
+
+
+        let pod_template = PodTemplateSpec {
+            metadata: Default::default(),
+            spec: Some(PodSpec {
+                containers: vec![],
+                ..Default::default()
+            }),
+        };
+        let deployment = Deployment {
+            metadata: NamespacedName::new("foo", "foo-namespace").into(),
+            spec: Some(DeploymentSpec {
+                replicas: Some(2),
+                template: pod_template.clone(),
+                strategy: Some(DeploymentStrategy { rolling_update: None, type_: Some(strategy.to_string()) }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let sup_deployment = SupportedResources::Deployment(deployment);
+        let sup_deployment = sup_deployment.fixup();
+        assert_eq!(true, sup_deployment.is_ok());
+        let sup_deployment = sup_deployment.unwrap();
+
+        let deployment = match sup_deployment {
+            SupportedResources::Deployment(deployment) => deployment,
+            _ => panic!("wrong type")
+        };
+
+        (pods, deployment)
+    }
+
+    #[test]
+    fn test_plan_deployment_recreate() {
+        let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
+
+        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, "Recreate");
+
+        let node1 = test_helpers::objects::node_state("node-1");
+        let node2 = test_helpers::objects::node_state("node-2");
+
+        let node1 = node1.with_pod(&pods[0]);
+        let node2 = node2.with_pod(&pods[1]);
+
+
+        let state = ClusterState {
+            cluster_name: "test".to_string(),
+            nodes: vec!(
+                node1,
+                node2,
+            ),
+        };
+
+
+        let result = DefaultScheduler::plan_deployment(&state, &deployment);
+        if result.is_err() {
+            panic!("{}", result.err().unwrap())
+        }
+
+
+        let result = &result.unwrap();
+        assert_eq!(1, result.actions.len());
+
+        let ops = result.actions.get(&ns_name);
+        assert_eq!(true, ops.is_some());
+
+        let ops = ops.unwrap();
+        assert_eq!(6, ops.len());
+
+        let deployment_ops = ops.iter().filter(|o| match o.resource {
+            SupportedResources::Deployment(_) => true,
+            _ => false,
+        }).collect_vec();
+        assert_eq!(2, deployment_ops.len());
+        assert_eq!(true, deployment_ops.iter().all(|o|
+            o.operation == OpType::Create
+                && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
+        ));
+
+        let pod_ops = ops.iter().filter(|o| match o.resource {
+            SupportedResources::Pod(_) => true,
+            _ => false,
+        }).collect_vec();
+        assert_eq!(4, pod_ops.len());
+
+        assert_eq!(OpType::Delete, pod_ops[0].operation);
+        assert_eq!(OpType::Delete, pod_ops[1].operation);
+        assert_eq!(OpType::Create, pod_ops[2].operation);
+        assert_eq!(OpType::Create, pod_ops[3].operation);
+    }
+
+    #[test]
+    fn test_plan_deployment_rolling_update() {
+        let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
+
+        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, "RollingUpdate");
+
+        let node1 = test_helpers::objects::node_state("node-1");
+        let node2 = test_helpers::objects::node_state("node-2");
+
+        let node1 = node1.with_pod(&pods[0]);
+        let node2 = node2.with_pod(&pods[1]);
+
+
+        let state = ClusterState {
+            cluster_name: "test".to_string(),
+            nodes: vec!(
+                node1,
+                node2,
+            ),
+        };
+
+
+        let result = DefaultScheduler::plan_deployment(&state, &deployment);
+        if result.is_err() {
+            panic!("{}", result.err().unwrap())
+        }
+
+
+        let result = &result.unwrap();
+
+        assert_eq!(3, result.actions.len());
+
+
+        let deployment_ops = result.actions.get(&ns_name).unwrap().iter().filter(|o| match o.resource {
+            SupportedResources::Deployment(_) => true,
+            _ => false,
+        }).collect_vec();
+
+        assert_eq!(2, deployment_ops.len());
+
+        assert_eq!(true, deployment_ops.iter().all(|o|
+            o.operation == OpType::Create
+                && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
+        ));
+
+        for i in 0..1 {
+            let pod_name = metadata_name(&pods[i]);
+            let pod_ops = result.actions.get(&pod_name);
+            assert_eq!(true, pod_ops.is_some());
+
+            let pod_ops = pod_ops.unwrap();
+            assert_eq!(2, pod_ops.len());
+
+
+            assert_eq!(OpType::Delete, pod_ops[0].operation);
+            assert_eq!(OpType::Create, pod_ops[1].operation);
+        }
     }
 }
