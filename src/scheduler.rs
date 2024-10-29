@@ -913,6 +913,7 @@ impl Scheduler for DefaultScheduler {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::max;
     use k8s_openapi::api::apps::v1::{DeploymentSpec, DeploymentStrategy};
     use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -924,7 +925,7 @@ mod tests {
     fn test_plan_deployment_clean_slate_recreate() {
         let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
         
-        let (pods, deployment) = create_deployment_fixtures(&ns_name, 0, "Recreate");
+        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, 0, "Recreate");
 
         let node1 = test_helpers::objects::node_state("node-1");
         let node2 = test_helpers::objects::node_state("node-2");
@@ -974,7 +975,7 @@ mod tests {
         println!("{:?}", pod_ops.into_iter().map(|p| p.resource.name()).collect_vec())
     }
 
-    fn create_deployment_fixtures(ns_name: &NamespacedName, existing_replicas: i8, strategy: &str) -> (Vec<Pod>, Deployment) {
+    fn create_deployment_fixtures(ns_name: &NamespacedName, requested_replicas: usize, existing_replicas: usize, strategy: &str) -> (Vec<Pod>, Deployment) {
         let container = Container {
             args: Some(vec!("arg1".to_string())),
             command: Some(vec!("cmd".to_string())),
@@ -1020,7 +1021,7 @@ mod tests {
         let deployment = Deployment {
             metadata: NamespacedName::new("foo", "foo-namespace").into(),
             spec: Some(DeploymentSpec {
-                replicas: Some(2),
+                replicas: Some(requested_replicas as i32),
                 template: pod_template.clone(),
                 strategy: Some(DeploymentStrategy { rolling_update: None, type_: Some(strategy.to_string()) }),
                 ..Default::default()
@@ -1043,24 +1044,30 @@ mod tests {
 
     #[test]
     fn test_plan_deployment_recreate() {
+        let existing_replicas = 2;
+        let requested_replicas = 2;
         let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
 
-        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, "Recreate");
+        let (pods, deployment) = create_deployment_fixtures(&ns_name, requested_replicas, existing_replicas, "Recreate");
 
         let node1 = test_helpers::objects::node_state("node-1");
         let node2 = test_helpers::objects::node_state("node-2");
 
-        let node1 = node1.with_pod(&pods[0]);
-        let node2 = node2.with_pod(&pods[1]);
+        let mut nodes = [node1, node2];
 
+        for i in 0..existing_replicas {
+            let node_index: usize = ((i + 1) % 2) as usize;
+            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i])
+        }
 
         let state = ClusterState {
             cluster_name: "test".to_string(),
             nodes: vec!(
-                node1,
-                node2,
+                nodes[0].clone(),
+                nodes[1].clone(),
             ),
         };
+
 
 
         let result = DefaultScheduler::plan_deployment(&state, &deployment);
@@ -1076,7 +1083,7 @@ mod tests {
         assert_eq!(true, ops.is_some());
 
         let ops = ops.unwrap();
-        assert_eq!(6, ops.len());
+        assert_eq!(2 + existing_replicas + requested_replicas, ops.len());
 
         let deployment_ops = ops.iter().filter(|o| match o.resource {
             SupportedResources::Deployment(_) => true,
@@ -1102,22 +1109,28 @@ mod tests {
 
     #[test]
     fn test_plan_deployment_rolling_update() {
+        
+        let existing_replicas = 2;
+        let requested_replicas = 2;
         let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
 
-        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, "RollingUpdate");
+        let (pods, deployment) = create_deployment_fixtures(&ns_name,requested_replicas,  existing_replicas, "RollingUpdate");
 
         let node1 = test_helpers::objects::node_state("node-1");
         let node2 = test_helpers::objects::node_state("node-2");
+        
+        let mut nodes = [node1, node2];
 
-        let node1 = node1.with_pod(&pods[0]);
-        let node2 = node2.with_pod(&pods[1]);
-
+        for i in 0..existing_replicas {
+            let node_index: usize = ((i + 1) % 2) as usize;
+            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i as usize])
+        }
 
         let state = ClusterState {
             cluster_name: "test".to_string(),
             nodes: vec!(
-                node1,
-                node2,
+                nodes[0].clone(),
+                nodes[1].clone(),
             ),
         };
 
@@ -1130,7 +1143,7 @@ mod tests {
 
         let result = &result.unwrap();
 
-        assert_eq!(3, result.actions.len());
+        assert_eq!(1+max(requested_replicas, existing_replicas) as usize, result.actions.len());
 
 
         let deployment_ops = result.actions.get(&ns_name).unwrap().iter().filter(|o| match o.resource {
@@ -1145,8 +1158,8 @@ mod tests {
                 && o.node.is_some() && !o.node.as_ref().unwrap().node_name.is_empty()
         ));
 
-        for i in 0..1 {
-            let pod_name = metadata_name(&pods[i]);
+        for i in 0..existing_replicas {
+            let pod_name = metadata_name(&pods[i as usize]);
             let pod_ops = result.actions.get(&pod_name);
             assert_eq!(true, pod_ops.is_some());
 
