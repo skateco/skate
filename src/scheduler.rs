@@ -275,7 +275,7 @@ impl DefaultScheduler {
             "RollingUpdate" => {
                 true
             }
-            "Recreate" => false,
+            ""|"Recreate" => false,
             _ => return Err(anyhow!("unrecognised strategy {}", strategy.type_.unwrap_or_default()).into())
         };
 
@@ -1056,7 +1056,7 @@ mod tests {
         let mut nodes = [node1, node2];
 
         for i in 0..existing_replicas {
-            let node_index: usize = ((i + 1) % 2) as usize;
+            let node_index: usize = (i + 1) % 2; // 0 or 1 alternating
             nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i])
         }
 
@@ -1122,7 +1122,7 @@ mod tests {
         let mut nodes = [node1, node2];
 
         for i in 0..existing_replicas {
-            let node_index: usize = ((i + 1) % 2) as usize;
+            let node_index: usize = (i + 1) % 2; // 0 or 1 alternating
             nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i as usize])
         }
 
