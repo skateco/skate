@@ -30,6 +30,7 @@ mod resource;
 mod exec;
 pub mod deps;
 mod test_helpers;
+mod upgrade;
 
 pub use skate::skate;
 pub use skate::AllDeps;

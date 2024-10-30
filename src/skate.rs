@@ -19,6 +19,8 @@ use crate::errors::SkateError;
 use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
+use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
+
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
 #[command(about = "Skate CLI", long_about = None, arg_required_else_help = true, version)]
@@ -53,6 +55,8 @@ enum Commands {
     Cluster(ClusterArgs),
     #[command(long_about = "Rollout actions")]
     Rollout(RolloutArgs),
+    #[command(long_about = "Upgrade actions")]
+    Upgrade(UpgradeArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -74,7 +78,9 @@ impl DescribeDeps for Deps{}
 impl LogsDeps for Deps{}
 impl RolloutDeps for Deps{}
 
-pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps{}
+impl UpgradeDeps for Deps{}
+
+pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps + UpgradeDeps{} 
 
 impl AllDeps for Deps{}
 
@@ -127,6 +133,10 @@ async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateErro
             let rollout = Rollout{deps};
             rollout.rollout(args).await
         },
+        Commands::Upgrade(args) => {
+            let upgrade = Upgrade{deps};
+            upgrade.upgrade(args).await
+        }
     }?;
     Ok(())
 }
@@ -186,6 +196,7 @@ mod tests {
     use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
     use crate::skate::Commands::Refresh;
     use crate::test_helpers::ssh_mocks::MockSshManager;
+    use crate::upgrade::UpgradeDeps;
 
     struct TestDeps{}
 
@@ -205,6 +216,7 @@ mod tests {
     impl DescribeDeps for TestDeps {}
     impl LogsDeps for TestDeps {}
     impl RolloutDeps for TestDeps {}
+    impl UpgradeDeps for TestDeps {}
 
     impl AllDeps for TestDeps{}
 

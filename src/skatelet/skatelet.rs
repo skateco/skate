@@ -17,6 +17,7 @@ use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
 use crate::deps::{Deps};
 use crate::errors::SkateError;
+use crate::upgrade::Upgrade;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 

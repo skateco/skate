@@ -933,7 +933,7 @@ mod tests {
     fn test_plan_deployment_clean_slate_recreate() {
         let ns_name = NamespacedName { name: "foo".to_string(), namespace: "foo-namespace".to_string() };
         
-        let (pods, deployment) = create_deployment_fixtures(&ns_name, 2, 0, "Recreate");
+        let (_, deployment) = create_deployment_fixtures(&ns_name, 2, 0, "Recreate");
 
         let node1 = test_helpers::objects::node_state("node-1");
         let node2 = test_helpers::objects::node_state("node-2");

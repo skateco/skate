@@ -17,6 +17,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use crate::resource::SupportedResources;
 use crate::exec::{ShellExec};
+use crate::skate::Platform;
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -248,7 +249,6 @@ pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> R
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Local};
@@ -270,3 +270,4 @@ mod tests {
         }
     }
 }
+
