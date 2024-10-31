@@ -1,13 +1,7 @@
 use clap::{Args, Subcommand};
-use semver::{Version, VersionReq};
-use serde::{Deserialize, Serialize};
-use reqwest;
-use crate::apply::ApplyDeps;
-use crate::config::{Config, Node};
-use crate::create::{CreateArgs, CreateCommands};
+use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
-use crate::refresh::RefreshDeps;
 use crate::skate::ConfigFileArgs;
 
 #[derive(Clone, Debug, Args)]

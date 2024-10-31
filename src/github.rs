@@ -2,7 +2,6 @@ use std::error::Error;
 use anyhow::anyhow;
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use serde_yaml::mapping::Index;
 use crate::skate::Platform;
 // Name your user agent after your app?
 static APP_USER_AGENT: &str = concat!(

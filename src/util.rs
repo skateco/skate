@@ -17,7 +17,6 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use crate::resource::SupportedResources;
 use crate::exec::{ShellExec};
-use crate::skate::Platform;
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
