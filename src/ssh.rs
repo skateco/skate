@@ -19,6 +19,7 @@ use itertools::Itertools;
 use russh::CryptoVec;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use crate::github;
 use crate::resource::ResourceType;
 
 #[async_trait]
@@ -235,33 +236,17 @@ echo ovs="$(cat /tmp/ovs-$$)";
     async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
 
         // TODO - download from bucket etc
+        
+        let resp = github::get_latest_release().await?;
 
-        let (dl_arch, dl_gnu) = match platform.arch.as_str() {
-            "amd64" => ("x86_64", "gnu"),
-            "armv6l" => ("arm", "gnueabi"),
-            "armv7l" => ("arm7", "gnueabi"),
-            "arm64" => ("aarch64", "gnu"),
-            _ => (platform.arch.as_str(), "gnu")
-        };
+        let version = resp.version()?;
+        
+        let download_url = resp.find_skatelet_archive(&platform).ok_or(anyhow!("failed to find skatelet archive for platform"))?;
 
-        let filename = format!("skatelet-{}-unknown-linux-{}.tar.gz", dl_arch, dl_gnu);
+        println!("installing skatelet version {}", version);
 
-
-        // get latest release binaries
-        let cmd = "curl -s https://api.github.com/repos/skateco/skate/releases/latest \
-| grep \"browser_download_url.*tar.gz\" \
-| cut -d : -f 2,3 \
-| tr -d \\\" | tr -d \"[:blank:]\"
-";
-
-
-        let result = self.execute_noisy(cmd).await?;
-        // find filename withing result.stdout
-        let url = result.lines().find(|l| l.ends_with(&filename)).ok_or(anyhow!("failed to find download url for {}", filename))?;
-
-        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && sudo mv skatelet /usr/local/bin", url);
+        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && sudo mv skatelet /usr/local/bin", download_url);
         self.execute_stdout(&cmd, true, true).await?;
-
 
         Ok(())
     }
