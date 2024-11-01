@@ -186,7 +186,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     "distro" => host_info.platform.distribution = Distribution::from(v),
                     "skatelet" => host_info.skatelet_version = match v {
                         "" => None,
-                        _ => Some(v.to_string())
+                        _ => v.to_string().strip_prefix("v").and_then(|v| Some(v.to_string()))
                     },
                     "podman" => host_info.podman_version = match v {
                         "" => None,
