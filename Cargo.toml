@@ -40,4 +40,6 @@ tabled = "0.16.0"
 dialoguer = "0.11.0"
 reqwest = { version = "0.12.9", features = ["json"] }
 shadow-rs = "0.35.2"
+openssl = { version = "0.10.68", features = ["vendored"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
