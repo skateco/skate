@@ -58,8 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.TARGET}}
-          path: |
-            target/$TARGET/release
+          path: target/${{matrix.TARGET}}/release
   create-release:
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
@@ -87,7 +86,7 @@ jobs:
         with:
           name: ${{matrix.TARGET}}
           path: |
-            target/$TARGET/release
+            target/${{matrix.TARGET}}/release
       - name: Archive and upload
         run: |
           mkdir -p dist
