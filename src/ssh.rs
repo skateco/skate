@@ -245,7 +245,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
 
         println!("installing skatelet version {}", version);
 
-        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && sudo mv skatelet /usr/local/bin", download_url);
+        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && chmod +x skatelet && sudo mv skatelet /usr/local/bin", download_url);
         self.execute_stdout(&cmd, true, true).await?;
 
         Ok(())

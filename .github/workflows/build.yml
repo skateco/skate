@@ -94,6 +94,8 @@ jobs:
           cd dist 
           cp ../target/$TARGET/release/skate .
           cp ../target/$TARGET/release/skatelet .
+          chmod +x skate
+          chmod +x skatelet
           tar -cvf skate-$TARGET.tar.gz skate
           tar -cvf skatelet-$TARGET.tar.gz skatelet
           gh release upload ${{github.ref_name}}  *.tar.gz
