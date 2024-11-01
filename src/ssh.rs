@@ -235,9 +235,9 @@ echo ovs="$(cat /tmp/ovs-$$)";
     }
     async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>> {
 
-        // TODO - download from bucket etc
+        let github_client = github::Client::new();
         
-        let resp = github::get_latest_release().await?;
+        let resp = github_client.get_latest_release().await?;
 
         let version = resp.version()?;
         
