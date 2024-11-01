@@ -1,3 +1,4 @@
-fn main() {
-    print!("{}", std::env::var("TARGET").unwrap());
+use shadow_rs;
+fn main() -> shadow_rs::SdResult<()> {
+    shadow_rs::new()
 }

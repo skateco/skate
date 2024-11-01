@@ -141,7 +141,7 @@ hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
 { { cat /etc/issue |head -1|awk '{print $1}'; }  || echo '' ; } > /tmp/distro-$$ &
-skatelet --version|awk '{print $NF}' > /tmp/skatelet-$$ &
+skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
 ovs-vsctl --version|head -1| awk '{print $NF}' > /tmp/ovs-$$ &

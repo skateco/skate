@@ -36,3 +36,6 @@ mod github;
 pub use skate::skate;
 pub use skate::AllDeps;
 pub use skatelet::skatelet;
+
+use shadow_rs::shadow;
+shadow!(build);

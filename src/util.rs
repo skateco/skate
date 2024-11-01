@@ -248,6 +248,23 @@ pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> R
     Ok(())
 }
 
+pub fn version(long: bool) -> String {
+    let tag = crate::build::TAG;
+    let short_version =  if tag.is_empty() {
+        crate::build::COMMIT_HASH
+    } else {
+        tag
+    };
+
+    if !long {
+        return format!("{}", short_version)
+    }
+    format!(r#"{}
+branch:{}
+commit_hash:{}
+build_time:{}"#, short_version, crate::build::BRANCH, crate::build::COMMIT_HASH, crate::build::BUILD_TIME)
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Local};

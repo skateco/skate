@@ -1,3 +1,4 @@
+use crate::util;
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
@@ -23,6 +24,7 @@ pub const VAR_PATH: &str = "/var/lib/skate";
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
 #[command(about = "Skatelet", version, long_about = "Skate agent to be run on nodes", arg_required_else_help = true)]
+#[clap(version = util::version(false), long_version = util::version(true))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

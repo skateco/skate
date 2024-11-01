@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use crate::util;
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use crate::apply::{Apply, ApplyArgs, ApplyDeps};
@@ -21,9 +22,13 @@ use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 
+
+
+
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
 #[command(about = "Skate CLI", long_about = None, arg_required_else_help = true, version)]
+#[clap(version = util::version(false), long_version = util::version(true))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
