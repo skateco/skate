@@ -66,6 +66,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
   release:
+    needs: [ build, create-release ]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     strategy:
