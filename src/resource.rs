@@ -16,24 +16,24 @@ use crate::ssh::{SshClient, SshClients};
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
 
-#[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString,PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum ResourceType {
-    #[strum(serialize="pods", serialize="pod", to_string="pod")]
+    #[strum(serialize = "pods", serialize = "pod", to_string = "pod")]
     Pod,
-    #[strum(serialize="deployments", serialize="deployment", to_string="deployment")]
+    #[strum(serialize = "deployments", serialize = "deployment", to_string = "deployment")]
     Deployment,
-    #[strum(serialize="daemonsets", serialize="daemonset", to_string="daemonset")]
+    #[strum(serialize = "daemonsets", serialize = "daemonset", to_string = "daemonset")]
     DaemonSet,
-    #[strum(serialize="ingress", to_string="ingress")]
+    #[strum(serialize = "ingress", to_string = "ingress")]
     Ingress,
-    #[strum(serialize="cronjobs", serialize="cronjob", to_string="cronjob")]
+    #[strum(serialize = "cronjobs", serialize = "cronjob", to_string = "cronjob")]
     CronJob,
-    #[strum(serialize="secrets", serialize="secret", to_string="secret")]
+    #[strum(serialize = "secrets", serialize = "secret", to_string = "secret")]
     Secret,
-    #[strum(serialize="services", serialize="service", to_string="service")]
+    #[strum(serialize = "services", serialize = "service", to_string = "service")]
     Service,
-    #[strum(serialize="clusterissuers", serialize="clusterissuer", to_string="clusterissuer")]
+    #[strum(serialize = "clusterissuers", serialize = "clusterissuer", to_string = "clusterissuer")]
     ClusterIssuer,
 }
 
@@ -212,18 +212,23 @@ impl SupportedResources {
     }
     fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
         let mut template = template.clone();
-        // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
         template.spec = match template.spec {
             Some(ref mut spec) => {
                 // first do env-var secrets
                 spec.containers = spec.containers.clone().into_iter().map(|mut container| {
                     container.env = container.env.map(|env_list| env_list.into_iter().map(|mut e| {
-                                let name_opt = e.value_from.as_ref().and_then(|v| v.secret_key_ref.clone()).and_then(|s| s.name);
-                                if name_opt.is_some() {
-                                    e.value_from.as_mut().unwrap().secret_key_ref.as_mut().unwrap().name = Some(format!("{}.{}", &name_opt.unwrap(), &ns));
-                                }
-                                e
-                            }).collect());
+                        match e.value_from.as_mut() {
+                            Some(value) => match value.secret_key_ref.as_mut() {
+                                Some(key_ref) =>  {
+                                    // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
+                                    key_ref.name = format!("{}.{}", &key_ref.name, &ns);
+                                },
+                                _ => {}
+                            },
+                            _ => {},
+                        };
+                        e
+                    }).collect());
                     container
                 }).collect();
                 // now do volume secrets
@@ -446,12 +451,11 @@ impl SupportedResources {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
-    
+
     use crate::resource::ResourceType;
 
     #[test]
     fn test_resource_type_from_str() {
-
         let table = &[
             ("pod", ResourceType::Pod),
             ("pods", ResourceType::Pod),

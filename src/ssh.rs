@@ -16,7 +16,7 @@ use colored::Colorize;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
-use russh::CryptoVec;
+use russh::{ChannelMsg, CryptoVec};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use crate::github;
@@ -312,10 +312,10 @@ echo ovs="$(cat /tmp/ovs-$$)";
             //dbg!(&msg);
             match msg {
                 // If we get data, add it to the buffer
-                russh::ChannelMsg::Data { ref data } => {
+                ChannelMsg::Data { ref data } => {
                     last_char = self.print_crypto_vec(data, prefix_output, last_char);
                 }
-                russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                ChannelMsg::ExtendedData { ref data, ext } => {
                     if ext == 1 {
                         last_char = self.print_crypto_vec(data, prefix_output, last_char);
                     }
@@ -323,7 +323,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 // If we get an exit code report, store it, but crucially don't
                 // assume this message means end of communications. The data might
                 // not be finished yet!
-                russh::ChannelMsg::ExitStatus { exit_status } => result = Some(exit_status),
+                ChannelMsg::ExitStatus { exit_status } => result = Some(exit_status),
 
                 // We SHOULD get this EOF messagge, but 4254 sec 5.3 also permits
                 // the channel to close without it being sent. And sometimes this
