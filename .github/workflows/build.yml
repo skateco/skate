@@ -1,4 +1,7 @@
-name: Check compilation
+name: Build
+
+permissions:
+  contents: write
 
 on:
   push:
