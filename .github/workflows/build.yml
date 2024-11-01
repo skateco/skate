@@ -81,6 +81,7 @@ jobs:
       TARGET: ${{ matrix.TARGET }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
