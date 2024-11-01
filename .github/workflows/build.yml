@@ -82,6 +82,12 @@ jobs:
       TARGET: ${{ matrix.TARGET }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{matrix.TARGET}}
+          path: |
+            target/$TARGET/release
       - name: Archive and upload
         run: |
           mkdir -p dist
