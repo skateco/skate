@@ -6,20 +6,46 @@ on:
     branches: '**'
 
 jobs:
-  check:  # Any action can contain multiple jobs
-    runs-on: ubuntu-latest  # OS on which the job runs
-    steps:  # Each job consists in a series of steps
-    - name: Checkout  # Clone git repository
-      uses: actions/checkout@v3
-
-    - name: Add protoc
-      run: |
-        sudo apt-get install -f protobuf-compiler libprotobuf-dev
-
-    - name: Install stable toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Check that code can compile
-      run: cargo check  # Run the `cargo check` command
-    - name: Compile
-      run: cargo build
+  build:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargo cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ./target
+          key: build-cargo-registry-${{matrix.TARGET}}
+      - name: Install and configure dependencies
+        run: |
+          # dependencies are only needed on ubuntu as that's the only place where
+          # we make cross-compilation
+          if [[ $OS =~ ^ubuntu.*$ ]]; then
+            sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf protobuf-compiler libprotobuf-dev
+          fi
+          
+          # some additional configuration for cross-compilation on linux
+          cat >>~/.cargo/config <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          [target.aarch64-unknown-linux-musl]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+      - name: Install rust target
+        run: rustup target add $TARGET
+      - name: Build Binary
+        run: cargo build --locked --release --target ${{ matrix.target }}
