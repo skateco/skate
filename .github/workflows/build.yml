@@ -2,8 +2,9 @@ name: Check compilation
 
 on:
   push:
-    # only trigger on branches, not on tags
     branches: '**'
+    tags:
+      - v[0-9]+.*
 
 jobs:
   build:
@@ -49,3 +50,13 @@ jobs:
         run: rustup target add $TARGET
       - name: Build Binary
         run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Archive and upload
+        if: github.ref_type == 'tag'
+        run: |
+          mkdir -p dist
+          cd dist 
+          cp ../target/$TARGET/release/skate .
+          cp ../target/$TARGET/release/skatelet .
+          tar -cvf skate-$TARGET.tar.gz skate
+          tar -cvf skatelet-$TARGET.tar.gz skatelet
+          gh release upload ${{github.ref_name}}  *.tar.gz
