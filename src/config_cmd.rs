@@ -19,11 +19,16 @@ pub struct UseContextArgs{
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigCommands {
+    CurrentContext,
     UseContext(UseContextArgs),
 }
 
 pub fn config(args: ConfigArgs) -> Result<(), SkateError> {
     match args.command {
+        ConfigCommands::CurrentContext => {
+            let config = crate::config::Config::load(Some(args.config.skateconfig.clone())).expect("failed to load skate config");
+            println!("{}", config.current_context.unwrap_or_default())
+        },
         ConfigCommands::UseContext(use_context_args) => {
             let mut config = crate::config::Config::load(Some(args.config.skateconfig.clone())).expect("failed to load skate config");
             config.clusters.iter().any(|c| c.name == use_context_args.context)

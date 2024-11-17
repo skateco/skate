@@ -2,13 +2,13 @@
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
-SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}
-
 POSITIONAL_ARGS=()
 
 if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
   source $SCRIPT_DIR/.clusterplz.env
 fi
+
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
