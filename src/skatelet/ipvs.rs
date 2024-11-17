@@ -72,7 +72,7 @@ impl<D: IPVSDeps> IPVS<D> {
         // args.service_name is fqn like foo.bar
         let mut manifest: Service = serde_yaml::from_str(&fs::read_to_string(args.file)?)?;
         let spec = manifest.spec.clone().unwrap_or_default();
-        let name = spec.selector.unwrap_or_default().get("app.kubernetes.io/name").unwrap_or(&"default".to_string()).clone();
+        let name = spec.selector.unwrap_or_default().get("app.kubernetes.io/name").unwrap_or(&"".to_string()).clone();
         if name.is_empty() {
             return Err(anyhow!("service selector app.kubernetes.io/name is required").into());
         }
