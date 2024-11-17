@@ -6,6 +6,10 @@ SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}
 
 POSITIONAL_ARGS=()
 
+if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
+  source $SCRIPT_DIR/.clusterplz.env
+fi
+
 while [[ $# -gt 0 ]]; do
     case $1 in
     #    -e|--extension)
