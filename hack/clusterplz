@@ -82,9 +82,17 @@ packages:
 - libssl-dev
 - pkg-config
 EOF
+
+    had_failures=false
     for f in $(seq $nodes); do
         multipass launch -c 1 -m 1G -d 7G -n node-$f --cloud-init ./.cluster-plz.yaml
+        exit_code=$?
+        if [ $exit_code -gt 0 ]; then
+          had_failures=true
+        fi
     done
+
+    $had_failures && exit 1
 
     snapshot_nodes
 
@@ -153,10 +161,19 @@ skatelet)
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
         if [ "$(arch)" = "$arch" ]; then
-          multipass transfer target/release/skatelet node-$f:
+          binary=target/release/skatelet
+          if [ ! -f $binary ]; then
+            cargo build --bin skatelet --release --locked
+          fi
         else
-          multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet node-$f:
+          target=${arch}-unknown-linux-gnu
+          binary=target/$target/release/skatelet
+          if [ ! -f $binary ]; then
+            cargo build --bin skatelet --release --locked --target "$target"
+          fi
         fi
+
+        multipass transfer $binary node-$f:
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
 
     done
