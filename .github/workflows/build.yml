@@ -58,7 +58,11 @@ jobs:
         run: cargo build --locked --release --target ${{ matrix.target }}
       - name: E2E Tests
         if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: make run-integration-tests
+        run: |
+          apt-get update && apt-get install -y multipass
+          make run-integration-tests
+          
+
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
         with:
