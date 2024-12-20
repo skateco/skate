@@ -50,8 +50,8 @@ fn ips() -> (String, String) {
         .args(&["ips"])
         .output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let lines = stdout.lines();
-    (lines[0], lines[1])
+    let mut lines = stdout.lines();
+    (lines.nth(0).unwrap().into(), lines.nth(0).unwrap().into())
 }
 
 #[test]

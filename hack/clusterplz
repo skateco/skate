@@ -163,13 +163,17 @@ skatelet)
         if [ "$(arch)" = "$arch" ]; then
           binary=target/release/skatelet
           if [ ! -f $binary ]; then
+            set -x
             cargo build --bin skatelet --release --locked
+            set +x
           fi
         else
           target=${arch}-unknown-linux-gnu
           binary=target/$target/release/skatelet
           if [ ! -f $binary ]; then
-            cargo build --bin skatelet --release --locked --target "$target"
+            set -x
+            cross build --bin skatelet --release --locked --target "$target"
+            set +x
           fi
         fi
 
