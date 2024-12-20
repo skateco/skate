@@ -61,7 +61,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y snapd
           sudo snap install multipass
-          make run-integration-tests
+          sudo make run-integration-tests
           
 
       - name: Archive artifacts
