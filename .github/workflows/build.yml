@@ -64,8 +64,7 @@ jobs:
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           export SSH_PUBLIC_KEY=/tmp/sshkey.pub
-          sudo make run-integration-tests
-          
+          sudo -E make run-integration-tests
 
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
