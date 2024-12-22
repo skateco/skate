@@ -52,10 +52,8 @@ jobs:
           EOF
       - name: Install rust target
         run: rustup target add $TARGET
-      - name: Normal Tests
-        run: cargo test
-      - name: Build Binaries
-        run: cargo build --locked --release --target ${{ matrix.target }}
+
+        # todo - move back to correct place
       - name: E2E Tests
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
@@ -67,6 +65,10 @@ jobs:
           # see https://github.com/canonical/multipass/issues/3464
           sudo multipass find --force-update
           sudo -E make run-integration-tests
+      - name: Normal Tests
+        run: cargo test
+      - name: Build Binaries
+        run: cargo build --locked --release --target ${{ matrix.target }}
 
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
