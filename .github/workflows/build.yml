@@ -58,13 +58,14 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -x
-          sudo apt-get update && sudo apt-get install -y snapd
           sudo snap install multipass
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
           ls -l /var/snap/multipass/common/multipass_socket
           sudo multipass find --force-update
+          cat ~/snap/multipass/current/data/multipass-client-certificate/multipass_cert.pem | sudo tee -a /var/snap/multipass/common/data/multipassd/authenticated-certs/multipass_client_certs.pem > /dev/null
+          sudo snap restart multipass
           SUDO_MULTIPASS=1 make run-integration-tests
       - name: Normal Tests
         run: cargo test
