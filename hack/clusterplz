@@ -6,7 +6,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
 
-if [ "$SUDO_MULTIPASS" = "1" ]; then
+if [ "$SUDO_MULTIPASS" -eq 1 ]; then
   alias multipass="sudo multipass"
 fi
 
