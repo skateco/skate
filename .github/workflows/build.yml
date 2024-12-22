@@ -65,8 +65,7 @@ jobs:
           # see https://github.com/canonical/multipass/issues/3464
           ls -l /var/snap/multipass/common/multipass_socket
           sudo multipass find --force-update
-          alias multipass='sudo multipass'
-          make run-integration-tests
+          alias multipass='sudo multipass' && make run-integration-tests
       - name: Normal Tests
         run: cargo test
       - name: Build Binaries
