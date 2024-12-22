@@ -8,7 +8,7 @@ if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
   source $SCRIPT_DIR/.clusterplz.env
 fi
 
-SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-${SSH_PRIVATE_KEY}.pub}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
