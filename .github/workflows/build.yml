@@ -62,8 +62,8 @@ jobs:
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
-          sudo multipass find --force-update
-          sudo -E make run-integration-tests
+          multipass find --force-update
+          make run-integration-tests
       - name: Normal Tests
         run: cargo test
       - name: Build Binaries
