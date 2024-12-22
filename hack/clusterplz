@@ -6,6 +6,15 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
 
+multipass_bin=$(which multipass)
+
+multipass() {
+  if [ "$SUDO_MULTIPASS" -eq 1 ]; then
+    sudo $multipass_bin $@
+  fi
+  $multipass_bin $@
+}
+
 if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
   source $SCRIPT_DIR/.clusterplz.env
 fi
