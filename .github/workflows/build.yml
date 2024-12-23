@@ -33,6 +33,8 @@ jobs:
         run: |
           set -x
           sudo snap install multipass
+          sudo snap set system experimental.parallel-instances=true
+          sudo snap install multipass_socket
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
