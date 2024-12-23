@@ -63,7 +63,7 @@ jobs:
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
           ls -l /var/snap/multipass/common/multipass_socket
-          sleep 5
+          sleep 10
           sudo multipass set local.passphrase=foo
           multipass authenticate foo
           make run-integration-tests
