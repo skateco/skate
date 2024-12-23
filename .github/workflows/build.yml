@@ -61,7 +61,7 @@ jobs:
           # see https://github.com/canonical/multipass/issues/3464
           sleep 10
           cat /var/log/syslog|grep multipass
-          SUDO_MULTIPASS=1 make run-integration-tests
+          make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
 
