@@ -62,8 +62,7 @@ jobs:
           export SSH_PRIVATE_KEY=./sshkey 
           sleep 10
           sudo multipass set local.passphrase=foo
-          sudo multipass authenticate foo
-          cat /var/log/syslog|grep multipass
+          sudo multipass authenticate foo || cat /var/log/syslog|grep multipass
           SUDO_MULTIPASS=1 make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
