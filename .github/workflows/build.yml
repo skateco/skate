@@ -18,9 +18,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
     env:
       TARGET: ${{ matrix.TARGET }}
