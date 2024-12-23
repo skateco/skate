@@ -65,10 +65,6 @@ jobs:
           sleep 10
           ls -l /var/snap/multipass/common/multipass_socket
           sudo chmod a+w /var/snap/multipass/common/multipass_socket.
-#          sudo multipass set local.passphrase=foo
-#          sudo snap set system experimental.parallel-instances=true
-#          sudo snap install multipass_socket
-#          multipass authenticate foo
           make run-integration-tests
       - name: Normal Tests
         run: cargo test
