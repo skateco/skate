@@ -56,8 +56,8 @@ jobs:
           set -x
           sudo apt-get install --reinstall resolvconf
           sudo snap install multipass
-          ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
-          export SSH_PRIVATE_KEY=/tmp/sshkey 
+          ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
+          export SSH_PRIVATE_KEY=./sshkey 
           sleep 10
           cat /var/log/syslog|grep multipass
           SUDO_MULTIPASS=1 make run-integration-tests
