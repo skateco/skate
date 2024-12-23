@@ -28,6 +28,19 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - name: E2E Tests
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          set -x
+          sudo snap install multipass
+          ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
+          export SSH_PRIVATE_KEY=/tmp/sshkey 
+          # see https://github.com/canonical/multipass/issues/3464
+          sleep 10
+          cat /var/log/syslog|grep multipass
+          ls -l /var/snap/multipass/common/multipass_socket
+          sudo chmod a+w /var/snap/multipass/common/multipass_socket.
+          make run-integration-tests
       - name: Cargo cache
         uses: actions/cache@v2
         with:
@@ -54,18 +67,6 @@ jobs:
         run: rustup target add $TARGET
 
         # todo - move back to correct place
-      - name: E2E Tests
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          set -x
-          sudo snap install multipass
-          ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
-          export SSH_PRIVATE_KEY=/tmp/sshkey 
-          # see https://github.com/canonical/multipass/issues/3464
-          sleep 10
-          ls -l /var/snap/multipass/common/multipass_socket
-          sudo chmod a+w /var/snap/multipass/common/multipass_socket.
-          make run-integration-tests
       - name: Normal Tests
         run: cargo test
       - name: Build Binaries
