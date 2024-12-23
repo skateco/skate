@@ -64,7 +64,7 @@ jobs:
           sleep 10
           sudo chmod a+w /var/snap/multipass/common/multipass_socket.
           cat /var/log/syslog|grep multipass
-          make run-integration-tests
+          SUDO_MULTIPASS=1 make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
 
