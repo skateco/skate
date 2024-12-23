@@ -54,12 +54,15 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -x
+          sudo systemctl stop apparmor.service
+          sudo systemctl disable apparmor.service
           sudo apt-get install --reinstall resolvconf
-          snap install multipass
+          sudo snap install multipass
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
           sleep 10
+          sudo chmod a+w /var/snap/multipass/common/multipass_socket.
           cat /var/log/syslog|grep multipass
           make run-integration-tests
       - name: Install rust target
