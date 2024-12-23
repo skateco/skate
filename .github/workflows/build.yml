@@ -63,9 +63,6 @@ jobs:
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
           ls -l /var/snap/multipass/common/multipass_socket
-          sudo multipass find --force-update
-          cat ~/snap/multipass/current/data/multipass-client-certificate/multipass_cert.pem | sudo tee -a /var/snap/multipass/common/data/multipassd/authenticated-certs/multipass_client_certs.pem > /dev/null
-          sudo snap restart multipass
           sleep 5
           SUDO_MULTIPASS=1 make run-integration-tests
       - name: Normal Tests
