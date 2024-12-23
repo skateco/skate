@@ -62,10 +62,13 @@ jobs:
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
-          ls -l /var/snap/multipass/common/multipass_socket
           sleep 10
-          sudo multipass set local.passphrase=foo
-          multipass authenticate foo
+          ls -l /var/snap/multipass/common/multipass_socket
+          sudo chmod a+w /var/snap/multipass/common/multipass_socket.
+#          sudo multipass set local.passphrase=foo
+#          sudo snap set system experimental.parallel-instances=true
+#          sudo snap install multipass_socket
+#          multipass authenticate foo
           make run-integration-tests
       - name: Normal Tests
         run: cargo test
