@@ -54,6 +54,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           set -x
+          sudo systemctl start snapd.socket
           sudo apt-get install --reinstall resolvconf
           sudo snap install multipass
           ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
