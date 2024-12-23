@@ -56,12 +56,11 @@ jobs:
           set -x
           sudo apt-get install --reinstall resolvconf
           sudo snap install multipass
-          sudo snap set system experimental.parallel-instances=true
-          sudo snap install multipass_socket
           ssh-keygen -b 2048 -t rsa -f /tmp/sshkey -q -N ""
           export SSH_PRIVATE_KEY=/tmp/sshkey 
           # see https://github.com/canonical/multipass/issues/3464
           sleep 10
+          cat /var/log/syslog|grep multipass
           make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
