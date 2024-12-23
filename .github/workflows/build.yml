@@ -57,7 +57,6 @@ jobs:
           sudo systemctl start snapd.socket
           sudo apt-get install --reinstall resolvconf
           sudo snap install multipass
-          sudo snap refresh multipass --channel edge
           ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
           export SSH_PRIVATE_KEY=./sshkey 
           sleep 10
