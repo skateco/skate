@@ -64,7 +64,9 @@ jobs:
           # see https://github.com/canonical/multipass/issues/3464
           ls -l /var/snap/multipass/common/multipass_socket
           sleep 5
-          SUDO_MULTIPASS=1 make run-integration-tests
+          sudo multipass set local.passphrase=foo
+          multipass authenticate foo
+          make run-integration-tests
       - name: Normal Tests
         run: cargo test
       - name: Build Binaries
