@@ -61,9 +61,7 @@ jobs:
           ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
           export SSH_PRIVATE_KEY=./sshkey 
           sleep 10
-          sudo multipass set local.passphrase=foo
-          sudo multipass authenticate foo || journalctl --unit 'snap.multipass*'
-          SUDO_MULTIPASS=1 make run-integration-tests
+          SUDO_MULTIPASS=1 make run-integration-tests || { journalctl --unit 'snap.multipass*' ; exit 1; }
       - name: Install rust target
         run: rustup target add $TARGET
 
