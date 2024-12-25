@@ -51,18 +51,14 @@ jobs:
           linker = "aarch64-linux-gnu-gcc"
           EOF
       - name: E2E Tests
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.target == 'aarch64-apple-darwin'
         run: |
           set -x
-          sudo systemctl stop apparmor.service
-          sudo systemctl disable apparmor.service
-          sudo systemctl start snapd.socket
-          sudo apt-get install --reinstall resolvconf
-          sudo snap install multipass
+          brew install multipass
           ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
           export SSH_PRIVATE_KEY=./sshkey 
           sleep 10
-          DISABLE_APPARMOR=1 SUDO_MULTIPASS=1 make run-integration-tests || { journalctl --unit 'snap.multipass*' ; exit 1; }
+          make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
 
