@@ -43,18 +43,19 @@ fn skate(command: &str, args: &[&str]) -> Result<String, SkateError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
 }
 
-fn ips() -> (String, String) {
+fn ips() -> Result<(String, String), anyhow::Error> {
     let output = process::Command::new("../hack/clusterplz")
         .args(&["ips"])
-        .output().unwrap();
+        .output()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut lines = stdout.lines();
-    (lines.nth(0).unwrap().into(), lines.nth(0).unwrap().into())
+    Ok((lines.nth(0).unwrap().into(), lines.nth(0).unwrap().into()))
 }
 
 #[test]
 #[ignore]
 fn test_node_creation() -> Result<(), anyhow::Error> {
+    let ips = ips()?;
     skate("delete", &["cluster", "integration-test", "--force"])?;
     skate("create", &["cluster", "integration-test"])?;
     skate("config", &["use-context", "integration-test"])?;
