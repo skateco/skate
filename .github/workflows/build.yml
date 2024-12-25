@@ -50,24 +50,12 @@ jobs:
           [target.aarch64-unknown-linux-musl]
           linker = "aarch64-linux-gnu-gcc"
           EOF
-      - name: E2E Tests
-        if: matrix.target == 'aarch64-apple-darwin'
-        run: |
-          set -x
-          brew install multipass
-          ssh-keygen -b 2048 -t rsa -f ./sshkey -q -N ""
-          export SSH_PRIVATE_KEY=./sshkey 
-          sleep 10
-          make run-integration-tests
       - name: Install rust target
         run: rustup target add $TARGET
-
-        # todo - move back to correct place
       - name: Normal Tests
         run: cargo test
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
-
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
         with:

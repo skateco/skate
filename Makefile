@@ -29,5 +29,5 @@ run-integration-tests:
 	# This copies over a skatelet binary. Not good, should really find a better way to do this.
 	./hack/clusterplz skatelet
     # the ignored tests are the integration tests. This is not optimal.
-	cargo test --ignored
+	cargo test -- --include-ignored
 

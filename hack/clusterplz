@@ -9,7 +9,7 @@ POSITIONAL_ARGS=()
 multipass_bin=$(which multipass)
 
 multipass() {
-  if [ "$SUDO_MULTIPASS" -eq 1 ]; then
+  if [[ "$SUDO_MULTIPASS" -eq 1 ]]; then
     sudo $multipass_bin $@
   fi
   $multipass_bin $@
