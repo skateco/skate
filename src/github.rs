@@ -107,20 +107,20 @@ impl Release {
 
 #[cfg(test)]
 mod tests {
-    // use crate::github::Client;
-    //
-    //
-    // #[tokio::test]
-    // async fn test_get_release() {
-    //     let client = Client::new();
-    //     let release = client.get_latest_release().await;
-    //
-    //     assert!(release.is_ok(), "{:?}", release.err());
-    //     let release = release.unwrap();
-    //
-    //
-    //     println!("{:?}", release);
-    //     let version = release.version();
-    //     assert!(version.is_ok(), "{:?}", version.err());
-    // }
+    use crate::github::Client;
+
+
+    #[tokio::test]
+    async fn test_get_release() {
+        let client = Client::new();
+        let release = client.get_latest_release().await;
+
+        assert!(release.is_ok(), "{:?}", release.err());
+        let release = release.unwrap();
+
+
+        println!("{:?}", release);
+        let version = release.version();
+        assert!(version.is_ok(), "{:?}", version.err());
+    }
 }
