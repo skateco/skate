@@ -1,6 +1,7 @@
 use crate::config::Config;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use dialoguer::Confirm;
 use itertools::Itertools;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
@@ -27,6 +28,7 @@ pub enum DeleteCommands {
     Daemonset(DeleteResourceArgs),
     Service(DeleteResourceArgs),
     ClusterIssuer(DeleteResourceArgs),
+    Cluster(DeleteClusterArgs),
 }
 
 #[derive(Debug, Args)]
@@ -36,8 +38,19 @@ pub struct DeleteResourceArgs {
     namespace: String,
     #[command(flatten)]
     config: ConfigFileArgs,
-
 }
+
+
+#[derive(Debug, Args)]
+pub struct DeleteClusterArgs {
+    name: String,
+    #[command(flatten)]
+    config: ConfigFileArgs,
+    #[arg(long, short, long_help = "Answer yes to confirmation")]
+    pub yes: bool,
+}
+
+
 
 pub trait DeleteDeps: With<dyn SshManager> {}
 
@@ -56,6 +69,7 @@ impl<D: DeleteDeps> Delete<D> {
             DeleteCommands::Secret(args) => self.delete_resource(ResourceType::Secret, args).await?,
             DeleteCommands::Service(args) => self.delete_resource(ResourceType::Service, args).await?,
             DeleteCommands::ClusterIssuer(args) => self.delete_resource(ResourceType::ClusterIssuer, args).await?,
+            DeleteCommands::Cluster(args) => self.delete_cluster(args).await?,
         }
         Ok(())
     }
@@ -118,5 +132,25 @@ impl<D: DeleteDeps> Delete<D> {
                 Ok(())
             }
         }
+    }
+
+    async fn delete_cluster(&self, args: DeleteClusterArgs) -> Result<(), SkateError> {
+        let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
+        let cluster = config.active_cluster(args.config.context.clone())?.clone();
+
+        if ! args.yes{
+            let confirmation = Confirm::new()
+                .with_prompt(format!("Are you sure you want to delete cluster {}?", args.name))
+                .wait_for_newline(true)
+                .interact()
+                .unwrap();
+
+            if !confirmation {
+                return Ok(())
+            }
+
+        }
+        config.delete_cluster(&cluster)?;
+        config.persist(Some(args.config.skateconfig))
     }
 }
