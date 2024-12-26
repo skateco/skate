@@ -25,6 +25,8 @@ done
 
 nodes=2
 
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-${SSH_PRIVATE_KEY}.pub}
+
 ensure_public_key() {
     if [ ! -f $SSH_PUBLIC_KEY ]; then
          echo >&2 "no public key at $SSH_PUBLIC_KEY, set SSH_PUBLIC_KEY env to point to a valid ssh public key"
@@ -102,7 +104,7 @@ stop)
     ;;
 remove)
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
-#    multipass delete --purge $node_names
+    docker rm -f $node_names
     ;;
 shell)
     SESSION="sindplz"
@@ -122,7 +124,7 @@ skate)
     cargo run --bin skate create cluster test||true
     cargo run --bin skate config use-context test
     for f in $(seq $nodes); do
-        cargo run --bin skate create node --name node-$f --host localhost --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
+        cargo run --bin skate create node --name node-$f --host 127.0.0.1 --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
     done
     ;;
 skatelet)
