@@ -35,7 +35,22 @@ impl Display for SkateError {
     }
 }
 
-fn skate(command: &str, args: &[&str]) -> Result<(), SkateError> {
+fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
+    let output = process::Command::new("./target/debug/skate")
+        .args([&[command], args].concat())
+        .output().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        return Err(SkateError { exit_code: output.status.code().unwrap_or_default(), message: stderr });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    Ok((stdout, stderr))
+}
+
+fn skate_stdout(command: &str, args: &[&str]) -> Result<(), SkateError> {
     let mut child = process::Command::new("./target/debug/skate")
         .args([&[command], args].concat())
         .stdout(stdout())
@@ -43,9 +58,9 @@ fn skate(command: &str, args: &[&str]) -> Result<(), SkateError> {
         .spawn().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
 
 
-    let status = child.wait().map_err(|e| SkateError{exit_code: -1, message: e.to_string()})?;
+    let status = child.wait().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
     if !status.success() {
-        return Err(SkateError { exit_code: status.code().unwrap_or_default(), message:"".to_string() });
+        return Err(SkateError { exit_code: status.code().unwrap_or_default(), message: "".to_string() });
     }
 
     Ok(())
@@ -70,12 +85,18 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
 
     let user = env::var("USER")?;
 
-    skate("delete", &["cluster", "integration-test", "--yes"])?;
-    skate("create", &["cluster", "integration-test"])?;
-    skate("config", &["use-context", "integration-test"])?;
-    skate("create", &["node", "--name", "node-1", "--host", &ips.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
-    skate("create", &["node", "--name", "node-2", "--host", &ips.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+    skate_stdout("delete", &["cluster", "integration-test", "--yes"]);
+    skate_stdout("create", &["cluster", "integration-test"])?;
+    skate_stdout("config", &["use-context", "integration-test"])?;
+    skate_stdout("create", &["node", "--name", "node-1", "--host", &ips.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+    skate_stdout("create", &["node", "--name", "node-2", "--host", &ips.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+    let (stdout, _stderr) = skate("refresh", &["--json"])?;
+
+    let state: serde_json::Value = serde_json::from_str(&stdout)?;
 
     // TODO -  validate that things work
+    // check internet works
+    // check dns works
+    //
     Ok(())
 }
