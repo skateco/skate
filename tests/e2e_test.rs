@@ -2,8 +2,6 @@ use std::{env, panic, process};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stderr, stdout};
-use std::process::Stdio;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 fn setup() {}
@@ -80,10 +78,15 @@ fn ips() -> Result<(String, String), anyhow::Error> {
 }
 
 #[test]
+fn e2e_test() {
+    run_test(|| {
+        test_cluster_creation().expect("failed to create cluster");
+        test_deployment().expect("failed to test deployment");
+
+    });
+}
+
 fn test_cluster_creation() -> Result<(), anyhow::Error> {
-    if env::var("SKATE_E2E").is_err() {
-        return Ok(());
-    }
     let ips = ips()?;
 
     let user = env::var("USER")?;
@@ -106,9 +109,41 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
     assert_eq!(node2["node_name"], "node-2");
     assert_eq!(node2["status"], "Healthy");
 
-    // TODO -  validate that things work
-    // check internet works
-    // check dns works
-    //
+    Ok(())
+}
+fn test_deployment() -> Result<(), anyhow::Error> {
+    if env::var("SKATE_E2E").is_err() {
+        return Ok(());
+    }
+
+    let root = env::var("CARGO_MANIFEST_DIR")?;
+
+    skate_stdout("config", &["use-context", "integration-test"])?;
+
+    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")])?;
+
+    let output = skate("get", &["pods", "-n", "test-deployment"])?;
+
+    println!("{}", output.0);
+
+    let stdout = output.0;
+
+    let lines = stdout.lines().skip(1);
+
+    assert_eq!(lines.clone().count(), 3);
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 6 {
+            assert_eq!(parts[0], "test-deployment");
+            assert_eq!(true, parts[1].starts_with("dpl-nginx-"));
+            assert_eq!(parts[2], "2/2");
+            assert_eq!(parts[3], "Running");
+            assert_eq!(parts[4], "0");
+        }
+    }
+
+
+
     Ok(())
 }
