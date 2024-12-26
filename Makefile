@@ -33,5 +33,5 @@ run-integration-tests:
 	./hack/clusterplz create || exit 0
 	./hack/clusterplz skatelet
     # the ignored tests are the integration tests. This is not optimal.
-	cargo test --test '*' -v -- --show-output --nocapture --include-ignored
+	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture --include-ignored
 

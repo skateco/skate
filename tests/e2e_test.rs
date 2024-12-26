@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io::{stderr, stdout};
 use std::process::Stdio;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 fn setup() {}
 
@@ -79,8 +80,10 @@ fn ips() -> Result<(String, String), anyhow::Error> {
 }
 
 #[test]
-#[ignore]
 fn test_cluster_creation() -> Result<(), anyhow::Error> {
+    if env::var("SKATE_E2E").is_err() {
+        return Ok(());
+    }
     let ips = ips()?;
 
     let user = env::var("USER")?;
@@ -92,7 +95,16 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
     skate_stdout("create", &["node", "--name", "node-2", "--host", &ips.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
     let (stdout, _stderr) = skate("refresh", &["--json"])?;
 
-    let state: serde_json::Value = serde_json::from_str(&stdout)?;
+    let state: Value = serde_json::from_str(&stdout)?;
+
+    assert_eq!(state["nodes"].as_array().unwrap().len(), 2);
+    let node1 = state["nodes"][0].clone();
+    let node2 = state["nodes"][1].clone();
+
+    assert_eq!(node1["node_name"], "node-1");
+    assert_eq!(node1["status"], "Healthy");
+    assert_eq!(node2["node_name"], "node-2");
+    assert_eq!(node2["status"], "Healthy");
 
     // TODO -  validate that things work
     // check internet works
