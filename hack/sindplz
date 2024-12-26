@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
@@ -24,6 +25,20 @@ done
 
 nodes=2
 
+ensure_public_key() {
+    if [ ! -f $SSH_PUBLIC_KEY ]; then
+         echo >&2 "no public key at $SSH_PUBLIC_KEY, set SSH_PUBLIC_KEY env to point to a valid ssh public key"
+        exit 2
+    fi
+}
+
+ensure_private_key() {
+    if [ ! -f $SSH_PRIVATE_KEY ]; then
+         echo >&2 "no private key at $SSH_PRIVATE_KEY, set SSH_PRIVATE_KEY env to point to a valid ssh private key"
+        exit 2
+    fi
+}
+
 stop_nodes() {
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
     multipass stop $node_names
@@ -48,36 +63,36 @@ snapshot_nodes() {
 # shellcheck disable=SC2128
 case "$POSITIONAL_ARGS" in
 create)
+    ensure_public_key
 
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
     docker build -t sind $SCRIPT_DIR/../images/sind
     docker rm -f $node_names
     for f in $(seq $nodes); do
-        docker run -d --privileged -p 222$f:22 --dns 127.0.0.1 --cgroupns host --tmpfs /tmp --tmpfs /run --tmpfs /run/lock --name node-$f sind
-        auth_key=$(cat ~/.ssh/id_rsa.pub)
+        docker run -d \
+          --privileged \
+          -p 222$f:22 \
+          --dns 127.0.0.1 \
+          --cgroupns host \
+          --hostname node-$f \
+          --tmpfs /tmp \
+          --tmpfs /run \
+          --tmpfs /run/lock \
+          --name node-$f sind
+        auth_key=$(cat $SSH_PUBLIC_KEY)
         docker exec node-$f bash -c "echo  '$auth_key' > /home/skate/.ssh/authorized_keys"
 
     done
     ;;
 info)
-    for f in $(seq $nodes); do
-        multipass info node-$f
-    done
-    ;;
-snapshot)
-    snapshot_nodes
+#    for f in $(seq $nodes); do
+#        multipass info node-$f
+#    done
     ;;
 ips)
-    for f in $(seq $nodes); do
-        multipass info node-$f | grep IPv4 | awk '{print $2}'
-    done
-    ;;
-restore)
-    stop_nodes
-    for f in $(seq $nodes); do
-        multipass restore -d "node-${f}.snapshot1"
-    done
-    start_nodes
+#    for f in $(seq $nodes); do
+#        multipass info node-$f | grep IPv4 | awk '{print $2}'
+#    done
     ;;
 start)
     start_nodes
@@ -87,30 +102,36 @@ stop)
     ;;
 remove)
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
-    multipass delete --purge $node_names
+#    multipass delete --purge $node_names
     ;;
 shell)
-    SESSION="clusterplz"
-    tmux kill-session -t $SESSION
+    SESSION="sindplz"
+    tmux kill-session -t $SESSION || true
     tmux new-session -d -s $SESSION
     # todo, split $nodes-1 times
     for f in $(seq $nodes); do
-        tmux send-keys -t $SESSION "multipass shell node-$f" Enter
+        tmux send-keys -t $SESSION "docker exec -it node-$f /bin/bash" Enter
         if [ $f -ne $nodes ]; then
             tmux split-window -h -t $SESSION
         fi
     done
     tmux attach-session -t $SESSION
     ;;
+skate)
+    ensure_private_key
+    cargo run --bin skate create cluster test||true
+    cargo run --bin skate config use-context test
+    for f in $(seq $nodes); do
+        cargo run --bin skate create node --name node-$f --host localhost --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
+    done
+    ;;
 skatelet)
-    set -e
-    arch=$(multipass exec -n node-1 -- arch)
+  set -x
+    arch=$(docker exec -it node-1 arch|tr -d '\r')
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet-netavark node-$f:
-        multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
-        multipass exec -n node-$f -- sudo mv skatelet-netavark /usr/local/bin/skatelet-netavark
+        docker cp target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:/
+        docker exec -it node-$f sudo mv skatelet /usr/local/bin/skatelet
     done
     ;;
 esac
