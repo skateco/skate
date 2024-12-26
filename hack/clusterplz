@@ -1,14 +1,25 @@
 #!/bin/bash
 
+set -x
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
+
+multipass_bin=$(which multipass)
+
+multipass() {
+  if [[ "$SUDO_MULTIPASS" -eq 1 ]]; then
+    sudo $multipass_bin $@
+  fi
+  $multipass_bin $@
+}
 
 if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
   source $SCRIPT_DIR/.clusterplz.env
 fi
 
-SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-${SSH_PRIVATE_KEY}.pub}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -82,9 +93,17 @@ packages:
 - libssl-dev
 - pkg-config
 EOF
+
+    had_failures=false
     for f in $(seq $nodes); do
         multipass launch -c 1 -m 1G -d 7G -n node-$f --cloud-init ./.cluster-plz.yaml
+        exit_code=$?
+        if [ $exit_code -gt 0 ]; then
+          had_failures=true
+        fi
     done
+
+    $had_failures && exit 1
 
     snapshot_nodes
 
@@ -153,10 +172,23 @@ skatelet)
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
         if [ "$(arch)" = "$arch" ]; then
-          multipass transfer target/release/skatelet node-$f:
+          binary=target/release/skatelet
+          if [ ! -f $binary ]; then
+            set -x
+            cargo build --bin skatelet --release --locked
+            set +x
+          fi
         else
-          multipass transfer target/${arch}-unknown-linux-gnu/release/skatelet node-$f:
+          target=${arch}-unknown-linux-gnu
+          binary=target/$target/release/skatelet
+          if [ ! -f $binary ]; then
+            set -x
+            cross build --bin skatelet --release --locked --target "$target"
+            set +x
+          fi
         fi
+
+        multipass transfer $binary node-$f:
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
 
     done

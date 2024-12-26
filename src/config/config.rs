@@ -55,6 +55,12 @@ impl Config {
         self.clusters[idx] = cluster.clone();
         Ok(())
     }
+
+    pub fn delete_cluster(&mut self, cluster: &Cluster) -> Result<(), SkateError> {
+        let idx = self.clusters.iter().position(|c| c.name == cluster.name).ok_or("cluster not found".to_string())?;
+        self.clusters.remove(idx);
+        Ok(())
+    }
 }
 
 

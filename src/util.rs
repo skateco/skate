@@ -22,7 +22,6 @@ pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
 pub const EQUAL_EMOJI: char = '~';
 pub const INFO_EMOJI: &str = "[i]";
-pub const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())

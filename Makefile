@@ -1,3 +1,4 @@
+.ONE_SHELL:
 .PHONY: default
 default: aarch64
 
@@ -21,4 +22,16 @@ lint:
 lint-fix:
 	cargo clippy --fix --all --allow-dirty --allow-staged
 
+
+.PHONY: run-integration-tests
+run-integration-tests: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
+run-integration-tests:
+	set -euo pipefail
+	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
+	echo "SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}" > ./hack/.clusterplz.env
+	# start vms
+	./hack/clusterplz create || exit 0
+	./hack/clusterplz skatelet
+    # the ignored tests are the integration tests. This is not optimal.
+	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture --include-ignored
 
