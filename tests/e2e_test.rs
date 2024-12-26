@@ -65,7 +65,7 @@ fn ips() -> Result<(String, String), anyhow::Error> {
 
 #[test]
 #[ignore]
-fn test_node_creation() -> Result<(), anyhow::Error> {
+fn test_cluster_creation() -> Result<(), anyhow::Error> {
     let ips = ips()?;
 
     let user = env::var("USER")?;
@@ -75,5 +75,7 @@ fn test_node_creation() -> Result<(), anyhow::Error> {
     skate("config", &["use-context", "integration-test"])?;
     skate("create", &["node", "--name", "node-1", "--host", &ips.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
     skate("create", &["node", "--name", "node-2", "--host", &ips.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+
+    // TODO -  validate that things work
     Ok(())
 }
