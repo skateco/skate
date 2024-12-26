@@ -43,23 +43,13 @@ ensure_private_key() {
 
 stop_nodes() {
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
-    multipass stop $node_names
+    docker stop $node_names
 }
 
 start_nodes() {
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
 
-    docker start start $node_names
-}
-
-snapshot_nodes() {
-    stop_nodes
-
-    for f in $(seq $nodes); do
-        multipass snapshot node-$f
-    done
-
-    start_nodes
+    docker start $node_names
 }
 
 # shellcheck disable=SC2128
@@ -92,9 +82,9 @@ info)
 #    done
     ;;
 ips)
-#    for f in $(seq $nodes); do
-#        multipass info node-$f | grep IPv4 | awk '{print $2}'
-#    done
+    for f in $(seq $nodes); do
+      echo "127.0.0.1 222$f"
+    done
     ;;
 start)
     start_nodes
