@@ -79,6 +79,10 @@ fn ips() -> Result<(String, String), anyhow::Error> {
 
 #[test]
 fn e2e_test() {
+    if env::var("SKATE_E2E").is_err() {
+        return;
+    }
+
     run_test(|| {
         test_cluster_creation().expect("failed to create cluster");
         test_deployment().expect("failed to test deployment");
@@ -112,9 +116,6 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
     Ok(())
 }
 fn test_deployment() -> Result<(), anyhow::Error> {
-    if env::var("SKATE_E2E").is_err() {
-        return Ok(());
-    }
 
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
