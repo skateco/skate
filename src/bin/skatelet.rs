@@ -1,8 +1,8 @@
-use std::error::Error;
-use tokio;
+#![warn(unused_extern_crates)]
+use skate::errors::SkateError;
 use skate::skatelet;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), SkateError> {
     skatelet().await
 }

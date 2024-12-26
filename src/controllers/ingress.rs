@@ -1,32 +1,34 @@
-use std::error::Error;
-use std::io::Write;
-use std::{fs, process};
-use std::process::Stdio;
+use crate::exec::{ShellExec};
+use crate::filestore::Store;
+use crate::spec::cert::ClusterIssuer;
+use crate::util::metadata_name;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
-use crate::filestore::FileStore;
-use crate::skate::exec_cmd;
-use crate::spec::cert::ClusterIssuer;
-use crate::util::metadata_name;
+use std::error::Error;
+use std::io::Write;
+use std::process::Stdio;
+use std::{fs, process};
 
 pub struct IngressController {
-    store: FileStore
+    store: Box<dyn Store>,
+    execer: Box<dyn ShellExec>,
 }
 
 impl IngressController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
         IngressController {
-            store: file_store
+            store,
+            execer,
         }
     }
 
-    pub fn apply(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        let ingress_string = serde_yaml::to_string(&ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(&ingress).to_string();
+    pub fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+        let ingress_string = serde_yaml::to_string(ingress).map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+        let name = &metadata_name(ingress).to_string();
 
-        exec_cmd("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
+        self.execer.exec("mkdir", &["-p", &format!("/var/lib/skate/ingress/services/{}", name)])?;
 
         // manifest goes into store
         self.store.write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
@@ -34,12 +36,12 @@ impl IngressController {
         let hash = ingress.metadata.labels.as_ref().and_then(|m| m.get("skate.io/hash")).unwrap_or(&"".to_string()).to_string();
 
         if !hash.is_empty() {
-            self.store.write_file("ingress", &name, "hash", &hash.as_bytes())?;
+            self.store.write_file("ingress", name, "hash", hash.as_bytes())?;
         }
 
         self.render_nginx_conf()?;
 
-        let _ns_name = metadata_name(&ingress);
+        let _ns_name = metadata_name(ingress);
 
         ////////////////////////////////////////////////////
         // Template service nginx confs for http/https
@@ -55,11 +57,11 @@ impl IngressController {
 
 
             let child = process::Command::new("bash")
-                .args(&["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
+                .args(["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped()).spawn()?;
 
-            child.stdin.as_ref().unwrap().write(json_ingress_string.as_ref()).unwrap();
+            let _ = child.stdin.as_ref().unwrap().write(json_ingress_string.as_ref()).unwrap();
 
             let output = child.wait_with_output()
                 .map_err(|e| anyhow!(e).context("failed to apply resource"))?;
@@ -69,36 +71,37 @@ impl IngressController {
             }
         }
 
-        Self::reload()?;
+        self.reload()?;
 
         Ok(())
     }
 
-    pub fn delete(&self, ingress: Ingress) -> Result<(), Box<dyn Error>> {
-        let ns_name = metadata_name(&ingress);
-        let _ = self.store.remove_object("ingress", &ns_name.to_string())?;
-        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name.to_string());
+    pub fn delete(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+        let ns_name = metadata_name(ingress);
+        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name);
         let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
             return Err(anyhow!(result.unwrap_err()).context(format!("failed to remove directory {}", dir)).into());
         }
 
-        Self::reload()?;
+        self.store.remove_object("ingress", &ns_name.to_string())?;
+
+        self.reload()?;
 
         Ok(())
     }
 
-    pub fn reload() -> Result<(), Box<dyn Error>> {
+    pub fn reload(&self) -> Result<(), Box<dyn Error>> {
 
         // trigger SIGHUP to ingress container
         // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
-        let id = exec_cmd("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
+        let id = self.execer.exec("podman", &["ps", "--filter", "label=skate.io/namespace=skate", "--filter", "label=skate.io/daemonset=nginx-ingress", "-q"])?;
 
         if id.is_empty() {
             return Err(anyhow!("no ingress container found").into());
         }
 
-        let _ = exec_cmd("podman", &["kill", "--signal", "HUP", &format!("{}", id)])?;
+        let _ = self.execer.exec("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
         Ok(())
     }
 
@@ -118,7 +121,7 @@ impl IngressController {
         // Template main nginx conf
         ////////////////////////////////////////////////////
 
-        let issuer = self.store.list_objects("clusterissuer").ok().and_then(|list| list.first().and_then(|c| Some(c.clone())));
+        let issuer = self.store.list_objects("clusterissuer").ok().and_then(|list| list.first().cloned());
 
         let (endpoint, email) = match issuer {
             Some(issuer) => {
@@ -130,7 +133,7 @@ impl IngressController {
             None => None
         }.unwrap_or_default();
 
-        let endpoint = if endpoint == "" {
+        let endpoint = if endpoint.is_empty() {
             // default to staging
             "https://acme-staging-v02.api.letsencrypt.org/directory".to_string()
         } else {
@@ -146,12 +149,12 @@ impl IngressController {
         });
 
         let child = process::Command::new("bash")
-            .args(&["-c", "skatelet template --file /var/lib/skate/ingress/nginx.conf.tmpl - > /var/lib/skate/ingress/nginx.conf"])
+            .args(["-c", "skatelet template --file /var/lib/skate/ingress/nginx.conf.tmpl - > /var/lib/skate/ingress/nginx.conf"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
 
-        child.stdin.as_ref().unwrap().write(main_template_data.to_string().as_ref()).unwrap();
+        let _ = child.stdin.as_ref().unwrap().write(main_template_data.to_string().as_ref()).unwrap();
 
         let output = child.wait_with_output()
             .map_err(|e| anyhow!(e).context("failed to apply resource"))?;

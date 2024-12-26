@@ -1,41 +1,47 @@
-use std::error::Error;
-use std::{process, thread};
-use std::panic::PanicInfo;
+use crate::util;
+use crate::skatelet::apply;
+use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
+use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
+use crate::skatelet::create::{create, CreateArgs, CreateDeps};
+use crate::skatelet::delete::{DeleteArgs, DeleteDeps, Deleter};
+use crate::skatelet::dns::{Dns, DnsArgs, DnsDeps};
+use crate::skatelet::ipvs::{IPVSDeps, IpvsArgs, IPVS};
+use crate::skatelet::oci::{oci, OciArgs};
+use crate::skatelet::system::{system, SystemArgs, SystemDeps};
+use crate::skatelet::template::{template, TemplateArgs};
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use strum::AsStaticRef;
-use strum_macros::AsStaticStr;
+use std::panic::PanicInfo;
+use std::{process, thread};
+use anyhow::anyhow;
+use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
-use crate::skatelet::apply;
-use crate::skatelet::apply::{ApplyArgs};
-use crate::skatelet::cni::cni;
-use crate::skatelet::delete::{delete, DeleteArgs};
-use crate::skatelet::dns::{dns, DnsArgs};
-use crate::skatelet::ipvs::{ipvs, IpvsArgs};
-use crate::skatelet::oci::{oci, OciArgs};
-use crate::skatelet::system::{system, SystemArgs};
-use crate::skatelet::template::{template, TemplateArgs};
+use crate::deps::{Deps};
+use crate::errors::SkateError;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
 #[command(about = "Skatelet", version, long_about = "Skate agent to be run on nodes", arg_required_else_help = true)]
+#[clap(version = util::version(false), long_version = util::version(true))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
 }
 
-#[derive(Debug, Subcommand, AsStaticStr)]
+#[derive(Debug, Subcommand, IntoStaticStr)]
 enum Commands {
     Apply(ApplyArgs),
     System(SystemArgs),
     Delete(DeleteArgs),
     Template(TemplateArgs),
     Dns(DnsArgs),
-    Cni,
     Oci(OciArgs),
-    Ipvs(IpvsArgs)
+    Ipvs(IpvsArgs),
+    Create(CreateArgs),
+    Cordon(CordonArgs),
+    Uncordon(UncordonArgs),
 }
 
 pub fn log_panic(info: &PanicInfo) {
@@ -70,14 +76,22 @@ pub fn log_panic(info: &PanicInfo) {
     }
 }
 
-pub async fn skatelet() -> Result<(), Box<dyn Error>> {
+impl ApplyDeps for Deps{}
+impl SystemDeps for Deps{}
+impl CreateDeps for Deps{}
+impl DeleteDeps for Deps{}
+impl DnsDeps for Deps{}
+impl IPVSDeps for Deps{}
+
+pub async fn skatelet() -> Result<(), SkateError> {
 
     let args = Cli::parse();
 
+    let cmd_name: &'static str = (&args.command).into();
     let formatter = Formatter3164 {
         facility: Facility::LOG_USER,
         hostname: None,
-        process: format!("skatelet-{}",args.command.as_static().to_lowercase()).into(),
+        process: format!("skatelet-{}", cmd_name.to_lowercase()),
         pid: process::id(),
     };
     let logger = match syslog::unix(formatter) {
@@ -86,21 +100,35 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
     };
 
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-        .map(|()| log::set_max_level(LevelFilter::Debug))?;
+        .map(|()| log::set_max_level(LevelFilter::Debug)).map_err(|e| anyhow!(e))?;
 
+    
+    let deps = Deps{
+    };
+    
 
     let result = match args.command {
-        Commands::Apply(args) => apply::apply(args),
-        Commands::System(args) => system(args).await,
-        Commands::Delete(args) => delete(args),
-        Commands::Template(args) => template(args),
-        Commands::Cni => {
-            cni();
-            Ok(())
+        Commands::Apply(args) => apply::apply(deps, args),
+        Commands::System(args) => system(deps, args).await,
+        Commands::Delete(args) => {
+            let deleter = Deleter{deps};
+            deleter.delete(args)
         },
-        Commands::Dns(args) => dns(args),
+        // TODO - deps
+        Commands::Template(args) => template(args),
+        Commands::Dns(args) => {
+            let dns = Dns{deps};
+            dns.dns(args)
+        },
+        // TODO - deps
         Commands::Oci(args) => oci(args),
-        Commands::Ipvs(args) => ipvs(args),
+        Commands::Ipvs(args) => {
+            let ipvs = IPVS{deps};
+            ipvs.ipvs(args)
+        },
+        Commands::Create(args) => create(deps, args),
+        Commands::Cordon(args) => cordon(args),
+        Commands::Uncordon(args) => uncordon(args),
         // _ => Ok(())
     };
     match result {
@@ -111,5 +139,6 @@ pub async fn skatelet() -> Result<(), Box<dyn Error>> {
         }
     }
 }
+
 
 

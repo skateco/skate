@@ -1,15 +1,19 @@
+use itertools::Itertools;
+use tabled::Tabled;
 use crate::filestore::ObjectListItem;
-use crate::get::{GetObjectArgs };
+use crate::get::{GetObjectArgs};
 use crate::skatelet::{SystemInfo};
 use crate::state::state::ClusterState;
 
 pub(crate) trait NameFilters {
-    fn id(&self) -> String;
+    fn id(&self) -> String {
+        self.name()
+    }
     fn name(&self) -> String;
     fn namespace(&self) -> String;
     fn filter_names(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
-            true => &"",
+            true => "",
             false => ns
         };
 
@@ -22,7 +26,7 @@ pub(crate) trait NameFilters {
         if ns.is_empty() && name.is_empty() && self.namespace() == "skate" {
             return false;
         }
-        return true;
+        true
     }
 }
 
@@ -40,26 +44,35 @@ impl NameFilters for &ObjectListItem {
 }
 
 pub(crate) trait Lister<T> {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Option<Vec<T>>;
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T> {
+    // selects data from each node
+    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<T>
+    where
+        T: Tabled + NameFilters,
+    {
+        unimplemented!("needs to be implemented if `list` is not")
+    }
+
+    // the outer list function
+    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T>
+    where
+        T: Tabled + NameFilters,
+    {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 
 
-        let resources = state.nodes.iter().map(|node| {
+        let resources = state.nodes.iter().flat_map(|node| {
             match &node.host_info {
                 Some(hi) => match &hi.system_info {
-                    Some(si) => match self.selector(&si, &ns, &id) {
-                        Some(items) => items.into_iter().collect(),
-                        None => vec![]
-                    }
-                    None => vec![]
+                    Some(si) => self.selector(si, &ns, &id),
+                    _ => vec![]
                 }
                 None => vec![]
             }
-        }).flatten().collect();
+        }).unique_by(|i| format!("{}.{}", i.name(), i.namespace())).collect();
 
         resources
     }
-    fn print(&self, items: Vec<T>);
 }
+
+

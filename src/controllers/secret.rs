@@ -1,28 +1,28 @@
-use std::error::Error;
+use crate::exec::{ShellExec};
+use crate::util::{apply_play, metadata_name};
 use k8s_openapi::api::core::v1::Secret;
-use crate::filestore::FileStore;
-use crate::skate::{exec_cmd, SupportedResources};
-use crate::util::apply_play;
+use std::error::Error;
+use crate::resource::SupportedResources;
 
 pub struct SecretController {
-    store: FileStore,
+    execer: Box<dyn ShellExec>
 }
 
 impl SecretController {
-    pub fn new(file_store: FileStore) -> Self {
+    pub fn new(execer: Box<dyn ShellExec>) -> Self {
         SecretController {
-            store: file_store,
+            execer
         }
     }
 
-    pub fn apply(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
-        apply_play(SupportedResources::Secret(secret))
+    pub fn apply(&self, secret: &Secret) -> Result<(), Box<dyn Error>> {
+        apply_play(&self.execer, &SupportedResources::Secret(secret.clone()))
     }
 
 
-    pub fn delete(&self, secret: Secret) -> Result<(), Box<dyn Error>> {
-        let fqn = format!("{}.{}", secret.metadata.name.unwrap(), secret.metadata.namespace.unwrap());
-        let output = exec_cmd("podman", &["secret", "rm", &fqn])?;
+    pub fn delete(&self, secret: &Secret) -> Result<(), Box<dyn Error>> {
+        let name = metadata_name(secret);
+        let output = self.execer.exec("podman", &["secret", "rm", &name.to_string()])?;
 
         if !output.is_empty() {
             println!("{}", output);

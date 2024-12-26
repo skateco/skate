@@ -1,54 +1,34 @@
 #![allow(unused)]
 
-use std::error::Error;
-use async_trait::async_trait;
-use clap::{Args, Command, Parser, Subcommand};
-use k8s_openapi::{List, Metadata, NamespaceResourceScope, Resource, ResourceScope};
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, DeploymentSpec};
-use k8s_openapi::api::core::v1::{Container, Pod, PodTemplateSpec, Secret, Service};
-use serde_yaml;
+use crate::util;
+use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use tokio;
-use crate::apply::{apply, ApplyArgs};
-use crate::refresh::{refresh, RefreshArgs};
-use async_ssh2_tokio::client::{AuthMethod, Client, CommandExecutedResult, ServerCheckMethod};
-use async_ssh2_tokio::Error as SshError;
-use strum_macros::{Display, EnumString};
-use std::{fs, io, process};
-use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
-use std::env::var;
+use crate::apply::{Apply, ApplyArgs, ApplyDeps};
+use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
+use strum_macros::Display;
 use std::fmt::{Display, Formatter};
-use std::fs::{create_dir, File, metadata};
-use std::io::Read;
-use std::ops::Deref;
-use std::path::Path;
-use std::time::{Duration, SystemTime};
-use path_absolutize::*;
-use anyhow::anyhow;
-use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use serde_yaml::{Error as SerdeYamlError, Value};
-use crate::{config, spec};
-use crate::config::{cache_dir, Config, Node};
+use crate::config;
+use crate::cluster::{Cluster, ClusterArgs, ClusterDeps};
 use crate::config_cmd::ConfigArgs;
-use crate::create::{create, CreateArgs};
-use crate::delete::{delete, DeleteArgs};
-use crate::get::{get, GetArgs};
-use crate::describe::{DescribeArgs, describe};
-use crate::logs::{LogArgs, logs};
+use crate::cordon::{Cordon, CordonArgs, CordonDeps, UncordonArgs};
+use crate::create::{Create, CreateArgs, CreateDeps};
+use crate::delete::{Delete, DeleteArgs, DeleteDeps};
+use crate::deps::Deps;
+use crate::get::{Get, GetArgs, GetDeps};
+use crate::describe::{Describe, DescribeArgs, DescribeDeps};
+use crate::errors::SkateError;
+use crate::logs::{LogArgs, Logs, LogsDeps};
+use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
-use crate::skate::Os::{Darwin, Linux};
-use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClient, SshClients};
-use crate::state::state::NodeState;
-use crate::util::{metadata_name, NamespacedName, slugify, TARGET};
+use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
+
+
 
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
 #[command(about = "Skate CLI", long_about = None, arg_required_else_help = true, version)]
+#[clap(version = util::version(false), long_version = util::version(true))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -56,14 +36,32 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    #[command(long_about = "Create resources")]
     Create(CreateArgs),
+    #[command(long_about = "Delete resources")]
     Delete(DeleteArgs),
+    #[command(long_about = "Apply kubernetes manifest files")]
     Apply(ApplyArgs),
+    #[command(long_about = "Refresh cluster state")]
     Refresh(RefreshArgs),
+    #[command(long_about = "List resources")]
     Get(GetArgs),
+    #[command(long_about = "View a resource")]
     Describe(DescribeArgs),
+    #[command(long_about = "View resource logs")]
     Logs(LogArgs),
+    #[command(long_about = "Configuration actions")]
     Config(ConfigArgs),
+    #[command(long_about = "Taint a node as unschedulable")]
+    Cordon(CordonArgs),
+    #[command(long_about = "Remove unschedulable taint on a node")]
+    Uncordon(UncordonArgs),
+    #[command(long_about = "Cluster actions")]
+    Cluster(ClusterArgs),
+    #[command(long_about = "Rollout actions")]
+    Rollout(RolloutArgs),
+    #[command(long_about = "Upgrade actions")]
+    Upgrade(UpgradeArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -74,482 +72,87 @@ pub struct ConfigFileArgs {
     pub context: Option<String>,
 }
 
-pub async fn skate() -> Result<(), Box<dyn Error>> {
+impl ApplyDeps for Deps {}
+impl ClusterDeps for Deps {}
+impl CreateDeps for Deps {}
+impl DeleteDeps for Deps {}
+impl CordonDeps for Deps {}
+impl RefreshDeps for Deps{}
+impl GetDeps for Deps{}
+impl DescribeDeps for Deps{}
+impl LogsDeps for Deps{}
+impl RolloutDeps for Deps{}
+
+impl UpgradeDeps for Deps{}
+
+pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps + UpgradeDeps{} 
+
+impl AllDeps for Deps{}
+
+async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateError> {
     config::ensure_config();
-    let args = Cli::parse();
     match args.command {
-        Commands::Create(args) => create(args).await,
-        Commands::Delete(args) => delete(args).await,
+        Commands::Create(args) => {
+            let create = Create { deps };
+            create.create(args).await
+        }
+        Commands::Delete(args) => {
+            let delete = Delete { deps };
+            delete.delete(args).await
+        }
 
-        Commands::Apply(args) => apply(args).await,
-        Commands::Refresh(args) => refresh(args).await,
-        Commands::Get(args) => get(args).await,
-        Commands::Describe(args) => describe(args).await,
-        Commands::Logs(args) => logs(args).await,
+        Commands::Apply(args) => {
+            let apply = Apply { deps, };
+            apply.apply_self(args).await
+        }
+        Commands::Refresh(args) => {
+            let refresh = Refresh{deps};
+            refresh.refresh(args).await
+        },
+        Commands::Get(args) => {
+            let get= Get{deps};
+            get.get(args).await
+        },
+        Commands::Describe(args) => {
+            let describe = Describe{deps};
+            describe.describe(args).await
+        },
+        Commands::Logs(args) => {
+            let logs= Logs{deps};
+            logs.logs(args).await
+        },
         Commands::Config(args) => crate::config_cmd::config(args),
-        _ => Ok(())
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString)]
-pub enum ResourceType {
-    Pod,
-    Deployment,
-    DaemonSet,
-    Ingress,
-    CronJob,
-    Secret,
-    Service,
-    ClusterIssuer
-}
-
-#[derive(Debug, Serialize, Deserialize, Display, Clone)]
-pub enum SupportedResources {
-    #[strum(serialize = "Pod")]
-    Pod(Pod),
-    #[strum(serialize = "Deployment")]
-    Deployment(Deployment),
-    #[strum(serialize = "DaemonSet")]
-    DaemonSet(DaemonSet),
-    #[strum(serialize = "Ingress")]
-    Ingress(Ingress),
-    #[strum(serialize = "CronJob")]
-    CronJob(CronJob),
-    #[strum(serialize = "Secret")]
-    Secret(Secret),
-    #[strum(serialize = "Service")]
-    Service(Service),
-    #[strum(serialize = "ClusterIssuer")]
-    ClusterIssuer(ClusterIssuer),
-
-}
-
-impl TryFrom<Value> for SupportedResources {
-    type Error = Box<dyn Error>;
-
-    fn try_from(value: Value) -> Result<Self, Self::Error> {
-        let api_version_key = Value::String("apiVersion".to_owned());
-        let kind_key = Value::String("kind".to_owned());
-
-        let api_version = value.get(&api_version_key).and_then(Value::as_str);
-        let kind = value.get(&kind_key).and_then(Value::as_str);
-        match (api_version, kind) {
-            (Some(api_version), Some(kind)) => {
-                if api_version == Pod::API_VERSION &&
-                    kind == Pod::KIND
-                {
-                    let pod: Pod = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::Pod(pod))
-                } else if api_version == Deployment::API_VERSION &&
-                    kind == Deployment::KIND
-                {
-                    let deployment: Deployment = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::Deployment(deployment))
-                } else if api_version == DaemonSet::API_VERSION &&
-                    kind == DaemonSet::KIND
-                {
-                    let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::DaemonSet(daemonset))
-                } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND
-                {
-                    let ingress: Ingress = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::Ingress(ingress))
-                } else if
-                api_version == CronJob::API_VERSION &&
-                    kind == CronJob::KIND
-                {
-                    let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::CronJob(cronjob))
-                } else if
-                api_version == Secret::API_VERSION &&
-                    kind == Secret::KIND
-                {
-                    let secret: Secret = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::Secret(secret))
-                } else if
-                api_version == Service::API_VERSION &&
-                    kind == Service::KIND
-                {
-                    let service: Service = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::Service(service))
-                } else if
-                api_version == ClusterIssuer::API_VERSION &&
-                    kind == ClusterIssuer::KIND {
-                    let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
-                    Ok(SupportedResources::ClusterIssuer(clusterissuer))
-                }
-
-                else {
-                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind)).context("unsupported resource type").into())
-                }
-            }
-            _ => {
-                Err(anyhow!("missing 'kind' and 'apiVersion' fields").context("unsupported resource type").into())
-            }
+        Commands::Cordon(args) => {
+            let cordon = Cordon {deps};
+            cordon.cordon(args).await
         }
-    }
-}
-
-impl SupportedResources {
-    pub fn name(&self) -> NamespacedName {
-        match self {
-            SupportedResources::Pod(r) => metadata_name(r),
-            //SupportedResources::Pod(r) => NamespacedName{name: r.metadata.name.clone().unwrap_or_default(), namespace: r.metadata.labels.clone().unwrap_or_default().get("skate.io/namespace").unwrap_or(&"default".to_string())},
-            SupportedResources::Deployment(r) => metadata_name(r),
-            SupportedResources::DaemonSet(r) => metadata_name(r),
-            SupportedResources::Ingress(r) => metadata_name(r),
-            SupportedResources::CronJob(r) => metadata_name(r),
-            SupportedResources::Secret(s) => metadata_name(s),
-            SupportedResources::Service(s) => metadata_name(s),
-            SupportedResources::ClusterIssuer(c) => metadata_name(c),
+        Commands::Uncordon(args) => {
+            let cordon = Cordon {deps };
+            cordon.uncordon(args).await
         }
-    }
-
-    pub async fn pre_remove_hook(&self, node: &NodeState, conns: &SshClients) -> Result<(), Box<dyn Error>> {
-        match self {
-            SupportedResources::Pod(pod) => {
-                let mut errs = vec!();
-                // remove the pod ip from dns on deployed node
-                let ips: Vec<_> = match conns.find(&node.node_name).unwrap()
-                    .execute(&format!("sudo skatelet dns remove --pod-id {}", &pod.metadata.name.clone().unwrap())).await {
-                    Ok((ips)) => {
-                        let ips: Vec<_> = ips.lines().map(|l| l.to_string()).collect();
-                        ips
-                    }
-                    Err(e) => {
-                        errs.push(e);
-                        vec!()
-                    }
-                };
-
-                let now = chrono::Utc::now().timestamp();
-
-                let name = self.name().to_string();
-
-                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &name, ips.join(" "), &name);
-                let res = conns.execute(&cmd).await;
-                res.into_iter().for_each(|(node, result)| {
-                    if result.is_err() {
-                        let err = result.err().unwrap();
-                        errs.push(err);
-                    }
-                });
-
-                if !errs.is_empty() {
-                    return Err(anyhow!(errs.iter().map(|e|e.to_string()).collect::<Vec<String>>().join(". ")).context("failed to run pre-remove hook").into());
-                }
-
-                Ok(())
-            }
-            _ => Ok(())
+        Commands::Cluster(args) => {
+            let cluster = Cluster { deps };
+            cluster.cluster(args).await
         }
-    }
-
-    // whether there's host network set
-    pub fn host_network(&self) -> bool {
-        match self {
-            SupportedResources::Pod(p) => p.clone().spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::Deployment(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::DaemonSet(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::Ingress(_) => false,
-            SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::Secret(_) => false,
-            SupportedResources::Service(_) => false,
-            SupportedResources::ClusterIssuer(_) => false,
+        Commands::Rollout(args) => {
+            let rollout = Rollout{deps};
+            rollout.rollout(args).await
+        },
+        Commands::Upgrade(args) => {
+            let upgrade = Upgrade{deps};
+            upgrade.upgrade(args).await
         }
-    }
-    fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
-        let mut template = template.clone();
-        // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
-        template.spec = match template.spec {
-            Some(ref mut spec) => {
-                // first do env-var secrets
-                spec.containers = spec.containers.clone().into_iter().map(|mut container| {
-                    container.env = match container.env {
-                        Some(env_list) => {
-                            Some(env_list.into_iter().map(|mut e| {
-                                let name_opt = e.value_from.as_ref().and_then(|v| v.secret_key_ref.clone()).and_then(|s| s.name);
-                                if name_opt.is_some() {
-                                    e.value_from.as_mut().unwrap().secret_key_ref.as_mut().unwrap().name = Some(format!("{}.{}", &name_opt.unwrap(), &ns));
-                                }
-                                e
-                            }).collect())
-                        }
-                        None => None
-                    };
-                    container
-                }).collect();
-                // now do volume secrets
-                spec.volumes = spec.volumes.clone().and_then(|volumes| Some(volumes.into_iter().map(|mut volume| {
-                    volume.secret = volume.secret.clone().map(|mut secret| {
-                        secret.secret_name = secret.secret_name.clone().and_then(|secret_name| Some(format!("{}.{}", secret_name, ns)));
-                        secret
-                    });
-                    volume
-                }).collect()));
+    }?;
+    Ok(())
+}
 
-
-                Some(spec.clone())
-            }
-            None => None
-        };
-
-        Ok(template)
-    }
-
-    fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
-        let mut meta = meta.clone();
-        let ns = meta.namespace.clone().unwrap_or("default".to_string());
-        let name = meta.name.clone().unwrap();
-
-        // labels apply to both pods and containers
-        let mut labels = meta.labels.unwrap_or_default();
-        labels.insert("skate.io/name".to_string(), name.clone());
-        labels.insert("skate.io/namespace".to_string(), ns.clone());
-
-        match extra_labels {
-            Some(extra_labels) => labels.extend(extra_labels),
-            _ => {}
-        };
-        meta.labels = Some(labels);
-
-        let mut annotations = meta.annotations.unwrap_or_default();
-        annotations.insert("io.skate".to_string(), "true".to_string());
-        meta.annotations = Some(annotations);
-
-        Ok(meta)
-    }
-
-    // TODO - do we need this? scheduler does most of this
-    pub fn fixup(self) -> Result<Self, Box<dyn Error>> {
-        let mut resource = self.clone();
-        let resource = match resource {
-            SupportedResources::Secret(ref mut s) => {
-                let original_name = s.metadata.name.clone().unwrap_or("".to_string());
-                if original_name.is_empty() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if s.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-                s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
-                s.metadata.name = Some(format!("{}.{}", original_name, s.metadata.namespace.clone().unwrap()));
-                resource
-            }
-            SupportedResources::CronJob(ref mut c) => {
-                let original_name = c.metadata.name.clone().unwrap_or("".to_string());
-                if original_name.is_empty() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if c.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-                let mut extra_labels = HashMap::from([
-                    ("skate.io/cronjob".to_string(), original_name)
-                ]);
-                c.metadata = Self::fixup_metadata(c.metadata.clone(), None)?;
-                c.spec = match c.spec.clone() {
-                    Some(mut spec) => {
-                        match spec.job_template.spec {
-                            Some(mut job_spec) => {
-                                job_spec.template.metadata = {
-                                    let mut meta = job_spec.template.metadata.clone().unwrap_or_default();
-                                    // forward the namespace
-                                    meta.namespace = c.metadata.namespace.clone();
-                                    // if no name is set, set it to the cronjob name
-                                    if meta.name.is_none() {
-                                        meta.name = Some(c.metadata.name.clone().unwrap());
-                                    }
-                                    let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-                                    Some(meta)
-                                };
-
-                                job_spec.template = Self::fixup_pod_template(job_spec.template.clone(), c.metadata.namespace.as_ref().unwrap())?;
-                                spec.job_template.spec = Some(job_spec);
-                                Some(spec)
-                            }
-                            None => None
-                        }
-                    }
-                    None => None
-                };
-                resource
-            }
-            SupportedResources::Ingress(ref mut i) => {
-                let original_name = i.metadata.name.clone().unwrap_or("".to_string());
-                if i.metadata.name.is_none() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if i.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-                let mut extra_labels = HashMap::from([]);
-
-                i.metadata = Self::fixup_metadata(i.metadata.clone(), Some(extra_labels))?;
-                // set name to be name.namespace
-                i.metadata.name = Some(format!("{}", metadata_name(i)));
-                resource
-            }
-            SupportedResources::Pod(ref mut p) => {
-                if p.metadata.name.is_none() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if p.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-                p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
-                // set name to be name.namespace
-                p.metadata.name = Some(format!("{}", metadata_name(p)));
-                // go through
-                resource
-            }
-            SupportedResources::Deployment(ref mut d) => {
-                let original_name = d.metadata.name.clone().unwrap_or("".to_string());
-                if original_name.is_empty() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if d.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-                let mut extra_labels = HashMap::from([
-                    ("skate.io/deployment".to_string(), original_name.clone())
-                ]);
-                d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
-
-                d.spec = match d.spec.clone() {
-                    Some(mut spec) => {
-                        spec.template.metadata = {
-                            let mut meta = spec.template.metadata.clone().unwrap_or_default();
-                            // forward the namespace
-                            meta.namespace = d.metadata.namespace.clone();
-                            if meta.name.clone().unwrap_or_default().is_empty() {
-                                meta.name = Some(original_name.clone());
-                            }
-                            let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-                            Some(meta)
-                        };
-
-                        spec.template = Self::fixup_pod_template(spec.template.clone(), d.metadata.namespace.as_ref().unwrap())?;
-                        Some(spec)
-                    }
-                    None => None
-                };
-                resource
-            }
-            SupportedResources::DaemonSet(ref mut ds) => {
-                let original_name = ds.metadata.name.clone().unwrap_or("".to_string());
-                if original_name.is_empty() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if ds.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-                let mut extra_labels = HashMap::from([
-                    ("skate.io/daemonset".to_string(), original_name.clone())
-                ]);
-                ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
-                ds.spec = match ds.spec.clone() {
-                    Some(mut spec) => {
-                        spec.template.metadata = {
-                            let mut meta = spec.template.metadata.clone().unwrap();
-                            // forward the namespace
-                            meta.namespace = ds.metadata.namespace.clone();
-                            if meta.name.clone().unwrap_or_default().is_empty() {
-                                meta.name = Some(original_name.clone());
-                            }
-                            let meta = Self::fixup_metadata(meta, Some(extra_labels))?;
-                            Some(meta)
-                        };
-
-                        spec.template = Self::fixup_pod_template(spec.template.clone(), ds.metadata.namespace.as_ref().unwrap())?;
-                        Some(spec)
-                    }
-                    None => None
-                };
-                resource
-            }
-            SupportedResources::Service(ref mut s) => {
-                let original_name = s.metadata.name.clone().unwrap_or("".to_string());
-                if s.metadata.name.is_none() {
-                    return Err(anyhow!("metadata.name is empty").into());
-                }
-                if s.metadata.namespace.is_none() {
-                    return Err(anyhow!("metadata.namespace is empty").into());
-                }
-
-
-                s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
-                // set name to be name.namespace
-                s.metadata.name = Some(format!("{}", metadata_name(s)));
-                resource
-            }
-            SupportedResources::ClusterIssuer(ref mut issuer) => {
-                let original_name = issuer.metadata.name.clone().unwrap_or("".to_string());
-
-                issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
-                issuer.metadata.name = Some(format!("{}", metadata_name(issuer)));
-                resource
-            }
-        };
-        Ok(resource)
-    }
+pub async fn skate<D: AllDeps>(deps: D) -> Result<(), SkateError> {
+    let args = Cli::parse();
+    skate_with_args(deps, args).await
 }
 
 
-pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
-    let api_version_key = Value::String("apiVersion".to_owned());
-    let kind_key = Value::String("kind".to_owned());
-
-    let mut result: Vec<SupportedResources> = Vec::new();
-
-    let num_filenames = filenames.len();
-
-    let supported_resources =
-
-        for filename in filenames {
-            let str_file = {
-                if num_filenames == 1 && filename == "-" {
-                    let mut stdin = io::stdin();
-                    let mut buffer = String::new();
-                    stdin.read_to_string(&mut buffer)?;
-                    buffer
-                } else {
-                    fs::read_to_string(filename).expect("failed to read file")
-                }
-            };
-            for document in serde_yaml::Deserializer::from_str(&str_file) {
-                let value = Value::deserialize(document).expect("failed to read document");
-                if let Value::Mapping(mapping) = &value {
-                    result.push(SupportedResources::try_from(value)?)
-                }
-            }
-        };
-    Ok(result)
-}
-
-#[derive(Debug, Display, EnumString, Clone, Serialize, Deserialize)]
-pub enum Os {
-    Unknown,
-    Linux,
-    Darwin,
-}
-
-impl Os {
-    pub fn from_str_loose(s: &str) -> Self {
-        match s.to_lowercase() {
-            s if s.contains("linux") => Os::Linux,
-            s if s.contains("darwin") => Os::Darwin,
-            _ => Os::Unknown
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq,Default, Serialize, Deserialize)]
 pub struct Platform {
     pub arch: String,
     pub distribution: Distribution,
@@ -561,22 +164,9 @@ impl Display for Platform {
     }
 }
 
-impl Platform {
-    pub fn target() -> Self {
-        let parts: Vec<&str> = TARGET.split('-').collect();
-
-
-        let arch = parts.first().expect("failed to find arch");
-
-        let issue = fs::read_to_string("/etc/issue").expect("failed to read /etc/issue");
-        let distro = issue.split_whitespace().next().expect("no distribution found in /etc/issue");
-
-        return Platform { arch: arch.to_string(), distribution: Distribution::from(distro) };
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Display)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Display)]
 pub enum Distribution {
+    #[default]
     Unknown,
     Debian,
     Raspbian,
@@ -594,17 +184,63 @@ impl From<&str> for Distribution {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use crate::{skate, AllDeps};
+    use crate::apply::ApplyDeps;
+    use crate::cluster::ClusterDeps;
+    use crate::cordon::CordonDeps;
+    use crate::create::CreateDeps;
+    use crate::delete::DeleteDeps;
+    use crate::deps::{SshManager, With};
+    use crate::describe::DescribeDeps;
+    use crate::get::GetDeps;
+    use crate::logs::LogsDeps;
+    use crate::refresh::{RefreshArgs, RefreshDeps};
+    use crate::rollout::RolloutDeps;
+    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
+    use crate::skate::Commands::Refresh;
+    use crate::test_helpers::ssh_mocks::MockSshManager;
+    use crate::upgrade::UpgradeDeps;
 
-pub(crate) fn exec_cmd(command: &str, args: &[&str]) -> Result<String, Box<dyn Error>> {
-    let output = process::Command::new(command)
-        .args(args)
-        .output().map_err(|e| anyhow!(e).context("failed to run command"))?;
-    if !output.status.success() {
-        return Err(anyhow!("exit code {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr).to_string()).context(format!("{} {} failed", command, args.join(" "))).into());
+    struct TestDeps{}
+
+    impl With<dyn SshManager> for TestDeps{
+        fn get(&self) -> Box<dyn SshManager> {
+            Box::new(MockSshManager{}) as Box<dyn SshManager>
+        }
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim_end().into())
+    impl ApplyDeps for TestDeps {}
+    impl RefreshDeps for TestDeps {}
+    impl ClusterDeps for TestDeps {}
+    impl CreateDeps for TestDeps {}
+    impl DeleteDeps for TestDeps {}
+    impl CordonDeps for TestDeps {}
+    impl GetDeps for TestDeps {}
+    impl DescribeDeps for TestDeps {}
+    impl LogsDeps for TestDeps {}
+    impl RolloutDeps for TestDeps {}
+    impl UpgradeDeps for TestDeps {}
+
+    impl AllDeps for TestDeps{}
+
+    #[tokio::test]
+    async fn test_runs() {
+        let deps = TestDeps{};
+
+        skate_with_args(deps, Cli{ command: Refresh(RefreshArgs{
+            json: false,
+            config: ConfigFileArgs{
+                skateconfig: "".to_string(),
+                context: None,
+            },
+        }) }).await;
+
+    }
 }
+
+
 
 
 

@@ -1,62 +1,65 @@
-use std::collections::{BTreeMap, HashSet};
-use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::fs::File;
-use std::ops::DerefMut;
-use std::path::Path;
-use anyhow::anyhow;
-use itertools::Itertools;
-use k8s_openapi::api::core::v1::{NodeSpec, NodeStatus as K8sNodeStatus, Node as K8sNode, NodeAddress};
-use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta};
-use strum_macros::Display;
 use crate::config::{cache_dir, Config};
 use crate::filestore::ObjectListItem;
+use anyhow::anyhow;
+use itertools::Itertools;
+use k8s_openapi::api::core::v1::{Node as K8sNode, NodeAddress, NodeSpec, NodeStatus as K8sNodeStatus, Secret, Service};
+use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
+use std::error::Error;
+use std::fs::File;
+use std::path::Path;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::networking::v1::Ingress;
+use strum_macros::Display;
+use tabled::Tabled;
 
-use crate::skate::SupportedResources;
+use crate::resource::{ResourceType, SupportedResources};
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
+use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
-use crate::util::{hash_string, slugify};
+use crate::util::{metadata_name, slugify};
 
-#[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
+    #[default]
     Unknown,
     Healthy,
     Unhealthy,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Tabled, Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[tabled(rename_all = "UPPERCASE")]
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
+    #[tabled(skip)]
     pub host_info: Option<HostInfo>,
 }
 
-impl Into<K8sNode> for NodeState {
-    fn into(self) -> K8sNode {
+impl From<NodeState> for K8sNode {
+    fn from(val: NodeState) -> Self {
         let mut metadata = ObjectMeta::default();
         let mut spec = NodeSpec::default();
         let mut status = K8sNodeStatus::default();
 
-        metadata.name = Some(self.node_name.clone());
+        metadata.name = Some(val.node_name.clone());
         metadata.namespace = Some("default".to_string());
-        metadata.uid = Some(self.node_name.clone());
+        metadata.uid = Some(val.node_name.clone());
 
-        status.phase = match self.status {
+        status.phase = match val.status {
             Unknown => Some("Pending".to_string()),
             Healthy => Some("Ready".to_string()),
             Unhealthy => Some("Pending".to_string()),
         };
 
-        spec.unschedulable = match self.status {
-            Unknown => Some(true),
-            Healthy => Some(false),
-            Unhealthy => Some(true),
-        };
+        spec.unschedulable = Some(!val.schedulable());
 
-        let sys_info = self.host_info.as_ref().and_then(|h| h.system_info.clone());
+        let sys_info = val.host_info.as_ref().and_then(|h| h.system_info.clone());
 
 
         (status.capacity, status.allocatable, status.addresses, metadata.labels) = match sys_info {
@@ -75,20 +78,17 @@ impl Into<K8sNode> for NodeState {
                             type_: "Hostname".to_string(),
                         },
                     ];
-                    match si.internal_ip_address {
-                        Some(ip) => {
-                            addresses.push(NodeAddress {
-                                address: ip,
-                                type_: "InternalIP".to_string(),
-                            })
-                        }
-                        None => {}
+                    if let Some(ip) = si.internal_ip_address {
+                        addresses.push(NodeAddress {
+                            address: ip,
+                            type_: "InternalIP".to_string(),
+                        })
                     }
                     Some(addresses)
                 }), (
                      Some(BTreeMap::<String, String>::from([
                          ("skate.io/arch".to_string(), si.platform.arch.clone()),
-                         ("skate.io/nodename".to_string(), self.node_name.clone()),
+                         ("skate.io/nodename".to_string(), val.node_name.clone()),
                          ("skate.io/hostname".to_string(), si.hostname.clone()),
                      ]))
                  ))
@@ -105,17 +105,228 @@ impl Into<K8sNode> for NodeState {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+impl NodeState {
+    pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<PodmanPodInfo> {
+        self.host_info.as_ref().and_then(|h| {
+            h.system_info.clone().and_then(|i| {
+                i.pods.map(|p| p.clone().into_iter().filter(|p| f(p)).collect::<Vec<_>>())
+            })
+        }).unwrap_or_default()
+    }
+
+    pub fn reconcile_object_creation(&mut self, object: &SupportedResources) -> Result<ReconciledResult, Box<dyn Error>> {
+        match object {
+            SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone())),
+            SupportedResources::Ingress(ingress) => self.reconcile_ingress_creation(ingress),
+            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_creation(cronjob),
+            SupportedResources::Secret(secret) => self.reconcile_secret_creation(secret),
+            SupportedResources::Service(service) => self.reconcile_service_creation(service),
+            SupportedResources::ClusterIssuer(issuer) => self.reconcile_cluster_issuer_creation(issuer),
+            // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
+            // The state change is all done by the Pods' scheduled operations
+            SupportedResources::Deployment(_) => { /* nothing to do */Ok(ReconciledResult::default()) }
+            SupportedResources::DaemonSet(_) => { /* nothing to do */Ok(ReconciledResult::default()) }
+        }
+    }
+
+    pub fn reconcile_object_deletion(&mut self, object: &SupportedResources) -> Result<crate::state::state::ReconciledResult, Box<dyn Error>> {
+        match object {
+            SupportedResources::Pod(pod) => self.reconcile_pod_deletion(&PodmanPodInfo::from((*pod).clone())),
+            SupportedResources::Ingress(ingress) => self.reconcile_ingress_deletion(ingress),
+            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_deletion(cronjob),
+            SupportedResources::Secret(secret) => self.reconcile_secret_deletion(secret),
+            SupportedResources::Service(service) => self.reconcile_service_deletion(service),
+            SupportedResources::ClusterIssuer(issuer) => self.reconcile_cluster_issuer_deletion(issuer),
+            SupportedResources::Deployment(deployment) => self.reconcile_deployment_deletion(deployment),
+            SupportedResources::DaemonSet(daemonset) => self.reconcile_daemonset_deletion(daemonset),
+        }
+    }
+
+    fn reconcile_cluster_issuer_creation(&mut self, issuer: &ClusterIssuer) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cluster_issuers.as_mut().map(|i| i.push(ObjectListItem::from(issuer)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+    fn reconcile_cluster_issuer_deletion(&mut self, issuer: &ClusterIssuer) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cluster_issuers.as_mut().map(|i| i.retain(|i| i.name != metadata_name(issuer)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+    fn reconcile_service_creation(&mut self, service: &Service) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.services.as_mut().map(|i| i.push(ObjectListItem::from(service)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_service_deletion(&mut self, service: &Service) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.services.as_mut().map(|i| i.retain(|i| i.name != metadata_name(service)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_secret_creation(&mut self, secret: &Secret) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.secrets.as_mut().map(|i| i.push(ObjectListItem::from(secret)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_secret_deletion(&mut self, secret: &Secret) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.secrets.as_mut().map(|i| i.retain(|i| i.name != metadata_name(secret)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_cronjob_creation(&mut self, cronjob: &CronJob) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cronjobs.as_mut().map(|i| i.push(ObjectListItem::from(cronjob)))
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_cronjob_deletion(&mut self, cronjob: &CronJob) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.cronjobs.as_mut().map(|i| i.retain(|c| c.name != metadata_name(cronjob)))
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+
+    fn reconcile_ingress_creation(&mut self, ingress: &Ingress) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.ingresses.as_mut().map(|i| i.push(ObjectListItem::from(ingress)))
+            })
+        });
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_ingress_deletion(&mut self, ingress: &Ingress) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.ingresses.as_mut().map(|items|
+                    items.retain(|existing| existing.name != metadata_name(ingress))
+                )
+            })
+        });
+        Ok(ReconciledResult::removed())
+    }
+
+
+    fn reconcile_pod_creation(&mut self, pod: &PodmanPodInfo) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.pods.as_mut().map(|pods| {
+                    pods.push(pod.clone());
+                })
+            })
+        });
+
+        Ok(ReconciledResult::added())
+    }
+
+    fn reconcile_pod_deletion(&mut self, pod: &PodmanPodInfo) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                si.pods.as_mut().map(|pods| {
+                    pods.retain(|p| p.name != pod.name)
+                })
+            })
+        });
+
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_daemonset_deletion(&mut self, daemonset: &DaemonSet) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(daemonset).to_string();
+        self.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.daemonset().is_empty() && p.daemonset() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_deployment_deletion(&mut self, deployment: &Deployment) -> Result<ReconciledResult, Box<dyn Error>> {
+        let name = metadata_name(deployment).to_string();
+        self.host_info.as_mut().and_then(|hi| hi.system_info.as_mut().and_then(|si|
+            si.pods.as_mut().map(|pods| pods.iter().filter(|p| !p.deployment().is_empty() && p.deployment() != name))
+        ));
+        Ok(ReconciledResult::removed())
+    }
+
+    // whether we can schedule workloads on this node
+    pub fn schedulable(&self) -> bool {
+        if self.status != Healthy {
+            return false;
+        }
+
+        self.host_info.as_ref().and_then(|hi|
+            hi.system_info.as_ref().map(|si| !si.cordoned)).unwrap_or(true)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ClusterState {
     pub cluster_name: String,
-    pub hash: String,
     pub nodes: Vec<NodeState>,
 }
 
+#[derive(Default)]
 pub struct ReconciledResult {
     pub removed: usize,
     pub added: usize,
     pub updated: usize,
+}
+impl ReconciledResult {
+    fn removed() -> ReconciledResult {
+        ReconciledResult {
+            removed: 1,
+            added: 0,
+            updated: 0,
+        }
+    }
+    fn added() -> ReconciledResult {
+        ReconciledResult {
+            removed: 0,
+            added: 1,
+            updated: 0,
+        }
+    }
+    fn updated() -> ReconciledResult {
+        ReconciledResult {
+            removed: 0,
+            added: 0,
+            updated: 1,
+        }
+    }
 }
 
 impl ClusterState {
@@ -140,7 +351,6 @@ impl ClusterState {
             Err(_e) => {
                 let state = ClusterState {
                     cluster_name: cluster_name.to_string(),
-                    hash: "".to_string(),
                     nodes: vec![],
                 };
                 Ok(state)
@@ -154,19 +364,11 @@ impl ClusterState {
         let result = match pos {
             Some((p, _obj)) => {
                 self.nodes[p] = (*node).clone().into();
-                ReconciledResult {
-                    removed: 0,
-                    added: 0,
-                    updated: 1,
-                }
+                ReconciledResult::updated()
             }
             None => {
                 self.nodes.push((*node).clone().into());
-                ReconciledResult {
-                    removed: 0,
-                    added: 1,
-                    updated: 0,
-                }
+                ReconciledResult::added()
             }
         };
 
@@ -174,39 +376,20 @@ impl ClusterState {
     }
 
     pub fn reconcile_object_creation(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
-        match object {
-            SupportedResources::Pod(pod) => self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()), node_name),
-            SupportedResources::Ingress(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            SupportedResources::CronJob(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            SupportedResources::Secret(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            SupportedResources::Secret(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            SupportedResources::Service(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            SupportedResources::ClusterIssuer(_) => Ok(ReconciledResult { removed: 1, added: 1, updated: 0 }), // TODO
-            _ => todo!("reconcile not supported")
-        }
-    }
-    pub fn reconcile_pod_creation(&mut self, pod: &PodmanPodInfo, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
-        let mut node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
+        let node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
             .ok_or(anyhow!("node not found: {}", node_name))?;
-
-        node.deref_mut().host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.pods.as_mut().and_then(|pods| {
-                    pods.push(pod.clone());
-                    Some(())
-                })
-            })
-        });
-
-        Ok(ReconciledResult {
-            removed: 0,
-            added: 1,
-            updated: 0,
-        })
+        node.reconcile_object_creation(object)
     }
-    pub fn reconcile_all_nodes(&mut self, config: &Config, host_info: &Vec<HostInfo>) -> Result<ReconciledResult, Box<dyn Error>> {
-        let cluster = config.current_cluster()?;
-        self.hash = hash_string(cluster);
+
+    pub fn reconcile_object_deletion(&mut self, object: &SupportedResources, node_name: &str) -> Result<ReconciledResult, Box<dyn Error>> {
+        let node = self.nodes.iter_mut().find(|n| n.node_name == node_name)
+            .ok_or(anyhow!("node not found: {}", node_name))?;
+        node.reconcile_object_deletion(object)
+    }
+
+
+    pub fn reconcile_all_nodes(&mut self, cluster_name: &str, config: &Config, host_info: &[HostInfo]) -> Result<ReconciledResult, Box<dyn Error>> {
+        let cluster = config.active_cluster(Some(cluster_name.to_string()))?;
 
         let state_hosts: HashSet<String> = self.nodes.iter().map(|n| n.node_name.clone()).collect();
 
@@ -224,7 +407,7 @@ impl ClusterState {
             }
         }).collect();
 
-        let mut new_nodes: Vec<NodeState> = config.current_cluster()?.nodes.iter().filter_map(|n| {
+        let mut new_nodes: Vec<NodeState> = config.active_cluster(Some(cluster_name.to_string()))?.nodes.iter().filter_map(|n| {
             match new.contains(&n.name) {
                 true => Some(NodeState {
                     node_name: n.name.clone(),
@@ -244,7 +427,7 @@ impl ClusterState {
             let mut node = node.clone();
             match host_info.iter().find(|h| h.node_name == node.node_name) {
                 Some(info) => {
-                    updated = updated + 1;
+                    updated += 1;
                     node.status = match info.healthy() {
                         true => Healthy,
                         false => Unhealthy
@@ -267,44 +450,132 @@ impl ClusterState {
     }
 
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<(PodmanPodInfo, &NodeState)> {
-        let res: Vec<_> = self.nodes.iter().filter_map(|n| {
-            n.host_info.as_ref().and_then(|h| {
-                h.system_info.clone().and_then(|i| {
-                    i.pods.and_then(|p| {
-                        Some(p.clone().into_iter().filter(|p| f(p)).map(|p| vec!((p, n))).collect::<Vec<_>>())
-                    })
-                })
-            })
-        }).flatten().flatten().collect();
+        let res: Vec<_> = self.nodes.iter().flat_map(|n| {
+            n.filter_pods(&|p| f(p)).into_iter().map(|p| (p, n)).collect::<Vec<_>>()
+        }).collect();
         res
     }
 
-    pub fn locate_daemonset(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
-        self.filter_pods(&|p| p.name == name && p.namespace() == namespace && p.labels.get("skate.io/daemonset").is_some())
-    }
 
     pub fn locate_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
-        self.filter_pods(&|p| p.name == name && p.namespace() == namespace)
+        // the pod manifest name is what podman will use to name the pod, thus has the namespace in it as a suffix
+        self.filter_pods(&|p| p.name == format!("{}.{}", name, namespace) && p.namespace() == namespace)
     }
 
 
-    pub fn locate_objects(&self, node:Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: &str, namespace: &str) -> Vec<(ObjectListItem, &NodeState)> {
-        self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).map(|n| {
+    pub fn locate_objects(&self, node: Option<&str>, selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>, name: Option<&str>, namespace: Option<&str>) -> Vec<(ObjectListItem, &NodeState)> {
+        self.nodes.iter().filter(|n| node.is_none() || n.node_name == node.unwrap()).filter_map(|n| {
             n.host_info.as_ref().and_then(|h| {
                 h.system_info.clone().and_then(|i| {
                     selector(&i).and_then(|p| {
                         p.clone().into_iter().find(|p| {
-                            p.name.name == name && p.name.namespace == namespace
-                        }).and_then(|o| Some((o, n)))
+                            (name.is_none() || p.name.name == name.unwrap()) && (namespace.is_none() || p.name.namespace == namespace.unwrap())
+                        }).map(|o| (o, n))
                     })
                 })
             })
-        }).flatten().collect()
+        }).collect()
     }
 
 
-    pub fn locate_deployment(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
+    pub fn locate_deployment_pods(&self, name: &str, namespace: &str) -> Vec<(PodmanPodInfo, &NodeState)> {
         let name = name.strip_prefix(format!("{}.", namespace).as_str()).unwrap_or(name);
         self.filter_pods(&|p| p.deployment() == name && p.namespace() == namespace)
     }
+
+    // the catalogue is the list of 'applied' resources. 
+    // does not include pods created due to another resource being applied
+    pub fn catalogue_mut(&mut self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem> {
+        self.nodes.iter_mut()
+            .filter(|n|
+                filter_node.is_none() || n.node_name == filter_node.unwrap()
+            )
+            .filter_map(|n| n.host_info.as_mut().and_then(
+                |hi| hi.system_info.as_mut().map(|si| extract_mut_catalog(&n.node_name, si, filter_types))
+            )).flatten()
+            // sort by time descending
+            .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
+            // will ignore duplicates,
+            .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name)).collect()
+    }
+    
+    pub fn catalogue(&self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
+        self.nodes.iter()
+            .filter(|n|
+                filter_node.is_none() || n.node_name == filter_node.unwrap()
+            )
+            .filter_map(|n| n.host_info.as_ref().and_then(
+                |hi| hi.system_info.as_ref().map(|si| extract_catalog(&n.node_name, si, filter_types))
+            )).flatten()
+            // sort by time descending
+            .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
+            // will ignore duplicates,
+            .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name)).collect()
+    }
 }
+
+macro_rules! extract_mappings {
+    ($si: ident, $suffixFunc: ident) => {
+        vec!(
+            (ResourceType::DaemonSet, $si.daemonsets.$suffixFunc()),
+            (ResourceType::Deployment, $si.deployments.$suffixFunc()),
+            (ResourceType::CronJob, $si.cronjobs.$suffixFunc()),
+            (ResourceType::Ingress, $si.ingresses.$suffixFunc()),
+            (ResourceType::Service, $si.services.$suffixFunc()),
+            (ResourceType::Secret, $si.secrets.$suffixFunc()),
+            (ResourceType::ClusterIssuer, $si.cluster_issuers.$suffixFunc()),
+            )
+    };
+}
+
+fn extract_mut_catalog<'a>(n: &str, si: &'a mut SystemInfo, filter_types: &[ResourceType]) -> Vec<MutCatalogueItem<'a>> {
+    let all_types = filter_types.is_empty();
+
+    let mapping = extract_mappings!(si, as_mut);
+
+
+    mapping.into_iter()
+        .filter_map(|c|
+            match all_types || filter_types.contains(&c.0) {
+                true => Some(c.1),
+                false => None
+            }
+        )
+        .flatten()
+        .flat_map(|list|
+            list.iter_mut()
+                .map(|o| MutCatalogueItem { object: o, node: n.to_string() })
+                .collect_vec()).collect()
+}
+
+fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType]) -> Vec<CatalogueItem<'a>> {
+    let all_types = filter_types.is_empty();
+
+    let mapping = extract_mappings!(si, as_ref);
+
+
+    mapping.into_iter()
+        .filter_map(|c|
+            match all_types || filter_types.contains(&c.0) {
+                true => Some(c.1),
+                false => None
+            }
+        )
+        .flatten()
+        .flat_map(|list|
+            list.iter()
+                .map(|o| CatalogueItem { object: o, node: n.to_string() })
+                .collect_vec()).collect()
+}
+
+// holds references to a resource
+pub struct MutCatalogueItem<'a> {
+    pub object: &'a mut ObjectListItem,
+    pub node: String,
+}
+
+pub struct CatalogueItem<'a> {
+    pub object: &'a ObjectListItem,
+    pub node: String,
+}
+

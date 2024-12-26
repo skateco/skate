@@ -14,14 +14,14 @@ use itertools::Itertools;
 use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
-use serde::{Deserialize, Deserializer, Serialize};
-use crate::skate::{exec_cmd, SupportedResources};
+use serde::{Deserialize, Serialize};
+use crate::resource::SupportedResources;
+use crate::exec::{ShellExec};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
 pub const EQUAL_EMOJI: char = '~';
 pub const INFO_EMOJI: &str = "[i]";
-pub const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/../output"));
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())
@@ -91,31 +91,19 @@ where
     format!("{:x}", hasher.finish())
 }
 
-
-// use with #[serde(deserialize_with = "deserialize_null_default")]
-// null or nonexistant values will be deserialized as T::default(
-fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    T: Default + Deserialize<'de>,
-    D: Deserializer<'de>,
-{
-    let opt = Option::deserialize(deserializer)?;
-    Ok(opt.unwrap_or_default())
-}
-
 pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String
 {
     let mut obj = obj.clone();
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
     labels.remove("skate.io/hash");
-    labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().labels = Option::from(labels);
 
 
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 
-    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).map(|(k, v)| (k, v)).collect();
+    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().annotations = Option::from(annotations);
 
     let serialized = serde_yaml::to_string(&obj).unwrap();
@@ -149,8 +137,8 @@ impl Display for NamespacedName {
 }
 
 impl NamespacedName {
-    pub fn new(name: String, namespace: String) -> Self {
-        NamespacedName { name, namespace }
+    pub fn new(name: &str, namespace: &str) -> Self {
+        NamespacedName { name: name.to_string(), namespace: namespace.to_string() }
     }
 }
 
@@ -170,7 +158,7 @@ pub fn metadata_name(obj: &impl Metadata<Ty=ObjectMeta>) -> NamespacedName
         panic!("metadata missing skate.io/namespace label")
     }
 
-    NamespacedName::new(name.unwrap().clone(), ns.unwrap().clone())
+    NamespacedName::new(name.unwrap(), ns.unwrap())
 }
 
 // hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it
@@ -192,17 +180,17 @@ pub fn age(date_time: DateTime<Local>) -> String {
             if duration.as_secs() < 60 {
                 return format!("{}s", duration.as_secs());
             }
-            let minutes = (duration.as_secs() / 60) % 60;
+            let minutes = duration.as_secs() / 60;
             if minutes < 60 {
                 return format!("{}m", minutes);
             }
-            let hours = duration.as_secs() / 60 * 60;
+            let hours = duration.as_secs() / (60 * 60);
             if hours < 24 {
                 return format!("{}h", hours);
             }
 
-            let days = duration.as_secs() / 60 * 60 * 24;
-            return format!("{}d", days);
+            let days = duration.as_secs() / (60 * 60 * 24);
+            format!("{}d", days)
         }
         Err(_) => "".to_string()
     }
@@ -243,20 +231,58 @@ fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
 }
 
 
-
-
-pub fn apply_play(object: SupportedResources) -> Result<(), Box<dyn Error>> {
-    let file_path = write_manifest_to_file(&serde_yaml::to_string(&object)?)?;
+pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> Result<(), Box<dyn Error>> {
+    let file_path = write_manifest_to_file(&serde_yaml::to_string(object)?)?;
 
     let mut args = vec!["play", "kube", &file_path, "--start"];
     if !object.host_network() {
         args.push("--network=skate")
     }
 
-    let result = exec_cmd("podman", &args)?;
+    let result = execer.exec("podman", &args)?;
 
     if !result.is_empty() {
         println!("{}", result);
     }
     Ok(())
 }
+
+pub fn version(long: bool) -> String {
+    let tag = crate::build::TAG;
+    let short_version =  if tag.is_empty() {
+        crate::build::COMMIT_HASH
+    } else {
+        tag
+    };
+
+    if !long {
+        return format!("{}", short_version)
+    }
+    format!(r#"{}
+branch:{}
+commit_hash:{}
+build_time:{}"#, short_version, crate::build::BRANCH, crate::build::COMMIT_HASH, crate::build::BUILD_TIME)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Local};
+    use crate::util::age;
+
+    #[test]
+    fn test_age() {
+        let conditions = &[
+            (Local::now(), "0s"),
+            (Local::now() - Duration::seconds(20), "20s"),
+            (Local::now() - Duration::minutes(20), "20m"),
+            (Local::now() - Duration::minutes(20*60), "20h"),
+            (Local::now() - Duration::minutes(20*60*24), "20d"),
+        ];
+
+        for (input, expect) in conditions {
+            let output = age(*input);
+            assert_eq!(output, *expect, "input: {}", input);
+        }
+    }
+}
+

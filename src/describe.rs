@@ -1,11 +1,12 @@
-use std::error::Error;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use k8s_openapi::api::core::v1::Node as K8sNode;
 use crate::config::Config;
-use crate::refresh::refreshed_state;
+use crate::deps::{SshManager, With};
+use crate::errors::SkateError;
+use crate::refresh::{Refresh};
 use crate::skate::ConfigFileArgs;
-use crate::ssh;
+use crate::refresh;
 use crate::state::state::{ClusterState, NodeState};
 
 #[derive(Debug, Clone, Args)]
@@ -40,14 +41,6 @@ pub enum DescribeCommands {
     Node(DescribeObjectArgs),
 }
 
-pub async fn describe(args: DescribeArgs) -> Result<(), Box<dyn Error>> {
-    let global_args = args.clone();
-    match args.commands {
-        DescribeCommands::Pod(_p_args) => Ok(()),
-        DescribeCommands::Deployment(_d_args) => Ok(()),
-        DescribeCommands::Node(n_args) => describe_node(global_args, n_args).await
-    }
-}
 
 pub trait Describer<T> {
     fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<T>;
@@ -59,7 +52,7 @@ struct NodeDescriber {}
 impl Describer<NodeState> for NodeDescriber {
     fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<NodeState> {
         let id = filters.id.as_ref().and_then(|cmd| match cmd {
-            IdCommand::Id(ids) => ids.first().and_then(|id| Some((*id).clone())),
+            IdCommand::Id(ids) => ids.first().map(|id| (*id).clone()),
         });
         let id = match id {
             Some(id) => id,
@@ -68,7 +61,7 @@ impl Describer<NodeState> for NodeDescriber {
             }
         };
 
-        state.nodes.iter().find(|n| *id == n.node_name.clone()).and_then(|n| Some(n.clone()))
+        state.nodes.iter().find(|n| *id == n.node_name.clone()).cloned()
     }
 
     fn print(&self, item: NodeState) {
@@ -77,32 +70,44 @@ impl Describer<NodeState> for NodeDescriber {
     }
 }
 
-async fn describe_node(global_args: DescribeArgs, args: DescribeObjectArgs) -> Result<(), Box<dyn Error>> {
-    let inspector = NodeDescriber {};
-    describe_object(global_args, args, &inspector).await
+pub trait DescribeDeps: With<dyn SshManager> {}
+
+pub struct Describe<D: DescribeDeps> {
+    pub deps: D,
 }
 
-async fn describe_object<T>(_global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), Box<dyn Error>> {
-    let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let cluster = config.current_cluster()?;
-    let (conns, errs) = ssh::cluster_connections(&cluster).await;
-    if errs.is_some() {
-        if conns.as_ref().and_then(|c| Some(c.clients.len())).unwrap_or(0) == 0 {
-            return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());
+impl<D: DescribeDeps + refresh::RefreshDeps> Describe<D> {
+    pub async fn describe(&self,args: DescribeArgs) -> Result<(), SkateError> {
+        let global_args = args.clone();
+        match args.commands {
+            DescribeCommands::Pod(_p_args) => Ok(()),
+            DescribeCommands::Deployment(_d_args) => Ok(()),
+            DescribeCommands::Node(n_args) => self.describe_node(global_args, n_args).await
         }
     }
-
-    let state = refreshed_state(&cluster.name, &conns.unwrap(), &config).await?;
-
-    let node = inspector.find(&args, &state);
-
-    match node {
-        Some(node) => inspector.print(node),
-        None => {}
-    };
-
-    if errs.is_some() {
-        return Err(anyhow!("failed to connect to some hosts: {}", errs.as_ref().unwrap()).into());
+    async fn describe_node(&self, global_args: DescribeArgs, args: DescribeObjectArgs) -> Result<(), SkateError> {
+        let inspector = NodeDescriber {};
+        self.describe_object(global_args, args, &inspector).await
     }
-    Ok(())
+
+    async fn describe_object<T>(&self, _global_args: DescribeArgs, args: DescribeObjectArgs, inspector: &dyn Describer<T>) -> Result<(), SkateError> {
+        let config = Config::load(Some(args.config.skateconfig.clone()))?;
+        let cluster = config.active_cluster(args.config.context.clone())?;
+        let mgr= self.deps.get();
+        let (conns, errs) = mgr.cluster_connect(cluster).await;
+        if errs.is_some() && conns.as_ref().map(|c| c.clients.len()).unwrap_or(0) == 0 {
+            return Err(anyhow!("failed to connect to any hosts: {}", errs.unwrap()).into());
+        }
+
+        let state = Refresh::<D>::refreshed_state(&cluster.name, &conns.unwrap(), &config).await?;
+
+        let node = inspector.find(&args, &state);
+
+        if let Some(node) = node { inspector.print(node) };
+
+        if errs.is_some() {
+            return Err(anyhow!("failed to connect to some hosts: {}", errs.as_ref().unwrap()).into());
+        }
+        Ok(())
+    }
 }

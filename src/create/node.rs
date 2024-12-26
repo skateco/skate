@@ -9,13 +9,16 @@ use itertools::Itertools;
 use std::io::Write;
 use base64::Engine;
 use std::net::ToSocketAddrs;
-use crate::apply::{apply, ApplyArgs};
+use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
+use crate::create::CreateDeps;
+use crate::deps::SshManager;
 use crate::oci;
-use crate::refresh::refreshed_state;
+use crate::refresh::Refresh;
+use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
-use crate::skate::{ConfigFileArgs, Distribution, SupportedResources};
-use crate::ssh::{cluster_connections, node_connection, SshClient, SshClients};
+use crate::skate::{ConfigFileArgs, Distribution};
+use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 
@@ -41,22 +44,11 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
-pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+
+pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-
-    let context = match args.config.context {
-        None => match config.current_context {
-            None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
-            }
-            Some(ref context) => Ok(context)
-        }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
-
-    let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
-    let mut cluster = (*cluster).clone();
+    let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
@@ -68,7 +60,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let node = Node {
         name: args.name.clone(),
         host: args.host.clone(),
-        port: args.port.clone(),
+        port: args.port,
         user: args.user.clone(),
         key: args.key.clone(),
         subnet_cidr: args.subnet_cidr.clone(),
@@ -84,11 +76,13 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
+    config.replace_cluster(&cluster)?;
 
-    config.clusters[cluster_index] = cluster.clone();
+
     config.persist(Some(args.config.skateconfig.clone()))?;
+    
 
-    let conn = node_connection(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
+    let conn = deps.get().node_connect(&cluster, &node).await.map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
     let info = conn.get_node_system_info().await?;
 
     println!("{:}", &info.platform);
@@ -98,7 +92,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
-            let _ = conn.install_skatelet(info.platform.clone()).await?;
+            conn.install_skatelet(info.platform.clone()).await?;
         }
         Some(v) => {
             println!("skatelet version {} already installed {} ", v, CHECKBOX_EMOJI)
@@ -109,7 +103,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         Some(version) => {
             let min_podman_ver = ">=3.0.0";
             let req = VersionReq::parse(min_podman_ver).unwrap();
-            let version = Version::parse(&version).unwrap();
+            let version = Version::parse(version).unwrap();
 
             if !req.matches(&version) {
                 return Err(anyhow!("podman version too old, must be {}, see https://podman.io/docs/installation", min_podman_ver).into());
@@ -123,14 +117,16 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
                 Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
                     let command = "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'";
                     println!("installing podman with command {}", command);
-                    let result = conn.client.execute(command).await?;
-                    if result.exit_status > 0 {
-                        let mut lines = result.stderr.lines();
-                        println!("failed to install podman {} :\n{}", CROSS_EMOJI, lines.join("\n"));
-                        false
-                    } else {
-                        println!("podman installed successfully {} ", CHECKBOX_EMOJI);
-                        true
+                    let result = conn.execute(command).await;
+                    match result {
+                        Ok(output) => {
+                            println!("podman installed successfully {} ", CHECKBOX_EMOJI);
+                            true
+                        },
+                        Err(e) => {
+                            println!("failed to install podman {} :\n{}", CROSS_EMOJI, e);
+                            false
+                        }
                     }
                 }
             };
@@ -144,7 +140,7 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
     let _ = conn.execute_stdout(cmd, true, true).await;
 
-    let (all_conns, _) = cluster_connections(&cluster).await;
+    let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
     let skate_dirs = [
@@ -153,19 +149,19 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
         "dns",
         "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
 
-    _ = conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
+    conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
     // _ = conn.execute("sudo podman rm -fa").await;
 
-    setup_networking(&conn, &all_conns, &cluster, &node).await?;
+    setup_networking(&conn, all_conns, &cluster, &node).await?;
 
     config.persist(Some(args.config.skateconfig.clone()))?;
 
     // Refresh state so that we can apply coredns later
-    let mut state = refreshed_state(&cluster.name, &all_conns, &config).await?;
+    let state = Refresh::<D>::refreshed_state(&cluster.name, all_conns, &config).await?;
 
-    install_cluster_manifests(&args.config, &cluster).await?;
+    install_cluster_manifests(deps, &args.config, &cluster).await?;
 
-    propagate_exsting_resources(&config, &all_conns, &node, &mut state).await?;
+    propagate_static_resources(&config, all_conns, &node, &state).await?;
 
     Ok(())
 }
@@ -174,35 +170,32 @@ pub async fn create_node(args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
 // for now just takes them from the first node
 // TODO - do some kind of lookup and merge
 // could be to take only resources that are the same on all nodes, log others
-async fn propagate_exsting_resources(conf: &Config, all_conns: &SshClients, node: &Node, state: &mut ClusterState) -> Result<(), Box<dyn Error>> {
-    let donor_state = match state.nodes.iter().find(|n| n.node_name != node.name && n.host_info.as_ref().and_then(|h| h.system_info.as_ref()).is_some()) {
-        Some(n) => n,
-        None => return Ok(())
-    };
+async fn propagate_static_resources(_conf: &Config, all_conns: &SshClients, node: &Node, state: &ClusterState) -> Result<(), Box<dyn Error>> {
+
+    
+    let catalogue = state.catalogue(None, &[ResourceType::Ingress, ResourceType::Service, ResourceType::Secret]);
 
 
-    let donor_sys_info = donor_state.host_info.as_ref().and_then(|h| h.system_info.as_ref()).unwrap();
 
-    let ingresses: Vec<_> = donor_sys_info.ingresses.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let services: Vec<_> = donor_sys_info.services.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-    let secrets: Vec<_> = donor_sys_info.secrets.as_ref().unwrap_or(&vec!()).iter().filter_map(|i| i.manifest.clone()).collect();
-
-    let all_manifests: Vec<_> = [ingresses, services, secrets].concat().iter().filter_map(|i| SupportedResources::try_from(i.clone()).ok()).collect();
+    let all_manifests: Result<Vec<_>, _> = catalogue.into_iter().map(|item| SupportedResources::try_from(item.object)).collect();
+    let all_manifests = all_manifests?;
+    
     println!("propagating {} resources", all_manifests.len());
 
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = vec!(state.nodes.iter().filter(|n| n.node_name == node.name).cloned().next().unwrap());
+    filtered_state.nodes = vec!(state.nodes.iter().find(|n| n.node_name == node.name).cloned().unwrap());
 
 
     let scheduler = DefaultScheduler {};
 
-    scheduler.schedule(all_conns, &mut filtered_state, all_manifests).await?;
+    // TODO - remove
+    scheduler.schedule(all_conns, &mut filtered_state, all_manifests, false).await?;
 
     Ok(())
 }
 
-pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
+pub async fn install_cluster_manifests<D: CreateDeps>(deps: &D, args: &ConfigFileArgs, config: &Cluster) -> Result<(), Box<dyn Error>> {
     println!("applying cluster manifests");
     // COREDNS
     // coredns listens on port 53 and 5533
@@ -214,35 +207,37 @@ pub async fn install_cluster_manifests(args: &ConfigFileArgs, config: &Cluster) 
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
-    let coredns_yaml_path = format!("/tmp/skate-coredns.yaml");
+    let coredns_yaml_path = "/tmp/skate-coredns.yaml".to_string();
     let mut file = File::create(&coredns_yaml_path)?;
     file.write_all(coredns_yaml.as_bytes())?;
 
 
-    apply(ApplyArgs {
+    Apply::<D>::apply(deps, ApplyArgs {
         filename: vec![coredns_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     // nginx ingress
 
-    let nginx_yaml_path = format!("/tmp/skate-nginx-ingress.yaml");
+    let nginx_yaml_path = "/tmp/skate-nginx-ingress.yaml".to_string();
     let mut file = File::create(&nginx_yaml_path)?;
     file.write_all(INGRESS_MANIFEST.as_bytes())?;
 
 
-    apply(ApplyArgs {
+    Apply::<D>::apply(deps, ApplyArgs {
         filename: vec![nginx_yaml_path],
         grace_period: 0,
         config: args.clone(),
+        dry_run: false,
     }).await?;
 
     Ok(())
 }
 
 // TODO don't run things unless they need to be
-async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
+async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, cluster_conf: &Cluster, node: &Node) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
@@ -275,8 +270,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
 
     match network_backend {
         "cni" => {
-            println!("WARNING: cni is deprecated, use netavark");
-            setup_cni(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
+            return Err(anyhow!("cni is deprecated, use netavark").into());
         }
         "netavark" => {
             setup_netavark(conn, gateway.clone(), node.subnet_cidr.clone()).await?;
@@ -344,27 +338,7 @@ async fn setup_networking(conn: &SshClient, all_conns: &SshClients, cluster_conf
     Ok(())
 }
 
-async fn setup_cni(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout("sudo apt-get install -y containernetworking-plugins", true, true).await?;
-
-    let cni = include_str!("../resources/podman-network.json").replace("%%subnet%%", &subnet_cidr)
-        .replace("%%gateway%%", &gateway);
-
-    let cni = general_purpose::STANDARD.encode(cni.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/cni/net.d/87-podman-bridge.conflist\"", cni);
-    conn.execute_stdout(&cmd, true, true).await?;
-
-    let cni_script = general_purpose::STANDARD.encode("#!/bin/sh
-    exec /usr/local/bin/skatelet cni < /dev/stdin
-    ");
-
-    let cmd = format!("sudo bash -c 'echo {} | base64 --decode > /usr/lib/cni/skatelet; chmod +x /usr/lib/cni/skatelet'", cni_script);
-    conn.execute_stdout(&cmd, true, true).await?;
-    Ok(())
-}
-
-async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
+async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
     conn.execute_stdout("sudo mkdir -p /usr/share/containers/oci/hooks.d", true, true).await?;
 
     let oci_poststart_hook = oci::HookConfig {
@@ -410,7 +384,7 @@ async fn install_oci_hooks(conn: &SshClient) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
+async fn setup_netavark(conn: &Box<dyn SshClient>, gateway: String, subnet_cidr: String) -> Result<(), Box<dyn Error>> {
     println!("installing netavark");
     // // The netavark plugin isn't actually used right now but we'll put it there just in case.
     // // We'll use an oci hook instead.
@@ -434,11 +408,11 @@ async fn setup_netavark(conn: &SshClient, gateway: String, subnet_cidr: String) 
     Ok(())
 }
 
-async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
+async fn create_replace_routes_file(conn: &Box<dyn SshClient>, cluster_conf: &Cluster) -> Result<(), Box<dyn Error>> {
     let cmd = "sudo mkdir -p /etc/skate";
     conn.execute_stdout(cmd, true, true).await?;
 
-    let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name).collect();
+    let other_nodes: Vec<_> = cluster_conf.nodes.iter().filter(|n| n.name != conn.node_name()).collect();
 
     let mut route_file = "#!/bin/bash
 ".to_string();
@@ -446,29 +420,29 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
     for other_node in &other_nodes {
         let ip = format!("{}:22", other_node.host).to_socket_addrs()
             .unwrap().next().unwrap().ip().to_string();
-        route_file = route_file + format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
+        route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }
 
     // load kernel modules
-    route_file = route_file + "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
+    route_file += "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
 
-    route_file = route_file + "sysctl -w net.ipv4.ip_forward=1\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_instances=1280\n";
-    route_file = route_file + "sysctl fs.inotify.max_user_watches=655360\n";
+    route_file += "sysctl -w net.ipv4.ip_forward=1\n";
+    route_file += "sysctl fs.inotify.max_user_instances=1280\n";
+    route_file += "sysctl fs.inotify.max_user_watches=655360\n";
 
     // Virtual Server stuff
     // taken from https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/proxier.go#L295
-    route_file = route_file + "sysctl -w net.ipv4.vs.conntrack=1\n";
+    route_file += "sysctl -w net.ipv4.vs.conntrack=1\n";
     // since we're using conntrac we need to increase the max so we dont exhaust it
-    route_file = route_file + "sysctl net.nf_conntrack_max=512000\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
-    route_file = route_file + "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
+    route_file += "sysctl net.nf_conntrack_max=512000\n";
+    route_file += "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
+    route_file += "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
+    route_file += "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
     // configurable in kube-proxy
     // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_ignore=1\n";
     // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_announce=2\n";
 
-    route_file = route_file + "sysctl -p\n";
+    route_file += "sysctl -p\n";
 
 
     let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
@@ -487,7 +461,7 @@ async fn create_replace_routes_file(conn: &SshClient, cluster_conf: &Cluster) ->
 
     conn.execute_stdout("sudo systemctl daemon-reload", true, true).await?;
     conn.execute_stdout("sudo systemctl enable skate-routes.service", true, true).await?;
-    _ = conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;
+    conn.execute_stdout("sudo systemctl start skate-routes.service", true, true).await?;
 
     Ok(())
 }

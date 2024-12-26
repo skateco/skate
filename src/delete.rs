@@ -1,11 +1,13 @@
-use std::error::Error;
+use crate::config::Config;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use dialoguer::Confirm;
 use itertools::Itertools;
-use crate::config::Config;
-
-use crate::skate::{ConfigFileArgs, ResourceType};
-use crate::ssh;
+use crate::deps::{SshManager, With};
+use crate::errors::SkateError;
+use crate::resource::ResourceType;
+use crate::skate::ConfigFileArgs;
+use crate::ssh::SshClient;
 use crate::util::CHECKBOX_EMOJI;
 
 #[derive(Debug, Args)]
@@ -26,6 +28,7 @@ pub enum DeleteCommands {
     Daemonset(DeleteResourceArgs),
     Service(DeleteResourceArgs),
     ClusterIssuer(DeleteResourceArgs),
+    Cluster(DeleteClusterArgs),
 }
 
 #[derive(Debug, Args)]
@@ -35,87 +38,119 @@ pub struct DeleteResourceArgs {
     namespace: String,
     #[command(flatten)]
     config: ConfigFileArgs,
-
 }
 
 
-pub async fn delete(args: DeleteArgs) -> Result<(), Box<dyn Error>> {
-    match args.command {
-        DeleteCommands::Node(args) => delete_node(args).await?,
-        DeleteCommands::Daemonset(args) => delete_resource(ResourceType::DaemonSet, args).await?,
-        DeleteCommands::Deployment(args) => delete_resource(ResourceType::Deployment, args).await?,
-        DeleteCommands::Ingress(args) => delete_resource(ResourceType::Ingress, args).await?,
-        DeleteCommands::Cronjob(args) => delete_resource(ResourceType::CronJob, args).await?,
-        DeleteCommands::Secret(args) => delete_resource(ResourceType::Secret, args).await?,
-        DeleteCommands::Service(args) => delete_resource(ResourceType::Service, args).await?,
-        DeleteCommands::ClusterIssuer(args) => delete_resource(ResourceType::ClusterIssuer, args).await?,
-    }
-    Ok(())
+#[derive(Debug, Args)]
+pub struct DeleteClusterArgs {
+    name: String,
+    #[command(flatten)]
+    config: ConfigFileArgs,
+    #[arg(long, short, long_help = "Answer yes to confirmation")]
+    pub yes: bool,
 }
 
-async fn delete_resource(r_type: ResourceType, args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
-    // fetch state for resource type from nodes
 
-    let config = Config::load(Some(args.config.skateconfig.clone()))?;
-    let (conns, errors) = ssh::cluster_connections(config.current_cluster()?).await;
-    if errors.is_some() {
-        eprintln!("{}", errors.unwrap())
+
+pub trait DeleteDeps: With<dyn SshManager> {}
+
+pub struct Delete<D: DeleteDeps> {
+    pub deps: D,
+}
+
+impl<D: DeleteDeps> Delete<D> {
+    pub async fn delete(&self, args: DeleteArgs) -> Result<(), SkateError> {
+        match args.command {
+            DeleteCommands::Node(args) => self.delete_node(args).await?,
+            DeleteCommands::Daemonset(args) => self.delete_resource(ResourceType::DaemonSet, args).await?,
+            DeleteCommands::Deployment(args) => self.delete_resource(ResourceType::Deployment, args).await?,
+            DeleteCommands::Ingress(args) => self.delete_resource(ResourceType::Ingress, args).await?,
+            DeleteCommands::Cronjob(args) => self.delete_resource(ResourceType::CronJob, args).await?,
+            DeleteCommands::Secret(args) => self.delete_resource(ResourceType::Secret, args).await?,
+            DeleteCommands::Service(args) => self.delete_resource(ResourceType::Service, args).await?,
+            DeleteCommands::ClusterIssuer(args) => self.delete_resource(ResourceType::ClusterIssuer, args).await?,
+            DeleteCommands::Cluster(args) => self.delete_cluster(args).await?,
+        }
+        Ok(())
     }
 
-    if conns.is_none() {
-        return Ok(());
-    }
+    async fn delete_resource(&self, r_type: ResourceType, args: DeleteResourceArgs) -> Result<(), SkateError> {
+        // fetch state for resource type from nodes
 
-    let conns = conns.unwrap();
+        let config = Config::load(Some(args.config.skateconfig.clone()))?;
+        let ssh_mgr= self.deps.get();
+        let (conns, errors) = ssh_mgr.cluster_connect(config.active_cluster(args.config.context)?).await;
+        if errors.is_some() {
+            eprintln!("{}", errors.unwrap())
+        }
 
-    let mut results = vec!();
-    let mut errors = vec!();
+        if conns.is_none() {
+            return Ok(());
+        }
 
-    for conn in conns.clients {
-        match conn.remove_resource(r_type.clone(), &args.name, &args.namespace).await {
-            Ok(result) => {
-                if !result.0.is_empty() {
-                    result.0.trim().split("\n").map(|line| format!("{} - {}", conn.node_name, line)).for_each(|line| println!("{}", line))
+        let conns = conns.unwrap();
+
+        let mut results = vec!();
+        let mut errors = vec!();
+
+        for conn in conns.clients {
+            match conn.remove_resource(r_type.clone(), &args.name, &args.namespace).await {
+                Ok(result) => {
+                    if !result.0.is_empty() {
+                        result.0.trim().split("\n").map(|line| format!("{} - {}", conn.node_name(), line)).for_each(|line| println!("{}", line))
+                    }
+                    results.push(result)
                 }
-                results.push(result)
+                Err(e) => errors.push(e.to_string())
             }
-            Err(e) => errors.push(e.to_string())
+        }
+
+        match errors.is_empty() {
+            false => Err(anyhow!("\n{}", errors.join("\n")).into()),
+            true => {
+                println!("{} deleted {} {}.{}", CHECKBOX_EMOJI, r_type, args.name, args.namespace);
+                Ok(())
+            }
         }
     }
 
-    match errors.is_empty() {
-        false => Err(anyhow!("\n{}", errors.join("\n")).into()),
-        true => {
-            println!("{} deleted {} {}.{}", CHECKBOX_EMOJI, r_type.to_string(), args.name, args.namespace);
-            Ok(())
-        }
-    }
-}
+    async fn delete_node(&self, args: DeleteResourceArgs) -> Result<(), SkateError> {
+        let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-async fn delete_node(args: DeleteResourceArgs) -> Result<(), Box<dyn Error>> {
-    let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
-    let context = match args.config.context {
-        None => match config.current_context {
+        let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
+
+        let find_result = cluster.nodes.iter().find_position(|n| n.name == args.name);
+
+        match find_result {
+            Some((p, _)) => {
+                cluster.nodes.remove(p);
+                config.replace_cluster(&cluster)?;
+                config.persist(Some(args.config.skateconfig))
+            }
             None => {
-                Err(anyhow!("--context is required unless there is already a current context"))
+                Ok(())
             }
-            Some(ref context) => Ok(context)
         }
-        Some(ref context) => Ok(context)
-    }.map_err(Into::<Box<dyn Error>>::into)?;
+    }
 
-    let (cluster_index, cluster) = config.clusters.iter().find_position(|c| c.name == context.clone()).ok_or(anyhow!("no cluster by name of {}", context))?;
+    async fn delete_cluster(&self, args: DeleteClusterArgs) -> Result<(), SkateError> {
+        let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
+        let cluster = config.active_cluster(args.config.context.clone())?.clone();
 
-    let find_result = cluster.nodes.iter().find_position(|n| n.name == args.name);
+        if ! args.yes{
+            let confirmation = Confirm::new()
+                .with_prompt(format!("Are you sure you want to delete cluster {}?", args.name))
+                .wait_for_newline(true)
+                .interact()
+                .unwrap();
 
-    match find_result {
-        Some((p, _)) => {
-            config.clusters[cluster_index].nodes.remove(p);
-            config.persist(Some(args.config.skateconfig))
+            if !confirmation {
+                return Ok(())
+            }
+
         }
-        None => {
-            Ok(())
-        }
+        config.delete_cluster(&cluster)?;
+        config.persist(Some(args.config.skateconfig))
     }
 }

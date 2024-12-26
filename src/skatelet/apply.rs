@@ -1,20 +1,22 @@
 use clap::{Args, Subcommand};
-use std::error::Error;
 
 use std::{io};
 
 
 use std::io::{Read};
-
-
-use crate::executor::{DefaultExecutor, Executor};
-
-
-
-
-
-
-
+use crate::deps::With;
+use crate::controllers::clusterissuer::ClusterIssuerController;
+use crate::controllers::cronjob::CronjobController;
+use crate::controllers::daemonset::DaemonSetController;
+use crate::controllers::deployment::DeploymentController;
+use crate::controllers::ingress::IngressController;
+use crate::controllers::pod::PodController;
+use crate::controllers::secret::SecretController;
+use crate::controllers::service::ServiceController;
+use crate::errors::SkateError;
+use crate::exec::ShellExec;
+use crate::filestore::Store;
+use crate::resource::SupportedResources;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -36,7 +38,9 @@ pub enum StdinCommand {
     Stdin {},
 }
 
-pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
+pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec>{}
+
+pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
         StdinCommand::Stdin {} => {
             let mut stdin = io::stdin();
@@ -46,7 +50,53 @@ pub fn apply(apply_args: ApplyArgs) -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let executor = DefaultExecutor::new();
-    executor.apply(&manifest)
+
+    let object: SupportedResources = serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
+    apply_supported_resource(deps, &object)
+}
+
+fn apply_supported_resource< D: ApplyDeps>(deps: D, object: &SupportedResources) -> Result<(),SkateError> {
+    let execer  = With::<dyn ShellExec>::get;
+    let store  = With::<dyn Store>::get;
+
+
+    match object {
+        SupportedResources::Deployment(deployment) => {
+            let pod_controller = PodController::new(execer(&deps));
+            let ctrl = DeploymentController::new(store(&deps), execer(&deps),pod_controller);
+            ctrl.apply(deployment)?;
+        }
+        SupportedResources::DaemonSet(daemonset) => {
+            let pod_controller = PodController::new(execer(&deps));
+            let ctrl = DaemonSetController::new(store(&deps), execer(&deps), pod_controller);
+            ctrl.apply(daemonset)?;
+        }
+        SupportedResources::Pod(pod) => {
+            let ctrl = PodController::new(execer(&deps));
+            ctrl.apply(pod)?;
+        }
+        SupportedResources::Secret(secret) => {
+            let ctrl = SecretController::new(execer(&deps));
+            ctrl.apply(secret)?;
+        }
+        SupportedResources::Ingress(ingress) => {
+            let ctrl = IngressController::new(store(&deps), execer(&deps));
+            ctrl.apply(ingress)?;
+        }
+        SupportedResources::CronJob(cron) => {
+            let ctrl = CronjobController::new(store(&deps), execer(&deps));
+            ctrl.apply(cron)?;
+        }
+        SupportedResources::Service(service) => {
+            let ctrl = ServiceController::new(store(&deps), execer(&deps), "/var/lib/skate", "/etc/systemd/system");
+            ctrl.apply(service)?;
+        }
+        SupportedResources::ClusterIssuer(issuer) => {
+            let ingress_ctrl = IngressController::new(store(&deps), execer(&deps));
+            let ctrl = ClusterIssuerController::new(store(&deps), ingress_ctrl);
+            ctrl.apply(issuer)?;
+        }
+    }
+    Ok(())
 }
 

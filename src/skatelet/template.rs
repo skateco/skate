@@ -1,10 +1,9 @@
-use std::error::Error;
 use std::io;
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use handlebars::{Handlebars};
 use serde_json::Value;
+use crate::errors::SkateError;
 use crate::template;
 
 #[derive(Debug, Subcommand)]
@@ -21,7 +20,7 @@ pub struct TemplateArgs {
     command: StdinJsonCommand,
 }
 
-pub fn template(template_args: TemplateArgs) -> Result<(), Box<dyn Error>> {
+pub fn template(template_args: TemplateArgs) -> Result<(), SkateError> {
 
     let mut handlebars = template::new();
 
@@ -29,7 +28,7 @@ pub fn template(template_args: TemplateArgs) -> Result<(), Box<dyn Error>> {
 
     let json: Value = serde_json::from_reader(io::stdin()).map_err(|e| anyhow!(e).context("failed to parse stdin"))?;
 
-    let output = handlebars.render(&template_args.file, &json)?;
+    let output = handlebars.render(&template_args.file, &json).map_err(|e| anyhow!(e).context("rending failed"))?;
     println!("{}", output);
 
     Ok(())

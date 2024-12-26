@@ -9,12 +9,17 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
 use k8s_openapi::api::core::v1::Secret;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use podman::PodmanPodInfo;
-use crate::filestore::{FileStore, ObjectListItem};
-
-use crate::skate::{Distribution, exec_cmd, Platform};
+use crate::deps::With;
+use crate::errors::SkateError;
+use crate::exec::ShellExec;
+use crate::filestore::{FileStore, ObjectListItem, Store};
+use crate::resource::ResourceType;
+use crate::skate::{Distribution, Platform};
+use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::NamespacedName;
 
@@ -32,21 +37,23 @@ pub enum SystemCommands {
     Info,
 }
 
-pub async fn system(args: SystemArgs) -> Result<(), Box<dyn Error>> {
+pub trait SystemDeps: With<dyn ShellExec>{}
+
+pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
-        SystemCommands::Info => info().await?
+        SystemCommands::Info => info(With::<dyn ShellExec>::get(&deps)).await?
     }
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub available_space_mib: u64,
     pub total_space_mib: u64,
     pub disk_kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default,  Clone, PartialEq, Serialize, Deserialize)]
 pub struct SystemInfo {
     pub platform: Platform,
     pub total_memory_mib: u64,
@@ -61,19 +68,23 @@ pub struct SystemInfo {
     pub secrets: Option<Vec<ObjectListItem>>,
     pub services: Option<Vec<ObjectListItem>>,
     pub cluster_issuers: Option<Vec<ObjectListItem>>,
+    pub deployments: Option<Vec<ObjectListItem>>,
+    pub daemonsets: Option<Vec<ObjectListItem>>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
     pub cpu_vendor_id: String,
     pub internal_ip_address: Option<String>,
     pub hostname: String,
+    #[serde(default)]
+    pub cordoned: bool,
 }
 
 // TODO - have more generic ObjectMeta type for explaining existing resources
 
 // returns (external, internal)
-fn internal_ip() -> Result<Option<String>, Box<dyn Error>> {
-    let iface_cmd = match exec_cmd("which", &["ifconfig"]) {
+fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Error>> {
+    let iface_cmd = match execer.exec("which", &["ifconfig"]) {
         Ok(_) => Some(r#"ifconfig -a | awk '
 /^[a-zA-Z0-9_\-]+:/ {
   sub(/:/, "");iface=$1}
@@ -92,7 +103,7 @@ fn internal_ip() -> Result<Option<String>, Box<dyn Error>> {
 
     let iface_ips: Vec<_> = match iface_cmd {
         Some(cmd) => {
-            exec_cmd("bash", &["-c", cmd])
+            execer.exec("bash", &["-c", cmd])
                 .map(|s| s.split("\n")
                     .map(|l| l.split("  ").collect::<Vec<&str>>())
                     .filter(|l| l.len() == 2)
@@ -113,13 +124,15 @@ fn internal_ip() -> Result<Option<String>, Box<dyn Error>> {
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
 
-async fn info() -> Result<(), Box<dyn Error>> {
+async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
+    
+    
     let sys = System::new_with_specifics(RefreshKind::new()
         .with_cpu(CpuRefreshKind::everything())
         .with_memory(MemoryRefreshKind::everything())
     );
 
-    let pod_list_result = match exec_cmd(
+    let pod_list_result = match execer.exec(
         "sudo",
         &["podman", "pod", "ps", "--filter", "label=skate.io/namespace", "--format", "json"],
     ) {
@@ -142,9 +155,11 @@ async fn info() -> Result<(), Box<dyn Error>> {
     let cronjobs = store.list_objects("cronjob")?;
     let services = store.list_objects("service")?;
     let cluster_issuers = store.list_objects("clusterissuer")?;
+    let deployments = store.list_objects("deployment")?;
+    let daemonsets = store.list_objects("daemonset")?;
 
 
-    let secrets = exec_cmd("podman", &["secret", "ls", "--noheading"]).unwrap_or_else(|e| {
+    let secrets = execer.exec("podman", &["secret", "ls", "--noheading"]).unwrap_or_else(|e| {
         eprintln!("failed to list secrets: {}", e);
         "".to_string()
     });
@@ -155,24 +170,24 @@ async fn info() -> Result<(), Box<dyn Error>> {
             return None;
         }
         let secret_name = parts[1];
-        match secret_name.rsplit_once(".") {
-            Some((_, _)) => Some(secret_name),
-            None => None,
-        }
+        secret_name.rsplit_once(".").map(|(_, _)| secret_name)
     }).collect();
 
-    let secret_json = exec_cmd("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names].concat()).unwrap_or_else(|e| {
-        eprintln!("failed to get secret info: {}", e);
+    let secret_json = execer.exec("podman", &[vec!["secret", "inspect", "--showsecret"], secret_names.clone()].concat()).unwrap_or_else(|e| {
+        error!("failed to get secret info for {:?}: {}",secret_names, e);
         "[]".to_string()
     });
 
 
     let secret_info: Vec<PodmanSecret> = serde_json::from_str(&secret_json).map_err(|e| anyhow!(e).context("failed to deserialize secret info"))?;
     let secret_info: Vec<ObjectListItem> = secret_info.iter().filter_map(|s| {
-        let manifest_result: Result<Secret, _> = serde_yaml::from_str(&s.secret_data);
-        if manifest_result.is_err() {
-            return None;
-        }
+        
+        let manifest = match serde_yaml::from_str::<Secret>(&s.secret_data) {
+            Ok(secret) => secret,
+            Err(_) => return None
+        };
+        
+        let hash = manifest.metadata.labels.as_ref().and_then(|l| l.get("skate.io/hash").cloned());
 
         // if we want to redact the secret values.
         // removing for now since we don't store the state anyway.
@@ -186,34 +201,36 @@ async fn info() -> Result<(), Box<dyn Error>> {
         //     Some(data.into_iter().map(|(k, _)| (k, "".to_string())).collect())
         // });
 
-        let yaml = serde_yaml::to_value(manifest_result.as_ref().unwrap()).unwrap();
+        let yaml = serde_yaml::to_value(&manifest).unwrap();
 
 
         Some(ObjectListItem {
+            resource_type: ResourceType::Secret,
             name: NamespacedName::from(s.spec.name.as_str()),
-            manifest_hash: "".to_string(), // TODO get from manifest
+            manifest_hash: hash.unwrap_or("".to_string()),
             manifest: Some(yaml),
             created_at: s.created_at,
+            updated_at: s.updated_at,
+            path: "".to_string(),
         })
     }).collect();
 
 
-    let internal_ip_addr = internal_ip().unwrap_or_else(|e| {
+    let internal_ip_addr = internal_ip(execer).unwrap_or_else(|e| {
         eprintln!("failed to get interface ipv4 addresses: {}", e);
         None
     });
 
 
-    let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/")
-        .and_then(|d| Some(DiskInfo {
-            available_space_mib: d.available_space() / BYTES_IN_MIB,
-            total_space_mib: d.total_space() / BYTES_IN_MIB,
-            disk_kind: match d.kind() {
-                DiskKind::HDD => "hdd",
-                DiskKind::SSD => "sdd",
-                DiskKind::Unknown(_) => "unknown"
-            }.to_string(),
-        }));
+    let root_disk = Disks::new_with_refreshed_list().iter().find(|d| d.mount_point().to_string_lossy() == "/").map(|d| DiskInfo {
+        available_space_mib: d.available_space() / BYTES_IN_MIB,
+        total_space_mib: d.total_space() / BYTES_IN_MIB,
+        disk_kind: match d.kind() {
+            DiskKind::HDD => "hdd",
+            DiskKind::SSD => "sdd",
+            DiskKind::Unknown(_) => "unknown"
+        }.to_string(),
+    });
 
 
     let info = SystemInfo {
@@ -232,13 +249,16 @@ async fn info() -> Result<(), Box<dyn Error>> {
         cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
-        ingresses: (!ingresses.is_empty()).then(|| ingresses),
-        cronjobs: (!cronjobs.is_empty()).then(|| cronjobs),
-        secrets: (!secret_info.is_empty()).then(|| secret_info),
-        services: (!services.is_empty()).then(|| services),
-        cluster_issuers: (!cluster_issuers.is_empty()).then(|| cluster_issuers),
+        ingresses: (!ingresses.is_empty()).then_some(ingresses),
+        cronjobs: (!cronjobs.is_empty()).then_some(cronjobs),
+        secrets: (!secret_info.is_empty()).then_some(secret_info),
+        services: (!services.is_empty()).then_some(services),
+        cluster_issuers: (!cluster_issuers.is_empty()).then_some(cluster_issuers),
+        deployments: (!deployments.is_empty()).then_some(deployments),
+        daemonsets: (!daemonsets.is_empty()).then_some(daemonsets),
         hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
+        cordoned: is_cordoned(),
     };
     let json = serde_json::to_string(&info)?;
     println!("{}", json);

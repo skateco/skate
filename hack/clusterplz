@@ -1,8 +1,25 @@
 #!/bin/bash
 
+set -x
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
+
+multipass_bin=$(which multipass)
+
+multipass() {
+  if [[ "$SUDO_MULTIPASS" -eq 1 ]]; then
+    sudo $multipass_bin $@
+  fi
+  $multipass_bin $@
+}
+
+if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
+  source $SCRIPT_DIR/.clusterplz.env
+fi
+
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-${SSH_PRIVATE_KEY}.pub}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -44,26 +61,49 @@ snapshot_nodes() {
     start_nodes
 }
 
+ensure_public_key() {
+    if [ ! -f $SSH_PUBLIC_KEY ]; then
+         echo >&2 "no public key at $SSH_PUBLIC_KEY, set SSH_PUBLIC_KEY env to point to a valid ssh public key"
+        exit 2
+    fi
+}
+
+ensure_private_key() {
+    if [ ! -f $SSH_PRIVATE_KEY ]; then
+         echo >&2 "no private key at $SSH_PRIVATE_KEY, set SSH_PRIVATE_KEY env to point to a valid ssh private key"
+        exit 2
+    fi
+}
+
 # shellcheck disable=SC2128
 case "$POSITIONAL_ARGS" in
 create)
+    ensure_public_key
 
-    cat <<EOF >/tmp/cluster-plz.yaml
+    cat <<EOF >./.cluster-plz.yaml
 users:
   - default
   - name: $(echo $USER)
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
-    - $(cat ~/.ssh/id_rsa.pub)
+    - $(cat $SSH_PUBLIC_KEY)
 packages:
 - make
 - gcc
 - libssl-dev
 - pkg-config
 EOF
+
+    had_failures=false
     for f in $(seq $nodes); do
-        multipass launch -c 1 -m 1G -d 7G -n node-$f --cloud-init /tmp/cluster-plz.yaml
+        multipass launch -c 1 -m 1G -d 7G -n node-$f --cloud-init ./.cluster-plz.yaml
+        exit_code=$?
+        if [ $exit_code -gt 0 ]; then
+          had_failures=true
+        fi
     done
+
+    $had_failures && exit 1
 
     snapshot_nodes
 
@@ -115,12 +155,15 @@ shell)
     tmux attach-session -t $SESSION
     ;;
 skate)
+    ensure_private_key
+    cargo run --bin skate create cluster test
     set -euo pipefail
+    cargo run --bin skate config use-context test
     for f in $(seq $nodes); do
         info=$(multipass info node-$f)
         ip=$(echo "$info" | grep -e '^IPv4:' | awk '{print $2}')
         name=$(echo "$info" | grep -e '^Name:' | awk '{print $2}')
-        cargo run --bin skate create node --name $name --host $ip --subnet-cidr "20.${f}.0.0/16"
+        cargo run --bin skate create node --name $name --host $ip --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user $USER
     done
     ;;
 skatelet)
@@ -128,10 +171,26 @@ skatelet)
     arch=$(multipass exec -n node-1 -- arch)
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:
-        multipass transfer target/${arch}-unknown-linux-gnu/debug/skatelet-netavark node-$f:
+        if [ "$(arch)" = "$arch" ]; then
+          binary=target/release/skatelet
+          if [ ! -f $binary ]; then
+            set -x
+            cargo build --bin skatelet --release --locked
+            set +x
+          fi
+        else
+          target=${arch}-unknown-linux-gnu
+          binary=target/$target/release/skatelet
+          if [ ! -f $binary ]; then
+            set -x
+            cross build --bin skatelet --release --locked --target "$target"
+            set +x
+          fi
+        fi
+
+        multipass transfer $binary node-$f:
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet
-        multipass exec -n node-$f -- sudo mv skatelet-netavark /usr/local/bin/skatelet-netavark
+
     done
     ;;
 esac
