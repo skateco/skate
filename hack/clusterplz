@@ -170,23 +170,24 @@ skatelet)
     set -e
     arch=$(multipass exec -n node-1 -- arch)
     echo "copying skatelet binaries for ${arch}"
+
+    if [ "$(arch)" = "$arch" ]; then
+      binary=target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cargo build --bin skatelet --release --locked
+        set +x
+      fi
+    else
+      target=${arch}-unknown-linux-gnu
+      binary=target/$target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cross build --bin skatelet --release --locked --target "$target"
+        set +x
+      fi
+    fi
     for f in $(seq $nodes); do
-        if [ "$(arch)" = "$arch" ]; then
-          binary=target/release/skatelet
-          if [ ! -f $binary ]; then
-            set -x
-            cargo build --bin skatelet --release --locked
-            set +x
-          fi
-        else
-          target=${arch}-unknown-linux-gnu
-          binary=target/$target/release/skatelet
-          if [ ! -f $binary ]; then
-            set -x
-            cross build --bin skatelet --release --locked --target "$target"
-            set +x
-          fi
-        fi
 
         multipass transfer $binary node-$f:
         multipass exec -n node-$f -- sudo mv skatelet /usr/local/bin/skatelet

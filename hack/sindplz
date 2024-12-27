@@ -125,9 +125,25 @@ skate)
 skatelet)
   set -x
     arch=$(docker exec node-1 arch|tr -d '\r')
+    if [ "$(arch)" = "$arch" ]; then
+      binary=target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cargo build --bin skatelet --release --locked
+        set +x
+      fi
+    else
+      target=${arch}-unknown-linux-gnu
+      binary=target/$target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cross build --bin skatelet --release --locked --target "$target"
+        set +x
+      fi
+    fi
     echo "copying skatelet binaries for ${arch}"
     for f in $(seq $nodes); do
-        docker cp target/${arch}-unknown-linux-gnu/debug/skatelet node-$f:/
+        docker cp $binary node-$f:/
         docker exec node-$f sudo mv skatelet /usr/local/bin/skatelet
     done
     ;;
