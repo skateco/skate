@@ -114,7 +114,8 @@ skate)
     cargo run --bin skate create cluster test||true
     cargo run --bin skate config use-context test
     for f in $(seq $nodes); do
-        cargo run --bin skate create node --name node-$f --host 127.0.0.1 --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
+        peer_host=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' node-$f)
+        cargo run --bin skate create node --name node-$f --host 127.0.0.1 --peer-host $peer_host --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
     done
     ;;
 skatelet)
