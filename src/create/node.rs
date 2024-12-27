@@ -29,8 +29,10 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 pub struct CreateNodeArgs {
     #[arg(long, long_help = "Name of the node.")]
     name: String,
-    #[arg(long, long_help = "IP or domain name of the node.")]
+    #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
+    #[arg(long, long_help = "IP or domain name of the node from other cluster hosts.")]
+    peer_host: Option<String>,
     #[arg(long, long_help = "Ssh user for connecting")]
     user: Option<String>,
     #[arg(long, long_help = "Ssh key for connecting")]
@@ -60,6 +62,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let node = Node {
         name: args.name.clone(),
         host: args.host.clone(),
+        peer_host: args.peer_host.clone().unwrap_or(args.host.clone()),
         port: args.port,
         user: args.user.clone(),
         key: args.key.clone(),
@@ -203,7 +206,7 @@ pub async fn install_cluster_manifests<D: CreateDeps>(deps: &D, args: &ConfigFil
     // uses fanout plugin
 
     // replace forward list in coredns config with that of other hosts
-    let fanout_list = config.nodes.iter().map(|n| n.host.clone() + ":5553").join(" ");
+    let fanout_list = config.nodes.iter().map(|n| n.peer_host.clone() + ":5553").join(" ");
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
@@ -418,7 +421,7 @@ async fn create_replace_routes_file(conn: &Box<dyn SshClient>, cluster_conf: &Cl
 ".to_string();
 
     for other_node in &other_nodes {
-        let ip = format!("{}:22", other_node.host).to_socket_addrs()
+        let ip = format!("{}:22", other_node.peer_host).to_socket_addrs()
             .unwrap().next().unwrap().ip().to_string();
         route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }

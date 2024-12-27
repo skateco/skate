@@ -389,6 +389,7 @@ impl Node {
         Node {
             name: self.name.clone(),
             host: self.host.clone(),
+            peer_host: self.peer_host.clone(),
             subnet_cidr: self.subnet_cidr.clone(),
             port: self.port.or(Some(22)),
             user: self.user.clone().or(cluster.default_user.clone()),
