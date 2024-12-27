@@ -23,6 +23,7 @@ COPY --chmod=0755 files/usr/local/bin/clean-install /usr/local/bin/
 RUN apt-get -y update; \
 DEBIAN_FRONTEND=noninteractive clean-install \
      podman \
+     netavark \
      uidmap \
      ipvsadm \
      sudo \
@@ -54,17 +55,38 @@ echo skate:200000:65536 > /etc/subgid;
 VOLUME /var/lib/containers
 VOLUME /home/skate/.local/share/containers
 
-ADD https://raw.githubusercontent.com/containers/image_build/master/podman/containers.conf /etc/containers/containers.conf
+ADD https://raw.githubusercontent.com/containers/image_build/master/podman/containers.conf /etc/containers/podman-image-containers.conf
 ADD https://raw.githubusercontent.com/containers/image_build/master/podman/podman-containers.conf /home/podman/.config/containers/containers.conf
 ADD https://raw.githubusercontent.com/containers/storage/main/storage.conf /etc/containers/storage.conf
 
+#[containers]
+ #netns="host"
+ #userns="host"
+ #ipcns="host"
+ #utsns="host"
+ #cgroupns="host"
+ #cgroups="disabled"
+ #log_driver = "k8s-file"
+ #[engine]
+ #cgroup_manager = "cgroupfs"
+ #events_logger="file"
+ #runtime="crun"
 
 # chmod containers.conf and adjust storage.conf to enable Fuse storage.
-RUN chmod 644 /etc/containers/containers.conf && \
+RUN mkdir -p /etc/containers && \
+    cp /usr/share/containers/containers.conf /etc/containers/ && \
+    chmod 644 /etc/containers/containers.conf && \
     echo "server=1.1.1.1" >> /etc/dnsmasq.conf && \
     echo "server=8.8.8.8" >> /etc/dnsmasq.conf && \
     sed -i -e \
-        's|^utsns="host"|utsns="private"|g'\
+        's|^[\#]\?netns\s\?=.*|netns="host"|g' -e \
+        's|^[\#]\?userns\s\?=.*|userns="host"|g' -e \
+        's|^[\#]\?ipcns\s\?=.*|ipcns="host"|g' -e \
+        's|^[\#]\?utsns\s\?=.*|utsns="private"|g' -e \
+        's|^[\#]\?cgroupns\s\?=.*|cgroupns="host"|g' -e \
+        's|^[\#]\?cgroups\s\?=.*|cgroups="disabled"|g' -e \
+        's|^[\#]\?cgroup_manager\s\?=.*|cgroup_manager="cgroupfs"|g' -e \
+        's|^[\#]\?events_logger\s\?=.*|events_logger="file"|g' \
         /etc/containers/containers.conf && \
     sed -i -e 's|^#mount_program|mount_program|g' -e \
         '/additionalimage.*/a "/var/lib/shared",' -e \

@@ -249,20 +249,20 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
     if conn.execute_stdout("test -f /etc/containers/containers.conf", true, true).await.is_err() {
         let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
         conn.execute_stdout(cmd, true, true).await?;
-
-        let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-        conn.execute_stdout(&cmd, true, true).await?;
-
-        let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-        conn.execute_stdout(&cmd, true, true).await?;
-
-        let current_backend = conn.execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
-        if current_backend.trim() != network_backend {
-            // Since we've changed the network backend we need to reset
-            conn.execute_stdout("sudo podman system reset -f", true, true).await?;
-        }
     } else {
         println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
+    }
+
+    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+    conn.execute_stdout(&cmd, true, true).await?;
+
+    let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
+    conn.execute_stdout(&cmd, true, true).await?;
+
+    let current_backend = conn.execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
+    if current_backend.trim() != network_backend {
+        // Since we've changed the network backend we need to reset
+        conn.execute_stdout("sudo podman system reset -f", true, true).await?;
     }
 
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
