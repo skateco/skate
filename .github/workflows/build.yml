@@ -54,6 +54,8 @@ jobs:
         run: rustup target add $TARGET
       - name: Normal Tests
         run: cargo test
+      - name: E2E Tests in Sind
+        run: make run-e2e-tests-docker
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Archive artifacts

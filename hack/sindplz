@@ -5,6 +5,10 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
 
+if [ -f $SCRIPT_DIR/.sindplz.env ]; then
+  source $SCRIPT_DIR/.sindplz.env
+fi
+
 while [[ $# -gt 0 ]]; do
     case $1 in
     #    -e|--extension)
