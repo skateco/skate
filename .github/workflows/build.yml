@@ -55,6 +55,7 @@ jobs:
       - name: Normal Tests
         run: cargo test
       - name: E2E Tests in Sind
+        if: ${{ matrix.TARGET == 'x86_64-unknown-linux-gnu' }}
         run: make run-e2e-tests-docker
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
