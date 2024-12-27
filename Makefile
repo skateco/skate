@@ -1,5 +1,8 @@
 .ONE_SHELL:
 .PHONY: default
+
+SHELL := /bin/bash
+
 default: aarch64
 
 .PHONY: aarch64
