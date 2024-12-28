@@ -80,9 +80,6 @@ impl<D: ApplyDeps> Apply<D> {
 }
 
 pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>, Box<dyn Error>> {
-    let api_version_key = Value::String("apiVersion".to_owned());
-    let kind_key = Value::String("kind".to_owned());
-
     let mut result: Vec<SupportedResources> = Vec::new();
 
     let num_filenames = filenames.len();
@@ -100,7 +97,7 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
         };
         for document in serde_yaml::Deserializer::from_str(&str_file) {
             let value = Value::deserialize(document).expect("failed to read document");
-            if let Value::Mapping(mapping) = &value {
+            if let Value::Mapping(_) = &value {
                 result.push(SupportedResources::try_from(&value)?)
             }
         }

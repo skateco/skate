@@ -49,11 +49,6 @@ pub struct RemoveArgs {
 
 impl<D: DnsDeps> Dns<D> {
     
-    fn conf_path_str() -> String {
-        "/var/lib/skate/dns".to_string()
-    }
-
-
     pub fn dns(&self, args: DnsArgs) -> Result<(), SkateError> {
         panic::set_hook(Box::new(move |info| {
             log_panic(info)

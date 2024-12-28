@@ -12,7 +12,6 @@ use std::net::ToSocketAddrs;
 use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
-use crate::deps::SshManager;
 use crate::oci;
 use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
@@ -29,8 +28,10 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 pub struct CreateNodeArgs {
     #[arg(long, long_help = "Name of the node.")]
     name: String,
-    #[arg(long, long_help = "IP or domain name of the node.")]
+    #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
+    #[arg(long, long_help = "IP or domain name of the node from other cluster hosts.")]
+    peer_host: Option<String>,
     #[arg(long, long_help = "Ssh user for connecting")]
     user: Option<String>,
     #[arg(long, long_help = "Ssh key for connecting")]
@@ -52,7 +53,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
-    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p, _n)| p);
+    let existing_index = nodes_iter.find_position(|n| n.name == args.name).map(|(p, _n)| p);
 
     // will clobber
     // TODO - ask
@@ -60,6 +61,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let node = Node {
         name: args.name.clone(),
         host: args.host.clone(),
+        peer_host: args.peer_host.clone().unwrap_or(args.host.clone()),
         port: args.port,
         user: args.user.clone(),
         key: args.key.clone(),
@@ -119,7 +121,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
                     println!("installing podman with command {}", command);
                     let result = conn.execute(command).await;
                     match result {
-                        Ok(output) => {
+                        Ok(_) => {
                             println!("podman installed successfully {} ", CHECKBOX_EMOJI);
                             true
                         },
@@ -203,7 +205,7 @@ pub async fn install_cluster_manifests<D: CreateDeps>(deps: &D, args: &ConfigFil
     // uses fanout plugin
 
     // replace forward list in coredns config with that of other hosts
-    let fanout_list = config.nodes.iter().map(|n| n.host.clone() + ":5553").join(" ");
+    let fanout_list = config.nodes.iter().map(|n| n.peer_host.clone() + ":5553").join(" ");
 
     let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
 
@@ -249,20 +251,20 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
     if conn.execute_stdout("test -f /etc/containers/containers.conf", true, true).await.is_err() {
         let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
         conn.execute_stdout(cmd, true, true).await?;
-
-        let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-        conn.execute_stdout(&cmd, true, true).await?;
-
-        let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-        conn.execute_stdout(&cmd, true, true).await?;
-
-        let current_backend = conn.execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
-        if current_backend.trim() != network_backend {
-            // Since we've changed the network backend we need to reset
-            conn.execute_stdout("sudo podman system reset -f", true, true).await?;
-        }
     } else {
         println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
+    }
+
+    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
+    conn.execute_stdout(&cmd, true, true).await?;
+
+    let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
+    conn.execute_stdout(&cmd, true, true).await?;
+
+    let current_backend = conn.execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'").await?;
+    if current_backend.trim() != network_backend {
+        // Since we've changed the network backend we need to reset
+        conn.execute_stdout("sudo podman system reset -f", true, true).await?;
     }
 
     let gateway = node.subnet_cidr.split(".").take(3).join(".") + ".1";
@@ -282,7 +284,7 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
 
     install_oci_hooks(conn).await?;
 
-    let cmd = "sudo podman run --rm busybox echo 1";
+    let cmd = "sudo podman run --rm busybox echo '1'";
     conn.execute_stdout(cmd, true, true).await?;
 
 
@@ -318,16 +320,22 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
     _ = conn.execute_stdout(cmd, true, true).await;
 
 
-    // disable systemd-resolved if exists
-    let cmd = "sudo bash -c 'systemctl disable systemd-resolved; sudo systemctl stop systemd-resolved'";
-    conn.execute_stdout(cmd, true, true).await?;
+    // disable dns services if exists
+    for dns_service in ["dnsmasq", "systemd-resolved"] {
+        let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
+    }
 
     // changed /etc/resolv.conf to be 127.0.0.1
     // neeed to use a symlink so that it's respected and not overridden by systemd
     let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
     conn.execute_stdout(cmd, true, true).await?;
-    let cmd = "sudo bash -c 'rm /etc/resolv.conf && ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    conn.execute_stdout(cmd, true, true).await?;
+    let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
+    match conn.execute_stdout(cmd, true, true).await {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("failed to change resolv.conf, we're probably inside a container: {}", e);
+        }
+    }
 
     Ok(())
 }
@@ -412,7 +420,7 @@ async fn create_replace_routes_file(conn: &Box<dyn SshClient>, cluster_conf: &Cl
 ".to_string();
 
     for other_node in &other_nodes {
-        let ip = format!("{}:22", other_node.host).to_socket_addrs()
+        let ip = format!("{}:22", other_node.peer_host).to_socket_addrs()
             .unwrap().next().unwrap().ip().to_string();
         route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
     }

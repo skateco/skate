@@ -1,6 +1,5 @@
 use crate::config::Config;
 use crate::skate::ConfigFileArgs;
-use crate::ssh::{SshClient};
 use anyhow::anyhow;
 use clap::Args;
 use std::error::Error;

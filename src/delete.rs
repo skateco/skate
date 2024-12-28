@@ -7,7 +7,6 @@ use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
-use crate::ssh::SshClient;
 use crate::util::CHECKBOX_EMOJI;
 
 #[derive(Debug, Args)]
@@ -136,7 +135,7 @@ impl<D: DeleteDeps> Delete<D> {
 
     async fn delete_cluster(&self, args: DeleteClusterArgs) -> Result<(), SkateError> {
         let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
-        let cluster = config.active_cluster(args.config.context.clone())?.clone();
+        let cluster = config.clusters.iter().find(|c| c.name == args.name).ok_or(anyhow!("cluster not found"))?;
 
         if ! args.yes{
             let confirmation = Confirm::new()
@@ -150,7 +149,7 @@ impl<D: DeleteDeps> Delete<D> {
             }
 
         }
-        config.delete_cluster(&cluster)?;
+        config.delete_cluster(&cluster.clone())?;
         config.persist(Some(args.config.skateconfig))
     }
 }

@@ -22,7 +22,7 @@ use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
-use crate::util::{metadata_name, slugify};
+use crate::util::{metadata_name, slugify, tabled_display_option};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
@@ -32,11 +32,14 @@ pub enum NodeStatus {
     Unhealthy,
 }
 
+
 #[derive(Tabled, Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
+    #[tabled(display_with = "tabled_display_option")]
+    pub message: Option<String>,
     #[tabled(skip)]
     pub host_info: Option<HostInfo>,
 }
@@ -333,6 +336,7 @@ impl ClusterState {
     fn path(cluster_name: &str) -> String {
         format!("{}/{}.state", cache_dir(), slugify(cluster_name))
     }
+    #[allow(unused)]
     pub fn persist(&self) -> Result<(), Box<dyn Error>> {
         let state_file = File::create(Path::new(ClusterState::path(&self.cluster_name.clone()).as_str()))
             .map_err(|e| anyhow!("failed to open or create state file").context(e))?;
@@ -358,6 +362,7 @@ impl ClusterState {
         }
     }
 
+    #[allow(unused)]
     pub fn reconcile_node(&mut self, node: &HostInfo) -> Result<ReconciledResult, Box<dyn Error>> {
         let pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
 
@@ -412,6 +417,7 @@ impl ClusterState {
                 true => Some(NodeState {
                     node_name: n.name.clone(),
                     status: Unknown,
+                    message: None,
                     host_info: None,
                 }),
                 false => None
@@ -428,9 +434,12 @@ impl ClusterState {
             match host_info.iter().find(|h| h.node_name == node.node_name) {
                 Some(info) => {
                     updated += 1;
-                    node.status = match info.healthy() {
-                        true => Healthy,
-                        false => Unhealthy
+                    (node.status, node.message) = match info.healthy() {
+                        Ok(_) => (Healthy, None),
+                        Err(errs) => {
+                            let err_string = errs.join(". ").to_string();
+                            (Unhealthy, Some(err_string))
+                        }
                     };
                     node.host_info = Some(info.clone())
                 }
@@ -498,7 +507,7 @@ impl ClusterState {
             // will ignore duplicates,
             .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name)).collect()
     }
-    
+
     pub fn catalogue(&self, filter_node: Option<&str>, filter_types: &[ResourceType]) -> Vec<CatalogueItem> {
         self.nodes.iter()
             .filter(|n|
@@ -571,6 +580,7 @@ fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType
 // holds references to a resource
 pub struct MutCatalogueItem<'a> {
     pub object: &'a mut ObjectListItem,
+    #[allow(unused)]
     pub node: String,
 }
 

@@ -22,10 +22,15 @@ pub struct Cluster {
 }
 
 
+fn default_string() -> String {
+    "".to_string()
+}
 #[derive(Serialize, Deserialize, Clone, Debug, Hash)]
 pub struct Node {
     pub name: String,
     pub host: String,
+    #[serde(default="default_string")]
+    pub peer_host: String,
     pub subnet_cidr: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
@@ -117,9 +122,21 @@ impl Config {
         let path = Config::path(path);
         let path = Path::new(&path);
         let f = fs::File::open(path).map_err(|e|anyhow!(e).context("failed to open config file"))?;
-        let data: Config = serde_yaml::from_reader(f).map_err(|e|anyhow!(e).context("failed to read config file"))?;
+        let mut data: Config = serde_yaml::from_reader(f).map_err(|e|anyhow!(e).context("failed to read config file"))?;
+        data.enrich();
         Ok(data)
     }
+
+    fn enrich(&mut self)  {
+        self.clusters.iter_mut().for_each(|c| {
+            c.nodes.iter_mut().for_each(|n| {
+                if n.peer_host.is_empty() {
+                    n.peer_host = n.host.clone();
+                }
+            });
+        });
+    }
+
 
     pub fn persist(&self, path: Option<String>) -> Result<(), SkateError> {
         let path = Config::path(path);

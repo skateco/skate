@@ -1,0 +1,148 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+
+POSITIONAL_ARGS=()
+
+if [ -f $SCRIPT_DIR/.sindplz.env ]; then
+  source $SCRIPT_DIR/.sindplz.env
+fi
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    #    -e|--extension)
+    #     EXTENSION="$2"
+    #      shift # past argument
+    #      shift # past value
+    #      ;;
+    -* | --*)
+        echo "Unknown option $1"
+        exit 1
+        ;;
+    *)
+        POSITIONAL_ARGS+=("$1") # save positional arg
+        shift                   # past argument
+        ;;
+    esac
+done
+
+nodes=2
+
+SSH_PUBLIC_KEY=${SSH_PUBLIC_KEY:-${SSH_PRIVATE_KEY}.pub}
+
+ensure_public_key() {
+    if [ ! -f $SSH_PUBLIC_KEY ]; then
+         echo >&2 "no public key at $SSH_PUBLIC_KEY, set SSH_PUBLIC_KEY env to point to a valid ssh public key"
+        exit 2
+    fi
+}
+
+ensure_private_key() {
+    if [ ! -f $SSH_PRIVATE_KEY ]; then
+         echo >&2 "no private key at $SSH_PRIVATE_KEY, set SSH_PRIVATE_KEY env to point to a valid ssh private key"
+        exit 2
+    fi
+}
+
+stop_nodes() {
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    docker stop $node_names
+}
+
+start_nodes() {
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+
+    docker start $node_names
+}
+
+# shellcheck disable=SC2128
+case "$POSITIONAL_ARGS" in
+create)
+    ensure_public_key
+
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    docker build -t sind $SCRIPT_DIR/../images/sind
+    docker rm -f $node_names
+    for f in $(seq $nodes); do
+        docker run -d \
+          --privileged \
+          -p 222$f:22 \
+          --dns 127.0.0.1 \
+          --cgroupns host \
+          --hostname node-$f \
+          --tmpfs /tmp \
+          --tmpfs /run \
+          --tmpfs /run/lock \
+          --name node-$f sind
+        auth_key=$(cat $SSH_PUBLIC_KEY)
+        docker exec node-$f bash -c "echo  '$auth_key' > /home/skate/.ssh/authorized_keys"
+
+    done
+    ;;
+info)
+#    for f in $(seq $nodes); do
+#        multipass info node-$f
+#    done
+    ;;
+ips)
+    for f in $(seq $nodes); do
+      echo "127.0.0.1 222$f"
+    done
+    ;;
+start)
+    start_nodes
+    ;;
+stop)
+    stop_nodes
+    ;;
+remove)
+    node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
+    docker rm -f $node_names
+    ;;
+shell)
+    SESSION="sindplz"
+    tmux kill-session -t $SESSION || true
+    tmux new-session -d -s $SESSION
+    # todo, split $nodes-1 times
+    for f in $(seq $nodes); do
+        tmux send-keys -t $SESSION "docker exec -it node-$f /bin/bash" Enter
+        if [ $f -ne $nodes ]; then
+            tmux split-window -h -t $SESSION
+        fi
+    done
+    tmux attach-session -t $SESSION
+    ;;
+skate)
+    ensure_private_key
+    for f in $(seq $nodes); do
+        peer_host=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' node-$f)
+        cargo run --bin skate create node --name node-$f --host 127.0.0.1 --peer-host $peer_host --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
+    done
+    ;;
+skatelet)
+  set -x
+    arch=$(docker exec node-1 arch|tr -d '\r')
+    if [ "$(arch)" = "$arch" ]; then
+      binary=target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cargo build --bin skatelet --release --locked
+        set +x
+      fi
+    else
+      target=${arch}-unknown-linux-gnu
+      binary=target/$target/release/skatelet
+      if [ ! -f $binary ]; then
+        set -x
+        cross build --bin skatelet --release --locked --target "$target"
+        set +x
+      fi
+    fi
+    echo "copying skatelet binaries for ${arch}"
+    for f in $(seq $nodes); do
+        docker cp $binary node-$f:/
+        docker exec node-$f sudo mv skatelet /usr/local/bin/skatelet
+    done
+    ;;
+esac

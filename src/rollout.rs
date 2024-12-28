@@ -101,7 +101,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
 
 
     pub async fn restart(&self, args: RestartArgs) -> Result<(), SkateError> {
-        let (resource_type, name) = args.resource.parse()?;
+        let (resource_type, _) = args.resource.parse()?;
 
         match resource_type {
             ResourceType::Deployment => {},

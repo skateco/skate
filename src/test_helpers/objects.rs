@@ -9,10 +9,12 @@ use crate::state::state::NodeState;
 use crate::state::state::NodeStatus::Healthy;
 use crate::util::NamespacedName;
 
+#[allow(unused)]
 pub fn node_state(name: &str) -> NodeState{
     NodeState{
         node_name: name.to_string(),
         status: Healthy,
+        message: None,
         host_info: Some(HostInfo{
             node_name: name.to_string(),
             hostname: name.to_string(),
@@ -53,6 +55,7 @@ pub fn node_state(name: &str) -> NodeState{
 }
 
 pub trait WithPod {
+    #[allow(unused)]
     fn with_pod(self, pod: &Pod) -> Self;
 }
 

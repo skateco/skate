@@ -13,6 +13,7 @@ pub struct NodeListItem {
     pub name: String,
     pub pods: String,
     pub status: String,
+    pub message: String,
 }
 
 impl NameFilters for NodeListItem {
@@ -47,6 +48,7 @@ impl Lister<NodeListItem> for NodeLister {
                 name: n.node_name.clone(),
                 pods: num_pods.to_string(),
                 status: n.status.to_string(),
+                message: n.message.clone().unwrap_or_default(),
             }
         }).collect()
     }

@@ -20,7 +20,9 @@ use crate::exec::{ShellExec};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
+#[allow(unused)]
 pub const EQUAL_EMOJI: char = '~';
+#[allow(unused)]
 pub const INFO_EMOJI: &str = "[i]";
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
@@ -264,6 +266,14 @@ commit_hash:{}
 build_time:{}"#, short_version, crate::build::BRANCH, crate::build::COMMIT_HASH, crate::build::BUILD_TIME)
 }
 
+
+pub fn tabled_display_option<T>(o: &Option<T>) -> String where T: Display{
+    match o {
+        Some(s) => format!("{}", s),
+        None => "-".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Local};
@@ -285,4 +295,3 @@ mod tests {
         }
     }
 }
-
