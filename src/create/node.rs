@@ -53,7 +53,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     let mut nodes_iter = cluster.nodes.clone().into_iter();
 
-    let existing_index = nodes_iter.find_position(|n| n.name == args.name || n.host == args.host).map(|(p, _n)| p);
+    let existing_index = nodes_iter.find_position(|n| n.name == args.name).map(|(p, _n)| p);
 
     // will clobber
     // TODO - ask

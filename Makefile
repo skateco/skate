@@ -42,7 +42,7 @@ run-e2e-tests:
 .PHONY: run-e2e-tests-docker
 run-e2e-tests-docker: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
 run-e2e-tests-docker:
-	set -euo pipefail
+	set -xeuo pipefail
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
 	echo "SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}" > ./hack/.sindplz.env
 	# start vms
