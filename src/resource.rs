@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use k8s_openapi::Resource;
 use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClient, SshClients};
+use crate::ssh::{SshClients};
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
 
@@ -165,8 +165,6 @@ impl SupportedResources {
                     }
                 };
 
-                let now = chrono::Utc::now().timestamp();
-
                 let labels = pod.metadata.labels.as_ref().ok_or("no labels")?;
 
                 let name = metadata_name(pod);
@@ -180,7 +178,7 @@ impl SupportedResources {
 
                 let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &fq_deployment_name, ips.join(" "), &fq_deployment_name);
                 let res = conns.execute(&cmd).await;
-                res.into_iter().for_each(|(node, result)| {
+                res.into_iter().for_each(|(_, result)| {
                     if result.is_err() {
                         let err = result.err().unwrap();
                         errs.push(err);
@@ -327,7 +325,6 @@ impl SupportedResources {
                 resource
             }
             SupportedResources::Ingress(ref mut i) => {
-                let original_name = i.metadata.name.clone().unwrap_or("".to_string());
                 if i.metadata.name.is_none() {
                     return Err(anyhow!("metadata.name is empty").into());
                 }
@@ -423,7 +420,6 @@ impl SupportedResources {
                 resource
             }
             SupportedResources::Service(ref mut s) => {
-                let original_name = s.metadata.name.clone().unwrap_or("".to_string());
                 if s.metadata.name.is_none() {
                     return Err(anyhow!("metadata.name is empty").into());
                 }

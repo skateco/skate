@@ -14,7 +14,7 @@ use itertools::Itertools;
 use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use crate::resource::SupportedResources;
 use crate::exec::{ShellExec};
 

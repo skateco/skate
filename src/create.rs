@@ -10,7 +10,6 @@ use crate::refresh::{Refresh, RefreshDeps};
 use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::JobArgs;
-use crate::ssh::SshClient;
 use crate::util::NamespacedName;
 
 mod node;

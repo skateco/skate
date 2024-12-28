@@ -12,7 +12,6 @@ use std::net::ToSocketAddrs;
 use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
-use crate::deps::SshManager;
 use crate::oci;
 use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
@@ -122,7 +121,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
                     println!("installing podman with command {}", command);
                     let result = conn.execute(command).await;
                     match result {
-                        Ok(output) => {
+                        Ok(_) => {
                             println!("podman installed successfully {} ", CHECKBOX_EMOJI);
                             true
                         },
@@ -323,7 +322,7 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
 
     // disable dns services if exists
     for dns_service in ["dnsmasq", "systemd-resolved"] {
-        conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
+        let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
     }
 
     // changed /etc/resolv.conf to be 127.0.0.1

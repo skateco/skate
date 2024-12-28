@@ -200,7 +200,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
                                         host_info.system_info = sys_info
                                     }
                                 }
-                                Err(e) => {
+                                Err(_) => {
                                     // TODO
                                 }
                             };

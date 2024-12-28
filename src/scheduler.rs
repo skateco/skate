@@ -16,7 +16,7 @@ use k8s_openapi::Metadata;
 use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClient, SshClients};
+use crate::ssh::{SshClients};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{CROSS_EMOJI, hash_k8s_resource, metadata_name, NamespacedName};
 
@@ -180,9 +180,7 @@ impl DefaultScheduler {
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut ds = ds.clone();
-
-        let new_hash = hash_k8s_resource(&mut ds);
+        let ds = ds.clone();
 
         let default_ops: Vec<_> = state.nodes.iter().map(|n|
             ScheduledOperation::new(OpType::Create, SupportedResources::DaemonSet(ds.clone()))
@@ -335,9 +333,7 @@ impl DefaultScheduler {
     }
 
     fn plan_deployment_generic(state: &ClusterState, d: &Deployment) -> Result<ApplyPlan, Box<dyn Error>> {
-        let mut d = d.clone();
-
-        let new_hash = hash_k8s_resource(&mut d);
+        let d = d.clone();
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
 

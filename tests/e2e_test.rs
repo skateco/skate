@@ -2,7 +2,6 @@ use std::{env, panic, process};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stderr, stdout};
-use anyhow::anyhow;
 use serde_json::Value;
 
 fn setup() {}

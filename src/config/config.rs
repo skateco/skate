@@ -128,8 +128,8 @@ impl Config {
     }
 
     fn enrich(&mut self)  {
-        self.clusters.iter_mut().for_each(|mut c| {
-            c.nodes.iter_mut().for_each(|mut n| {
+        self.clusters.iter_mut().for_each(|c| {
+            c.nodes.iter_mut().for_each(|n| {
                 if n.peer_host.is_empty() {
                     n.peer_host = n.host.clone();
                 }

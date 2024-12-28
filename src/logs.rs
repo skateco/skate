@@ -8,7 +8,7 @@ use futures::StreamExt;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::resource::ResourceType;
-use crate::ssh::{SshClient, SshClients};
+use crate::ssh::{SshClients};
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
