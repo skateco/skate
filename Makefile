@@ -36,6 +36,9 @@ run-e2e-tests:
 	echo "SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}" > ./hack/.clusterplz.env
 	# start vms
 	./hack/clusterplz create || exit 0
+	cargo run --bin skate -- delete cluster e2e-test --yes || exit 0
+	cargo run --bin skate -- create cluster e2e-test
+	cargo run --bin skate -- config use-context e2e-test
 	./hack/clusterplz skatelet
 	./hack/clusterplz skate
     # the ignored tests are the e2e tests. This is not optimal.
@@ -52,7 +55,7 @@ run-e2e-tests-docker:
 	cargo run --bin skate -- delete cluster e2e-test --yes || exit 0
 	cargo run --bin skate -- create cluster e2e-test
 	cargo run --bin skate -- config use-context e2e-test
-	./hack/sindplz skate
 	./hack/sindplz skatelet
+	./hack/sindplz skate
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 

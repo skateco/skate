@@ -62,7 +62,7 @@ create)
     ensure_public_key
 
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
-    docker build -t sind $SCRIPT_DIR/../images/sind
+    #docker build -t sind $SCRIPT_DIR/../images/sind
     docker rm -f $node_names
     for f in $(seq $nodes); do
         docker run -d \
@@ -74,7 +74,7 @@ create)
           --tmpfs /tmp \
           --tmpfs /run \
           --tmpfs /run/lock \
-          --name node-$f sind
+          --name node-$f ghcr.io/skateco/sind
         auth_key=$(cat $SSH_PUBLIC_KEY)
         docker exec node-$f bash -c "echo  '$auth_key' > /home/skate/.ssh/authorized_keys"
 

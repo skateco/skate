@@ -1,17 +1,11 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 POSITIONAL_ARGS=()
 
 multipass_bin=$(which multipass)
-
-multipass() {
-  if [[ "$SUDO_MULTIPASS" -eq 1 ]]; then
-    sudo $multipass_bin $@
-  fi
-  $multipass_bin $@
-}
 
 if [ -f $SCRIPT_DIR/.clusterplz.env ]; then
   source $SCRIPT_DIR/.clusterplz.env
@@ -154,9 +148,7 @@ shell)
     ;;
 skate)
     ensure_private_key
-    cargo run --bin skate create cluster test
     set -euo pipefail
-    cargo run --bin skate config use-context test
     for f in $(seq $nodes); do
         info=$(multipass info node-$f)
         ip=$(echo "$info" | grep -e '^IPv4:' | awk '{print $2}')
