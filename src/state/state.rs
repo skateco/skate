@@ -333,6 +333,7 @@ impl ClusterState {
     fn path(cluster_name: &str) -> String {
         format!("{}/{}.state", cache_dir(), slugify(cluster_name))
     }
+    #[allow(unused)]
     pub fn persist(&self) -> Result<(), Box<dyn Error>> {
         let state_file = File::create(Path::new(ClusterState::path(&self.cluster_name.clone()).as_str()))
             .map_err(|e| anyhow!("failed to open or create state file").context(e))?;
@@ -358,6 +359,7 @@ impl ClusterState {
         }
     }
 
+    #[allow(unused)]
     pub fn reconcile_node(&mut self, node: &HostInfo) -> Result<ReconciledResult, Box<dyn Error>> {
         let pos = self.nodes.iter_mut().find_position(|n| n.node_name == node.node_name);
 
@@ -571,6 +573,7 @@ fn extract_catalog<'a>(n: &str, si: &'a SystemInfo, filter_types: &[ResourceType
 // holds references to a resource
 pub struct MutCatalogueItem<'a> {
     pub object: &'a mut ObjectListItem,
+    #[allow(unused)]
     pub node: String,
 }
 

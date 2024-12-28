@@ -434,8 +434,6 @@ impl SupportedResources {
                 resource
             }
             SupportedResources::ClusterIssuer(ref mut issuer) => {
-                let original_name = issuer.metadata.name.clone().unwrap_or("".to_string());
-
                 issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
                 issuer.metadata.name = Some(format!("{}", metadata_name(issuer)));
                 resource

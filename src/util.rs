@@ -20,7 +20,9 @@ use crate::exec::{ShellExec};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
+#[allow(unused)]
 pub const EQUAL_EMOJI: char = '~';
+#[allow(unused)]
 pub const INFO_EMOJI: &str = "[i]";
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
