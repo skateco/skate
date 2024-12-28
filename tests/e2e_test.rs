@@ -2,6 +2,7 @@ use std::{env, panic, process};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stderr, stdout};
+use anyhow::anyhow;
 use serde_json::Value;
 
 fn setup() {}
@@ -65,17 +66,6 @@ fn skate_stdout(command: &str, args: &[&str]) -> Result<(), SkateError> {
     Ok(())
 }
 
-fn ips() -> Result<(String, String), anyhow::Error> {
-    let output = process::Command::new("multipass")
-        .args(&["info", "--format", "json"])
-        .output()?;
-
-    let info: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    let node1 = info["info"]["node-1"]["ipv4"][0].as_str().ok_or(anyhow::anyhow!("failed to get node-1 ip"))?;
-    let node2 = info["info"]["node-2"]["ipv4"][0].as_str().ok_or(anyhow::anyhow!("failed to get node-2 ip"))?;
-
-    Ok((node1.to_string(), node2.to_string()))
-}
 
 #[test]
 fn e2e_test() {
@@ -91,15 +81,14 @@ fn e2e_test() {
 }
 
 fn test_cluster_creation() -> Result<(), anyhow::Error> {
-    let ips = ips()?;
 
-    let user = env::var("USER")?;
-
-    skate_stdout("delete", &["cluster", "integration-test", "--yes"]);
-    skate_stdout("create", &["cluster", "integration-test"])?;
-    skate_stdout("config", &["use-context", "integration-test"])?;
-    skate_stdout("create", &["node", "--name", "node-1", "--host", &ips.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
-    skate_stdout("create", &["node", "--name", "node-2", "--host", &ips.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+    // let user = env::var("USER")?;
+    //
+    // skate_stdout("delete", &["cluster", "integration-test", "--yes"]);
+    // skate_stdout("create", &["cluster", "integration-test"])?;
+    // skate_stdout("config", &["use-context", "integration-test"])?;
+    // skate_stdout("create", &["node", "--name", "node-1", "--host", &addrs.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
+    // skate_stdout("create", &["node", "--name", "node-2", "--host", &addrs.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
     let (stdout, _stderr) = skate("refresh", &["--json"])?;
 
     let state: Value = serde_json::from_str(&stdout)?;
@@ -119,7 +108,7 @@ fn test_deployment() -> Result<(), anyhow::Error> {
 
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
-    skate_stdout("config", &["use-context", "integration-test"])?;
+    skate_stdout("config", &["use-context", "e2e-test"])?;
 
     skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")])?;
 
