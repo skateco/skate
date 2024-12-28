@@ -69,21 +69,34 @@ pub struct HostInfo {
 
 impl From<HostInfo> for NodeState {
     fn from(val: HostInfo) -> Self {
+        let (status, message) = match val.healthy() {
+            Ok(_) => (NodeStatus::Healthy, None),
+            Err(errs) => (NodeStatus::Unhealthy, Some(errs.join(". ").to_string())),
+        };
         NodeState {
             node_name: val.node_name.to_string(),
-            status: match val.healthy() {
-                true => NodeStatus::Healthy,
-                false => NodeStatus::Unhealthy
-            },
+            status,
+            message,
             host_info: Some(val),
         }
     }
 }
 
 impl HostInfo {
-    pub fn healthy(&self) -> bool {
+    pub fn healthy(&self) -> Result<(), Vec<String>> {
+        let mut errs = Vec::new();
         // TODO - actual checks for things that matter
-        self.skatelet_version.is_some() && self.system_info.as_ref().map(|si| !si.cordoned).unwrap_or(false)
+        if !self.skatelet_version.is_some() {
+            errs.push("Failed to find skatelet version".to_string());
+        }
+        let cordoned = self.system_info.as_ref().map(|si| si.cordoned).unwrap_or(false);
+        if cordoned {
+            errs.push("Node is cordoned".to_string());
+        }
+        if errs.is_empty() {
+            return Ok(())
+        }
+        Err(errs)
     }
 }
 
@@ -186,7 +199,13 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     "distro" => host_info.platform.distribution = Distribution::from(v),
                     "skatelet" => host_info.skatelet_version = match v {
                         "" => None,
-                        _ => v.to_string().strip_prefix("v").and_then(|v| Some(v.to_string()))
+                        _ => {
+                            Some(if v.starts_with("v") {
+                                v.strip_prefix("v").and_then(|v| Some(v.to_string())).unwrap()
+                            } else {
+                                v.to_string()
+                            })
+                        }
                     },
                     "podman" => host_info.podman_version = match v {
                         "" => None,

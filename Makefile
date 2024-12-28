@@ -8,6 +8,8 @@ default: aarch64
 .PHONY: aarch64
 aarch64:
 	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu
+aarch64-release:
+	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu --release --locked
 .PHONY: aarch64-cross
 aarch64-cross:
 	cross build  --target aarch64-unknown-linux-gnu --release --locked

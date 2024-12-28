@@ -14,6 +14,7 @@ pub fn node_state(name: &str) -> NodeState{
     NodeState{
         node_name: name.to_string(),
         status: Healthy,
+        message: None,
         host_info: Some(HostInfo{
             node_name: name.to_string(),
             hostname: name.to_string(),
