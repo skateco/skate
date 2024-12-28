@@ -178,7 +178,7 @@ impl SupportedResources {
 
                 let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &fq_deployment_name, ips.join(" "), &fq_deployment_name);
                 let res = conns.execute(&cmd).await;
-                res.into_iter().for_each(|(_, result)| {
+                res.into_iter().for_each(|(_node, result)| {
                     if result.is_err() {
                         let err = result.err().unwrap();
                         errs.push(err);
