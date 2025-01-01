@@ -436,6 +436,8 @@ enable_rsyslog() {
   touch /var/log/auth.log
   touch /var/log/kern.log
   chown syslog:adm /var/log/syslog /var/log/auth.log /var/log/kern.log
+  # redirect syslog to pid 1's stdout so that we get it in docker logs
+  tail -n 0 -q -F /var/log/syslog >> /proc/1/fd/1 &
 
   systemctl enable rsyslog
   (sleep 5; systemctl start rsyslog) &
