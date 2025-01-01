@@ -142,9 +142,8 @@ fn test_deployment() -> Result<(), anyhow::Error> {
 }
 
 fn test_service() -> Result<(), anyhow::Error> {
-    // TODO
-    // - keepalived is alive
-    // - keepalived realservers exist
-    // - dns entry exist
-    // - service is reachable
+    // TODO - keepalived is alive
+    //      - keepalived realservers exist
+    //      - dns entry exist
+    //      - service is reachable
 }
