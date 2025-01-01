@@ -15,8 +15,11 @@ use k8s_openapi::Metadata;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use serde::{Deserialize, Serialize};
+use regex::Regex;
+use once_cell::sync::Lazy;
 use crate::resource::SupportedResources;
 use crate::exec::{ShellExec};
+
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -295,3 +298,10 @@ mod tests {
         }
     }
 }
+
+pub static RE_CIDR: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap()
+});
+pub static RE_IP: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap()
+});

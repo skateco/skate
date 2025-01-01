@@ -8,7 +8,9 @@ use clap::Args;
 use itertools::Itertools;
 use std::io::Write;
 use base64::Engine;
-use std::net::ToSocketAddrs;
+use std::net::{ToSocketAddrs};
+use std::str::FromStr;
+use validator::Validate;
 use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
@@ -19,18 +21,19 @@ use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
 use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
+use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP};
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
 const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
     #[arg(long, long_help = "Name of the node.")]
     name: String,
     #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
-    #[arg(long, long_help = "IP or domain name of the node from other cluster hosts.")]
+    #[validate(regex(path = *RE_IP, message = "peer-host must be a valid ipv4 address"))]
+    #[arg(long, long_help = "IP of the node from other cluster hosts.")]
     peer_host: Option<String>,
     #[arg(long, long_help = "Ssh user for connecting")]
     user: Option<String>,
@@ -38,6 +41,7 @@ pub struct CreateNodeArgs {
     key: Option<String>,
     #[arg(long, long_help = "Ssh port for connecting")]
     port: Option<u16>,
+    #[validate(regex(path = *RE_CIDR, message = "subnet-cidr must be a valid ipv4 cidr range"))]
     #[arg(long, long_help = "Subnet cidr for podman network (must be unique range per host)")]
     subnet_cidr: String,
 
@@ -45,8 +49,8 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
-
 pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+    args.validate()?;
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
     let mut cluster = config.active_cluster(args.config.context.clone())?.clone();
