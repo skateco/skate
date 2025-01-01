@@ -62,7 +62,14 @@ create)
     ensure_public_key
 
     node_names=$(seq $nodes | sed 's/^/node-/' | xargs)
-    #docker build -t sind $SCRIPT_DIR/../images/sind
+
+    set +u
+    should_build="${SIND_BUILD}"
+    set -u
+
+    if [[ -n "${should_build}" ]]; then
+      docker build -t ghcr.io/skateco/sind $SCRIPT_DIR/../images/sind
+    fi
     docker rm -f $node_names
     for f in $(seq $nodes); do
         docker run -d \
