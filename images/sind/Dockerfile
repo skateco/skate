@@ -34,6 +34,7 @@ DEBIAN_FRONTEND=noninteractive clean-install \
      wget \
      dnsutils \
      catatonit \
+     rsyslog \
      conntrack iptables nftables iproute2 ethtool util-linux mount kmod \
      libseccomp2 pigz fuse-overlayfs \
      nfs-common open-iscsi \

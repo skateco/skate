@@ -431,6 +431,18 @@ select_iptables() {
   update-alternatives --set ip6tables "/usr/sbin/ip6tables-${mode}" > /dev/null
 }
 
+enable_rsyslog() {
+  touch /var/log/syslog
+  touch /var/log/auth.log
+  touch /var/log/kern.log
+  chown syslog:adm /var/log/syslog /var/log/auth.log /var/log/kern.log
+  # redirect syslog to pid 1's stdout so that we get it in docker logs
+  tail -n 0 -q -F /var/log/syslog >> /proc/1/fd/1 &
+
+  systemctl enable rsyslog
+  (sleep 5; systemctl start rsyslog) &
+}
+
 #fix_certificate() {
 #  local apiserver_crt_file="/etc/kubernetes/pki/apiserver.crt"
 #  local apiserver_key_file="/etc/kubernetes/pki/apiserver.key"
@@ -574,6 +586,14 @@ select_iptables
 
 systemctl enable ssh
 systemctl enable dnsmasq
+
+enable_rsyslog
+
+
+# Dummy syslog server for debugging
+#touch /var/log/syslog
+#socat -u UNIX-LISTEN:/dev/log,reuseaddr,mode=666,fork, SYSTEM:'tee -a /var/log/syslog && echo "" >> /var/log/syslog' &
+
 
 # we want the command (expected to be systemd) to be PID1, so exec to it
 log_info 'starting init'
