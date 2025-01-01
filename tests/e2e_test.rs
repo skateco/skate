@@ -132,7 +132,19 @@ fn test_deployment() -> Result<(), anyhow::Error> {
         }
     }
 
+    // TODO - check healthchecks work
+    //      - dns entries exist
+    //      - addresses are reachable from each node
+
 
 
     Ok(())
+}
+
+fn test_service() -> Result<(), anyhow::Error> {
+    // TODO
+    // - keepalived is alive
+    // - keepalived realservers exist
+    // - dns entry exist
+    // - service is reachable
 }
