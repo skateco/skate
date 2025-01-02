@@ -73,9 +73,11 @@ fn e2e_test() {
     }
 
     run_test(|| {
+        skate_stdout("config", &["use-context", "e2e-test"]).expect("failed to set context");
+
         test_cluster_creation().expect("failed to create cluster");
         test_deployment().expect("failed to test deployment");
-
+        test_service().expect("failed to test service");
     });
 }
 
@@ -106,8 +108,6 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
 fn test_deployment() -> Result<(), anyhow::Error> {
 
     let root = env::var("CARGO_MANIFEST_DIR")?;
-
-    skate_stdout("config", &["use-context", "e2e-test"])?;
 
     skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")])?;
 
@@ -142,8 +142,34 @@ fn test_deployment() -> Result<(), anyhow::Error> {
 }
 
 fn test_service() -> Result<(), anyhow::Error> {
+
+    let root = env::var("CARGO_MANIFEST_DIR")?;
+
+    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-service.yaml")])?;
+
+    let output = skate("get", &["service", "-n", "test-deployment"])?;
+
+    println!("{}", output.0);
+
+    let stdout = output.0;
+
+    let lines = stdout.lines().skip(1);
+
+    assert_eq!(lines.clone().count(), 1);
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 6 {
+            assert_eq!(parts[0], "test-deployment");
+            assert_eq!(true, parts[1].starts_with("nginx"));
+            assert_eq!(parts[4], "80");
+        }
+    }
+
+
     // TODO - keepalived is alive
     //      - keepalived realservers exist
     //      - dns entry exist
     //      - service is reachable
+    Ok(())
 }
