@@ -146,4 +146,5 @@ fn test_service() -> Result<(), anyhow::Error> {
     //      - keepalived realservers exist
     //      - dns entry exist
     //      - service is reachable
+    Ok(())
 }

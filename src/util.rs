@@ -7,6 +7,8 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::Path;
 use anyhow::anyhow;
+use base64::Engine;
+use base64::engine::general_purpose;
 use chrono::{DateTime, Local};
 use deunicode::deunicode_char;
 use fs2::FileExt;
@@ -275,6 +277,10 @@ pub fn tabled_display_option<T>(o: &Option<T>) -> String where T: Display{
         Some(s) => format!("{}", s),
         None => "-".to_string()
     }
+}
+
+pub fn transfer_file_cmd(contents: &str, remote_path: &str) -> String {
+    format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(contents), remote_path)
 }
 
 #[cfg(test)]
