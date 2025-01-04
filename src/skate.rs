@@ -205,6 +205,7 @@ mod tests {
     use crate::describe::DescribeDeps;
     use crate::get::GetDeps;
     use crate::logs::LogsDeps;
+    use crate::node_shell::NodeShellDeps;
     use crate::refresh::{RefreshArgs, RefreshDeps};
     use crate::rollout::RolloutDeps;
     use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
@@ -231,6 +232,7 @@ mod tests {
     impl LogsDeps for TestDeps {}
     impl RolloutDeps for TestDeps {}
     impl UpgradeDeps for TestDeps {}
+    impl NodeShellDeps for TestDeps {}
 
     impl AllDeps for TestDeps{}
 
