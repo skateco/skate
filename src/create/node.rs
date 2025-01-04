@@ -2,19 +2,16 @@ use std::error::Error;
 use anyhow::anyhow;
 use semver::{Version, VersionReq};
 use std::fs::File;
-use base64::engine::general_purpose;
 use std::collections::HashMap;
 use clap::Args;
 use itertools::Itertools;
 use std::io::Write;
-use base64::Engine;
 use std::net::{ToSocketAddrs};
-use std::str::FromStr;
 use validator::Validate;
 use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
-use crate::oci;
+use crate::{oci, util};
 use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
@@ -150,13 +147,21 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
     let skate_dirs = [
-        "ingress",
-        "ingress/letsencrypt_storage",
-        "dns",
-        "keepalived"].map(|s| format!("/var/lib/skate/{}", s));
+        "/var/lib/ingress",
+        "/var/lib/ingress/letsencrypt_storage",
+        "/var/lib/dns",
+        "/var/lib/keepalived",
+        "/etc/skate",
+    ];
 
     conn.execute_stdout(&format!("sudo mkdir -p {}", skate_dirs.join(" ")), true, true).await?;
-    // _ = conn.execute("sudo podman rm -fa").await;
+
+    // copy rsyslog config
+    conn.execute_stdout(&util::transfer_file_cmd(include_str!("../resources/10-skate.conf"),  "/etc/rsyslog.d/10-skate.conf"), true, true).await?;
+    conn.execute_stdout("sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf", true, true).await?;
+    conn.execute_stdout("sudo touch /var/log/skate.log && sudo chown syslog:adm /var/log/skate.log", true, true).await?;
+    // restart rsyslog
+    conn.execute_stdout("sudo systemctl restart rsyslog", true, true).await?;
 
     setup_networking(&conn, all_conns, &cluster, &node).await?;
 
@@ -247,7 +252,7 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
     let network_backend = "netavark";
 
     conn.execute_stdout("sudo apt-get install -y keepalived", true, true).await?;
-    conn.execute_stdout(&format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/keepalived/keepalived.conf'", general_purpose::STANDARD.encode(include_str!("../resources/keepalived.conf"))), true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(include_str!("../resources/keepalived.conf"),  "/etc/keepalived/keepalived.conf"), true, true).await?;
     conn.execute_stdout("sudo systemctl enable keepalived", true, true).await?;
     conn.execute_stdout("sudo systemctl start keepalived", true, true).await?;
 
@@ -289,10 +294,6 @@ async fn setup_networking(conn: &Box<dyn SshClient>, all_conns: &SshClients, clu
     install_oci_hooks(conn).await?;
 
     let cmd = "sudo podman run --rm busybox echo '1'";
-    conn.execute_stdout(cmd, true, true).await?;
-
-
-    let cmd = "sudo mkdir -p /etc/skate";
     conn.execute_stdout(cmd, true, true).await?;
 
 
@@ -363,10 +364,8 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
     };
     // serialize to /usr/share/containers/oci/hooks.d/skatelet-poststart.json
     let serialized = serde_json::to_string(&oci_poststart_hook).unwrap();
-
     let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
-    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(serialized.as_str(),  path), true, true).await?;
 
 
     let oci_poststop = oci::HookConfig {
@@ -385,8 +384,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
     };
     let serialized = serde_json::to_string(&oci_poststop).unwrap();
     let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
-    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(serialized.as_bytes()), path);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(serialized.as_str(),  path), true, true).await?;
     Ok(())
 }
 
@@ -407,10 +405,7 @@ async fn setup_netavark(conn: &Box<dyn SshClient>, gateway: String, subnet_cidr:
     let netavark_config = include_str!("../resources/podman-network-netavark.json").replace("%%subnet%%", &subnet_cidr)
         .replace("%%gateway%%", &gateway);
 
-    let netvark_config = general_purpose::STANDARD.encode(netavark_config.as_bytes());
-
-    let cmd = format!("sudo bash -c \"echo {}| base64 --decode > /etc/containers/networks/skate.json\"", netvark_config);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(&netavark_config, "/etc/containers/networks/skate.json" ), true, true).await?;
     Ok(())
 }
 
@@ -451,19 +446,16 @@ async fn create_replace_routes_file(conn: &Box<dyn SshClient>, cluster_conf: &Cl
     route_file += "sysctl -p\n";
 
 
-    let route_file = general_purpose::STANDARD.encode(route_file.as_bytes());
-    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > /etc/skate/routes.sh; chmod +x /etc/skate/routes.sh; /etc/skate/routes.sh'", route_file);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(&route_file, "/etc/skate/routes.sh" ), true, true).await?;
+    conn.execute_stdout("sudo chmod +x /etc/skate/routes.sh; sudo /etc/skate/routes.sh", true, true).await?;
 
 
     // Create systemd unit file to call the skate routes file on startup after internet
     // TODO - only add if different
     let path = "/etc/systemd/system/skate-routes.service";
     let unit_file = include_str!("../resources/skate-routes.service");
-    let unit_file = general_purpose::STANDARD.encode(unit_file.as_bytes());
 
-    let cmd = format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", unit_file, path);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&util::transfer_file_cmd(&unit_file, path ), true, true).await?;
 
     conn.execute_stdout("sudo systemctl daemon-reload", true, true).await?;
     conn.execute_stdout("sudo systemctl enable skate-routes.service", true, true).await?;

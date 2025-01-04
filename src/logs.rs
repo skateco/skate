@@ -40,6 +40,21 @@ impl LogArgs {
         }
         cmd
     }
+
+    pub fn to_journalctl_args(&self) -> Vec<String> {
+        let mut cmd: Vec<_> = ["sudo", "journalctl"].map(String::from).to_vec();
+
+        if self.follow {
+            cmd.push("-f".to_string());
+        }
+        if self.tail > 0 {
+            let tail = format!("-n {}", &self.tail);
+            cmd.push(tail);
+        }
+        cmd.push("-u".to_string());
+        cmd
+
+    }
 }
 
 pub trait LogsDeps: With<dyn SshManager> {}
@@ -87,7 +102,7 @@ impl<D:LogsDeps> Logs<D> {
                 self.log_child_pods(&conns, ResourceType::DaemonSet, name, ns, &args).await
             }
             "cronjob" => {
-                self.log_child_pods(&conns, ResourceType::CronJob, name, ns, &args).await
+                self.log_journalctl(&conns, ResourceType::CronJob, name, ns, &args).await
             }
             _ => {
                 Err(anyhow!("Unexpected resource type {}", resource_type).into())
@@ -122,6 +137,26 @@ impl<D:LogsDeps> Logs<D> {
 
         cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q)", resource_type.to_string().to_lowercase(), name, ns));
 
+
+        let cmd = cmd.join(" ");
+
+        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
+
+        let result: Vec<_> = fut.collect().await;
+
+        if result.iter().all(|r| r.is_err()) {
+            return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
+        }
+
+        for res in result {
+            if let Err(e) = res { eprintln!("{}", e) }
+        }
+
+        Ok(())
+    }
+    pub async fn log_journalctl(&self, conns: &SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
+        let mut cmd = args.to_journalctl_args();
+        cmd.push(format!("skate-{}-{}.{}.service", resource_type.to_string(), name, ns));
 
         let cmd = cmd.join(" ");
 

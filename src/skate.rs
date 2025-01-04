@@ -18,6 +18,7 @@ use crate::get::{Get, GetArgs, GetDeps};
 use crate::describe::{Describe, DescribeArgs, DescribeDeps};
 use crate::errors::SkateError;
 use crate::logs::{LogArgs, Logs, LogsDeps};
+use crate::node_shell::{NodeShell, NodeShellArgs, NodeShellDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
@@ -62,6 +63,8 @@ enum Commands {
     Rollout(RolloutArgs),
     #[command(long_about = "Upgrade actions")]
     Upgrade(UpgradeArgs),
+    #[command(long_about = "Start a shell on a node")]
+    NodeShell(NodeShellArgs)
 }
 
 #[derive(Debug, Clone, Args)]
@@ -85,7 +88,9 @@ impl RolloutDeps for Deps{}
 
 impl UpgradeDeps for Deps{}
 
-pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps + UpgradeDeps{} 
+impl NodeShellDeps for Deps{}
+
+pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps + UpgradeDeps + NodeShellDeps{}
 
 impl AllDeps for Deps{}
 
@@ -141,6 +146,10 @@ async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateErro
         Commands::Upgrade(args) => {
             let upgrade = Upgrade{deps};
             upgrade.upgrade(args).await
+        },
+        Commands::NodeShell(args) => {
+            let node_shell = NodeShell{deps};
+            node_shell.node_shell(args).await
         }
     }?;
     Ok(())
@@ -196,6 +205,7 @@ mod tests {
     use crate::describe::DescribeDeps;
     use crate::get::GetDeps;
     use crate::logs::LogsDeps;
+    use crate::node_shell::NodeShellDeps;
     use crate::refresh::{RefreshArgs, RefreshDeps};
     use crate::rollout::RolloutDeps;
     use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
@@ -222,6 +232,7 @@ mod tests {
     impl LogsDeps for TestDeps {}
     impl RolloutDeps for TestDeps {}
     impl UpgradeDeps for TestDeps {}
+    impl NodeShellDeps for TestDeps {}
 
     impl AllDeps for TestDeps{}
 
