@@ -1,7 +1,8 @@
-use std::{env, panic, process};
+use std::{env, panic, process, time};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stderr, stdout};
+use std::thread::sleep;
 use serde_json::Value;
 
 fn setup() {}
@@ -106,7 +107,6 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
     Ok(())
 }
 fn test_deployment() -> Result<(), anyhow::Error> {
-
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
     skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")])?;
@@ -132,17 +132,23 @@ fn test_deployment() -> Result<(), anyhow::Error> {
         }
     }
 
+    let wait = time::Duration::from_secs(5);
+    sleep(wait);
+    for node in ["node-1", "node-2"].iter() {
+        let (stdout, _) = skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"])?;
+        println!("{}", stdout);
+        assert_eq!(stdout.trim().lines().count(), 3);
+    }
+
     // TODO - check healthchecks work
     //      - dns entries exist
     //      - addresses are reachable from each node
-
 
 
     Ok(())
 }
 
 fn test_service() -> Result<(), anyhow::Error> {
-
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
     skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-service.yaml")])?;
@@ -166,10 +172,20 @@ fn test_service() -> Result<(), anyhow::Error> {
         }
     }
 
+    let wait = time::Duration::from_secs(5);
+    sleep(wait);
 
-    // TODO - keepalived is alive
+    for node in ["node-1", "node-2"].iter() {
+        let (stdout, _) = skate("node-shell", &[node, "--", "pgrep", "-x", "keepalived"])?;
+        // keepalived 2 has 2 processes
+        assert_eq!(stdout.trim().lines().count(), 2);
+
+        let (stdout, _) = skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"])?;
+        assert_eq!(stdout.trim().lines().count(), 1);
+    }
+
+    // TODO
     //      - keepalived realservers exist
-    //      - dns entry exist
     //      - service is reachable
     Ok(())
 }

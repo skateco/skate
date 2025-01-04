@@ -147,10 +147,10 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec!() });
 
     let skate_dirs = [
-        "/var/lib/ingress",
-        "/var/lib/ingress/letsencrypt_storage",
-        "/var/lib/dns",
-        "/var/lib/keepalived",
+        "/var/lib/skate/ingress",
+        "/var/lib/skate/ingress/letsencrypt_storage",
+        "/var/lib/skate/dns",
+        "/var/lib/skate/keepalived",
         "/etc/skate",
     ];
 
