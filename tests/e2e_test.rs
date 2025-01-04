@@ -1,25 +1,14 @@
 use std::{env, panic, process, time};
+use tokio::process::{Command};
+use tokio::time::sleep;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::future::Future;
 use std::io::{stderr, stdout};
-use std::thread::sleep;
+use std::time::Duration;
+use anyhow::anyhow;
+use log::error;
 use serde_json::Value;
-
-fn setup() {}
-
-fn teardown() {}
-
-fn run_test<T>(test: T) -> ()
-where
-    T: FnOnce() -> () + panic::UnwindSafe,
-{
-    setup();
-    let result = panic::catch_unwind(|| {
-        test()
-    });
-    teardown();
-    assert!(result.is_ok())
-}
 
 #[derive(Debug, Clone)]
 struct SkateError {
@@ -35,10 +24,30 @@ impl Display for SkateError {
     }
 }
 
-fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
-    let output = process::Command::new("./target/debug/skate")
+pub async fn retry<F, Fu>(attempts: u8, delay: u64, f: F) -> Result<(), ()>
+where F: Fn() -> Fu,
+      Fu: Future<Output=Result<(), ()>>{
+    for n in 0..attempts {
+        if n >= 1 {
+            println!("retried {} times", n);
+        }
+
+        if let Ok(()) = f().await {
+            return Ok(());
+        }
+
+        sleep(Duration::from_secs(delay)).await;
+    }
+
+    println!("error after {} attempts", attempts);
+
+    Err(())
+}
+
+async fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
+    let output = Command::new("./target/debug/skate")
         .args([&[command], args].concat())
-        .output().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
+        .output().await.map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
 
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
@@ -50,15 +59,15 @@ fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
     Ok((stdout, stderr))
 }
 
-fn skate_stdout(command: &str, args: &[&str]) -> Result<(), SkateError> {
-    let mut child = process::Command::new("./target/debug/skate")
+async fn skate_stdout(command: &str, args: &[&str]) -> Result<(), SkateError> {
+    let mut child = Command::new("./target/debug/skate")
         .args([&[command], args].concat())
         .stdout(stdout())
         .stderr(stderr())
         .spawn().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
 
 
-    let status = child.wait().map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
+    let status = child.wait().await.map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
     if !status.success() {
         return Err(SkateError { exit_code: status.code().unwrap_or_default(), message: "".to_string() });
     }
@@ -67,22 +76,20 @@ fn skate_stdout(command: &str, args: &[&str]) -> Result<(), SkateError> {
 }
 
 
-#[test]
-fn e2e_test() {
+#[tokio::test]
+async fn e2e_test() {
     if env::var("SKATE_E2E").is_err() {
         return;
     }
 
-    run_test(|| {
-        skate_stdout("config", &["use-context", "e2e-test"]).expect("failed to set context");
+    skate_stdout("config", &["use-context", "e2e-test"]).await.expect("failed to set context");
 
-        test_cluster_creation().expect("failed to create cluster");
-        test_deployment().expect("failed to test deployment");
-        test_service().expect("failed to test service");
-    });
+    test_cluster_creation().await.expect("failed to create cluster");
+    test_deployment().await.expect("failed to test deployment");
+    test_service().await.expect("failed to test service");
 }
 
-fn test_cluster_creation() -> Result<(), anyhow::Error> {
+async fn test_cluster_creation() -> Result<(), anyhow::Error> {
 
     // let user = env::var("USER")?;
     //
@@ -91,7 +98,7 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
     // skate_stdout("config", &["use-context", "integration-test"])?;
     // skate_stdout("create", &["node", "--name", "node-1", "--host", &addrs.0, "--subnet-cidr", "20.1.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
     // skate_stdout("create", &["node", "--name", "node-2", "--host", &addrs.1, "--subnet-cidr", "20.2.0.0/16", "--key", "/tmp/skate-e2e-key", "--user", &user])?;
-    let (stdout, _stderr) = skate("refresh", &["--json"])?;
+    let (stdout, _stderr) = skate("refresh", &["--json"]).await?;
 
     let state: Value = serde_json::from_str(&stdout)?;
 
@@ -106,12 +113,12 @@ fn test_cluster_creation() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-fn test_deployment() -> Result<(), anyhow::Error> {
+async fn test_deployment() -> Result<(), anyhow::Error> {
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
-    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")])?;
+    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-deployment.yaml")]).await?;
 
-    let output = skate("get", &["pods", "-n", "test-deployment"])?;
+    let output = skate("get", &["pods", "-n", "test-deployment"]).await?;
 
     println!("{}", output.0);
 
@@ -132,12 +139,22 @@ fn test_deployment() -> Result<(), anyhow::Error> {
         }
     }
 
-    let wait = time::Duration::from_secs(5);
-    sleep(wait);
     for node in ["node-1", "node-2"].iter() {
-        let (stdout, _) = skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"])?;
-        println!("{}", stdout);
-        assert_eq!(stdout.trim().lines().count(), 3);
+        let result = retry(10, 1, ||async {
+            match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"]).await {
+                Ok((stdout, _)) => {
+                    if stdout.trim().lines().count() != 3 {
+                        return Err(());
+                    }
+                    Ok(())
+                },
+                Err(err) => {
+                    error!("{:?}", err );
+                    Err(())
+                },
+            }
+        }).await;
+        assert!(result.is_ok());
     }
 
     // TODO - check healthchecks work
@@ -148,12 +165,12 @@ fn test_deployment() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn test_service() -> Result<(), anyhow::Error> {
+async fn test_service() -> Result<(), anyhow::Error> {
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
-    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-service.yaml")])?;
+    skate_stdout("apply", &["-f", &format!("{root}/tests/manifests/test-service.yaml")]).await?;
 
-    let output = skate("get", &["service", "-n", "test-deployment"])?;
+    let output = skate("get", &["service", "-n", "test-deployment"]).await?;
 
     println!("{}", output.0);
 
@@ -172,16 +189,27 @@ fn test_service() -> Result<(), anyhow::Error> {
         }
     }
 
-    let wait = time::Duration::from_secs(5);
-    sleep(wait);
 
     for node in ["node-1", "node-2"].iter() {
-        let (stdout, _) = skate("node-shell", &[node, "--", "pgrep", "-x", "keepalived"])?;
+        let (stdout, _) = skate("node-shell", &[node, "--", "pgrep", "-x", "keepalived"]).await?;
         // keepalived 2 has 2 processes
         assert_eq!(stdout.trim().lines().count(), 2);
 
-        let (stdout, _) = skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"])?;
-        assert_eq!(stdout.trim().lines().count(), 1);
+        let result = retry(10, 1, ||async {
+            match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"]).await {
+                Ok((stdout, _)) => {
+                    if stdout.trim().lines().count() != 1 {
+                        return Err(());
+                    }
+                    Ok(())
+                },
+                Err(err) => {
+                    error!("{}", err );
+                    Err(())
+                },
+            }
+        }).await;
+        assert!(result.is_ok());
     }
 
     // TODO
