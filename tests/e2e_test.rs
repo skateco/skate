@@ -7,9 +7,10 @@ use std::future::Future;
 use std::io::{stderr, stdout};
 use std::time::Duration;
 use anyhow::anyhow;
+use colored::Colorize;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use log::error;
+use log::{error, info};
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
@@ -72,6 +73,7 @@ where
 }
 
 async fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
+    println!("running command: {}", [&["skate", command], args].concat().join(" ").green());
     let output = Command::new("./target/debug/skate")
         .args([&[command], args].concat())
         .output().await.map_err(|e| SkateError { exit_code: -1, message: e.to_string() })?;
