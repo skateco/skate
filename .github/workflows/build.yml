@@ -63,7 +63,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.TARGET}}
-          path: target/${{matrix.TARGET}}/release
+          path: |
+            target/${{matrix.TARGET}}/release/skate
+            target/${{matrix.TARGET}}/release/skatelet
   create-release:
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
