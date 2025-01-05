@@ -7,6 +7,8 @@ use std::future::Future;
 use std::io::{stderr, stdout};
 use std::time::Duration;
 use anyhow::anyhow;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 use log::error;
 use serde_json::Value;
 
@@ -25,8 +27,10 @@ impl Display for SkateError {
 }
 
 pub async fn retry<F, Fu>(attempts: u8, delay: u64, f: F) -> Result<(), ()>
-where F: Fn() -> Fu,
-      Fu: Future<Output=Result<(), ()>>{
+where
+    F: Fn() -> Fu,
+    Fu: Future<Output=Result<(), ()>>,
+{
     for n in 0..attempts {
         if n >= 1 {
             println!("retried {} times", n);
@@ -139,23 +143,26 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
         }
     }
 
-    for node in ["node-1", "node-2"].iter() {
-        let result = retry(10, 1, ||async {
+    let fut: FuturesUnordered<_> = ["node-1", "node-2"].iter().map(|node| async {
+        let result = retry(10, 1, || async {
             match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"]).await {
                 Ok((stdout, _)) => {
                     if stdout.trim().lines().count() != 3 {
                         return Err(());
                     }
                     Ok(())
-                },
+                }
                 Err(err) => {
                     error!("{:?}", err );
                     Err(())
-                },
+                }
             }
         }).await;
         assert!(result.is_ok());
-    }
+        Result::<(), anyhow::Error>::Ok(())
+    }).collect();
+
+    let _: Vec<_> = fut.collect().await;
 
     // TODO - check healthchecks work
     //      - dns entries exist
@@ -190,27 +197,29 @@ async fn test_service() -> Result<(), anyhow::Error> {
     }
 
 
-    for node in ["node-1", "node-2"].iter() {
+    let fut: FuturesUnordered<_> = ["node-1", "node-2"].iter().map(|node| async {
         let (stdout, _) = skate("node-shell", &[node, "--", "pgrep", "-x", "keepalived"]).await?;
         // keepalived 2 has 2 processes
         assert_eq!(stdout.trim().lines().count(), 2);
 
-        let result = retry(10, 1, ||async {
+        let result = retry(10, 1, || async {
             match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"]).await {
                 Ok((stdout, _)) => {
                     if stdout.trim().lines().count() != 1 {
                         return Err(());
                     }
                     Ok(())
-                },
+                }
                 Err(err) => {
                     error!("{}", err );
                     Err(())
-                },
+                }
             }
         }).await;
         assert!(result.is_ok());
-    }
+        Result::<(), anyhow::Error>::Ok(())
+    }).collect();
+    let _: Vec<_> = fut.collect().await;
 
     // TODO
     //      - keepalived realservers exist
