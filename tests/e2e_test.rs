@@ -26,26 +26,49 @@ impl Display for SkateError {
     }
 }
 
-pub async fn retry<F, Fu>(attempts: u8, delay: u64, f: F) -> Result<(), ()>
+pub async fn retry<F, Fu, R>(attempts: u8, delay: u64, f: F) -> Result<R, anyhow::Error>
 where
     F: Fn() -> Fu,
-    Fu: Future<Output=Result<(), ()>>,
+    Fu: Future<Output=Result<R, anyhow::Error>>,
 {
     for n in 0..attempts {
         if n >= 1 {
             println!("retried {} times", n);
         }
 
-        if let Ok(()) = f().await {
-            return Ok(());
+        if let Ok(res) = f().await {
+            return Ok(res);
         }
 
         sleep(Duration::from_secs(delay)).await;
     }
 
-    println!("error after {} attempts", attempts);
+    Err(anyhow!("error after {} attempts", attempts))
+}
 
-    Err(())
+pub async fn retry_all_nodes<F, Fu, R>(attempts: u8, delay: u64, f: F) -> Vec<Result<R, anyhow::Error>>
+where
+    F: Fn(String) -> Fu,
+    Fu: Future<Output=Result<R, anyhow::Error>>,
+{
+    let fut: FuturesUnordered<_> = ["node-1", "node-2"].iter().map(|node| async {
+        for n in 0..attempts {
+            if n >= 1 {
+                println!("retried {} times", n);
+            }
+
+            if let Ok(res) = f(node.to_string()).await {
+                return Ok(res);
+            }
+
+            sleep(Duration::from_secs(delay)).await;
+        }
+
+        Err(anyhow!("error after {} attempts", attempts))
+    }).collect();
+
+    let result: Vec<_> = fut.collect().await;
+    result
 }
 
 async fn skate(command: &str, args: &[&str]) -> Result<(String, String), SkateError> {
@@ -143,26 +166,21 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
         }
     }
 
-    let fut: FuturesUnordered<_> = ["node-1", "node-2"].iter().map(|node| async {
-        let result = retry(10, 1, || async {
-            match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"]).await {
-                Ok((stdout, _)) => {
-                    if stdout.trim().lines().count() != 3 {
-                        return Err(());
-                    }
-                    Ok(())
+    let results = retry_all_nodes(10, 1, |node: String| async move {
+        match skate("node-shell", &[&node, "--", "dig", "+short", "nginx.test-deployment.pod.cluster.skate"]).await {
+            Ok((stdout, _)) => {
+                if stdout.trim().lines().count() != 3 {
+                    return Err(anyhow!("expected 3 dns entries, got {}", stdout.trim().lines().count()));
                 }
-                Err(err) => {
-                    error!("{:?}", err );
-                    Err(())
-                }
+                Ok(())
             }
-        }).await;
-        assert!(result.is_ok());
-        Result::<(), anyhow::Error>::Ok(())
-    }).collect();
+            Err(err) => {
+                Err(err.into())
+            }
+        }
+    }).await;
 
-    let _: Vec<_> = fut.collect().await;
+    assert!(results.iter().all(|r| r.is_ok()));
 
     // TODO - check healthchecks work
     //      - dns entries exist
@@ -197,29 +215,34 @@ async fn test_service() -> Result<(), anyhow::Error> {
     }
 
 
-    let fut: FuturesUnordered<_> = ["node-1", "node-2"].iter().map(|node| async {
-        let (stdout, _) = skate("node-shell", &[node, "--", "pgrep", "-x", "keepalived"]).await?;
-        // keepalived 2 has 2 processes
-        assert_eq!(stdout.trim().lines().count(), 2);
+    let results = retry_all_nodes(10, 1, |node: String| async move {
+        let (stdout, _) = skate("node-shell", &[&node, "--", "pgrep", "-x", "keepalived"]).await?;
 
-        let result = retry(10, 1, || async {
-            match skate("node-shell", &[node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"]).await {
-                Ok((stdout, _)) => {
-                    if stdout.trim().lines().count() != 1 {
-                        return Err(());
-                    }
-                    Ok(())
+        // keepalived 2 has 2 processes
+        let procs = stdout.trim().lines().count();
+        if procs != 2 {
+            return Err(anyhow!("expected 2 keepalived processes, got {}", procs));
+        }
+        Ok(())
+    }).await;
+
+    assert!(results.iter().all(|r| r.is_ok()));
+
+    let results = retry_all_nodes(10, 1, |node: String| async move {
+        match skate("node-shell", &[&node, "--", "dig", "+short", "nginx.test-deployment.svc.cluster.skate"]).await {
+            Ok((stdout, _)) => {
+                if stdout.trim().lines().count() != 1 {
+                    return Err(anyhow!("expected 1 dns entry, got {}", stdout.trim().lines().count()));
                 }
-                Err(err) => {
-                    error!("{}", err );
-                    Err(())
-                }
+                Ok(())
             }
-        }).await;
-        assert!(result.is_ok());
-        Result::<(), anyhow::Error>::Ok(())
-    }).collect();
-    let _: Vec<_> = fut.collect().await;
+            Err(err) => {
+                Err(err.into())
+            }
+        }
+    }).await;
+
+    assert!(results.iter().all(|r| r.is_ok()));
 
     // TODO
     //      - keepalived realservers exist
