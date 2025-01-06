@@ -5,12 +5,28 @@ permissions:
 
 on:
   push:
-    # only trigger on branches, not on tags
     branches: '**'
     tags:
       - v[0-9]+.*
 
 jobs:
+  e2e-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: e2e-cargo-registry
+      - uses: actions/checkout@v4
+      - name: E2E Tests in Sind
+        run: RUST_BACKTRACE=1 make run-e2e-tests-docker
   build:
     strategy:
       matrix:
@@ -29,11 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ./target
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: build-cargo-registry-${{matrix.TARGET}}
       - name: Install and configure dependencies
         run: |
@@ -54,9 +73,6 @@ jobs:
         run: rustup target add $TARGET
       - name: Normal Tests
         run: cargo test
-      - name: E2E Tests in Sind
-        if: ${{ matrix.TARGET == 'x86_64-unknown-linux-gnu' }}
-        run: RUST_BACKTRACE=1 make run-e2e-tests-docker
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Archive artifacts
@@ -75,7 +91,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
   release:
-    needs: [ build, create-release ]
+    needs: [ build, e2e-test, create-release ]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     strategy:
