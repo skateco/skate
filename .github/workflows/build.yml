@@ -15,11 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ./target
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: e2e-cargo-registry
       - uses: actions/checkout@v4
       - name: E2E Tests in Sind
@@ -42,11 +45,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ./target
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
           key: build-cargo-registry-${{matrix.TARGET}}
       - name: Install and configure dependencies
         run: |
