@@ -42,7 +42,7 @@ impl LogArgs {
     }
 
     pub fn to_journalctl_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = ["sudo", "journalctl"].map(String::from).to_vec();
+        let mut cmd: Vec<_> = ["sudo", "journalctl", "--output", "short-iso-precise", "--quiet"].map(String::from).to_vec();
 
         if self.follow {
             cmd.push("-f".to_string());
@@ -133,14 +133,19 @@ impl<D:LogsDeps> Logs<D> {
     }
 
     pub async fn log_child_pods(&self, conns: &SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
-        let mut cmd = args.to_podman_log_args();
+        let log_cmd = args.to_podman_log_args().join(" ");
 
-        cmd.push(format!("$(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q)", resource_type.to_string().to_lowercase(), name, ns));
+        let cmd = format!("for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;", resource_type.to_string().to_lowercase(), name, ns, log_cmd);
 
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 
-        let cmd = cmd.join(" ");
+        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_to_sender(&cmd, tx.clone())).collect();
 
-        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
+        tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                print!("{}", msg);
+            }
+        });
 
         let result: Vec<_> = fut.collect().await;
 
@@ -160,7 +165,16 @@ impl<D:LogsDeps> Logs<D> {
 
         let cmd = cmd.join(" ");
 
-        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
+
+        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_to_sender(&cmd, tx.clone())).collect();
+
+        tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+                print!("{}", msg);
+            }
+        });
+
 
         let result: Vec<_> = fut.collect().await;
 
