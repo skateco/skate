@@ -19,6 +19,7 @@ use itertools::Itertools;
 use russh::{ChannelMsg, CryptoVec};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::mpsc;
 use crate::github;
 use crate::resource::ResourceType;
 
@@ -30,6 +31,7 @@ pub trait SshClient: Send + Sync {
     async fn remove_resource(&self, resource_type: ResourceType, name: &str, namespace: &str) -> Result<(String, String), Box<dyn Error>>;
     async fn remove_resource_by_manifest(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>>;
     async fn execute_stdout(&self, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>>;
+    async fn execute_to_sender(&self, cmd: &str, sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>>;
     // TODO-merge this into execute_stdout
     async fn execute_noisy(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
     async fn execute(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
@@ -102,6 +104,17 @@ impl HostInfo {
 
 impl RealSsh {
 
+
+    async fn write_crypto_vec(self: &RealSsh, data: &CryptoVec,  prev_last_char: char, sender: &mpsc::Sender<String>) -> char {
+        let binding = data.to_vec();
+        let s = String::from_utf8_lossy(&binding);
+        sender.send(s.to_string()).await.expect("failed to send");
+        if s.len() > 0 {
+            s.chars().last().unwrap()
+        } else {
+            prev_last_char
+        }
+    }
 
     fn print_crypto_vec(self: &RealSsh, data: &CryptoVec, prefix_output: bool, prev_last_char: char) -> char {
         let binding = data.to_vec();
@@ -315,6 +328,46 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 Err(anyhow!("failed to remove resource: exit code {}, {}", result.exit_status, message).into())
             }
         }
+    }
+
+    async fn execute_to_sender(&self, cmd: &str, sender: mpsc::Sender<String>) -> Result<(), Box<dyn Error>> {
+
+        let mut ch = self.client.get_channel().await?;
+        ch.exec(true, cmd).await?;
+
+        let mut result: Option<_> = None;
+        let mut last_char = '\n';
+
+        while let Some(msg) = ch.wait().await {
+            //dbg!(&msg);
+            match msg {
+                // If we get data, add it to the buffer
+                ChannelMsg::Data { ref data } => {
+                    last_char = self.write_crypto_vec(data, last_char, &sender).await;
+                }
+                ChannelMsg::ExtendedData { ref data, ext } => {
+                    if ext == 1 {
+                        last_char = self.write_crypto_vec(data, last_char, &sender).await;
+                    }
+                }
+                // If we get an exit code report, store it, but crucially don't
+                // assume this message means end of communications. The data might
+                // not be finished yet!
+                ChannelMsg::ExitStatus { exit_status } => result = Some(exit_status),
+
+                // We SHOULD get this EOF messagge, but 4254 sec 5.3 also permits
+                // the channel to close without it being sent. And sometimes this
+                // message can even precede the Data message, so don't handle it
+                // russh::ChannelMsg::Eof => break,
+                _ => {}
+            }
+        }
+
+        if result.is_none() || result == Some(0) {
+            return Ok(());
+        }
+        Err(anyhow!("exit status {}", result.unwrap()).into())
+
     }
     async fn execute_stdout(self: &RealSsh, cmd: &str, print_command: bool, prefix_output: bool) -> Result<(), Box<dyn Error>> {
         if print_command {
