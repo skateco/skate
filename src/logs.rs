@@ -29,7 +29,7 @@ pub struct LogArgs {
 
 impl LogArgs {
     pub fn to_podman_log_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names"].map(String::from).to_vec();
+        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names", "--timestamps"].map(String::from).to_vec();
 
         if self.follow {
             cmd.push("--follow".to_string());
