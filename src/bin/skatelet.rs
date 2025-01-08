@@ -1,8 +1,13 @@
 #![warn(unused_extern_crates)]
-use skate::errors::SkateError;
 use skate::skatelet;
 
 #[tokio::main]
-async fn main() -> Result<(), SkateError> {
-    skatelet().await
+async fn main() {
+    match skatelet().await {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("{}", e.to_string());
+            std::process::exit(1);
+        }
+    }
 }

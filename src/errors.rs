@@ -1,6 +1,7 @@
 use thiserror::Error;
 use std::error::Error as RustError;
 use handlebars::RenderError;
+use validator::{ValidationErrors};
 use crate::ssh::SshError;
 
 #[derive(Error, Debug)]
@@ -25,10 +26,11 @@ pub enum SkateError {
     Ssh(#[from] SshError),
     #[error("Error: {0:?}")]
     Multi(Vec<SkateError>),
+    #[error("Error: {}", .0)]
+    ValidationErrors(#[from] ValidationErrors),
     #[error("unknown error")]
     Unknown,
 }
-
 
 impl From<String> for SkateError {
     fn from(value: String) -> Self {

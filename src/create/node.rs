@@ -12,6 +12,7 @@ use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
 use crate::{oci, util};
+use crate::errors::SkateError;
 use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
@@ -46,7 +47,7 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
-pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), Box<dyn Error>> {
+pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), SkateError> {
     args.validate()?;
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
 
