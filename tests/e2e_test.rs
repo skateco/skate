@@ -1,4 +1,4 @@
-use std::{env, panic, process, time};
+use std::{env};
 use tokio::process::{Command};
 use tokio::time::sleep;
 use std::error::Error;
@@ -10,7 +10,6 @@ use anyhow::anyhow;
 use colored::Colorize;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use log::{error, info};
 use serde_json::Value;
 
 #[derive(Debug, Clone)]
