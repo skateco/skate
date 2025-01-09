@@ -5,7 +5,16 @@
   env.GREET = "devenv";
 
   # https://devenv.sh/packages/
-  packages = [ pkgs.git ];
+    packages = [
+      pkgs.git
+      pkgs.openssl
+      pkgs.docker
+    ] ++ lib.optionals pkgs.stdenv.isDarwin [
+      # Seems like some part of sqlx needs this if on mac
+      # Symptom was "ld: framework not found SystemConfiguration"
+      pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+    ];
+
 
   # https://devenv.sh/languages/
   # languages.rust.enable = true;
@@ -42,4 +51,11 @@
   # pre-commit.hooks.shellcheck.enable = true;
 
   # See full reference at https://devenv.sh/reference/options/
+
+  languages.rust = {
+    enable = true;
+    # https://devenv.sh/reference/options/#languagesrustchannel
+    channel = "stable";
+  };
+
 }
