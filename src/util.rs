@@ -1,3 +1,18 @@
+use crate::exec::ShellExec;
+use crate::resource::SupportedResources;
+use anyhow::anyhow;
+use base64::engine::general_purpose;
+use base64::Engine;
+use chrono::{DateTime, Local};
+use deunicode::deunicode_char;
+use fs2::FileExt;
+use itertools::Itertools;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::Metadata;
+use log::info;
+use once_cell::sync::Lazy;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -6,22 +21,6 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::Path;
-use anyhow::anyhow;
-use base64::Engine;
-use base64::engine::general_purpose;
-use chrono::{DateTime, Local};
-use deunicode::deunicode_char;
-use fs2::FileExt;
-use itertools::Itertools;
-use k8s_openapi::Metadata;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use log::info;
-use serde::{Deserialize, Serialize};
-use regex::Regex;
-use once_cell::sync::Lazy;
-use crate::resource::SupportedResources;
-use crate::exec::{ShellExec};
-
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -98,8 +97,7 @@ where
     format!("{:x}", hasher.finish())
 }
 
-pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String
-{
+pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize + Clone)) -> String {
     let mut obj = obj.clone();
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
@@ -107,10 +105,12 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + C
     labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().labels = Option::from(labels);
 
-
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 
-    annotations = annotations.into_iter().sorted_by_key(|l| l.1.clone()).collect();
+    annotations = annotations
+        .into_iter()
+        .sorted_by_key(|l| l.1.clone())
+        .collect();
     obj.metadata_mut().annotations = Option::from(annotations);
 
     let serialized = serde_yaml::to_string(&obj).unwrap();
@@ -119,7 +119,6 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty=ObjectMeta> + Serialize + C
     serialized.hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, Hash, PartialEq)]
 pub struct NamespacedName {
@@ -145,13 +144,15 @@ impl Display for NamespacedName {
 
 impl NamespacedName {
     pub fn new(name: &str, namespace: &str) -> Self {
-        NamespacedName { name: name.to_string(), namespace: namespace.to_string() }
+        NamespacedName {
+            name: name.to_string(),
+            namespace: namespace.to_string(),
+        }
     }
 }
 
 // returns name, namespace
-pub fn metadata_name(obj: &impl Metadata<Ty=ObjectMeta>) -> NamespacedName
-{
+pub fn metadata_name(obj: &impl Metadata<Ty = ObjectMeta>) -> NamespacedName {
     let m = obj.metadata();
 
     let name = m.labels.as_ref().and_then(|l| l.get("skate.io/name"));
@@ -169,9 +170,7 @@ pub fn metadata_name(obj: &impl Metadata<Ty=ObjectMeta>) -> NamespacedName
 }
 
 // hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it
-pub fn hash_k8s_resource(obj: &mut (impl Metadata<Ty=ObjectMeta> + Serialize + Clone)) -> String
-
-{
+pub fn hash_k8s_resource(obj: &mut (impl Metadata<Ty = ObjectMeta> + Serialize + Clone)) -> String {
     let hash = calc_k8s_resource_hash(obj.clone());
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
@@ -199,16 +198,15 @@ pub fn age(date_time: DateTime<Local>) -> String {
             let days = duration.as_secs() / (60 * 60 * 24);
             format!("{}d", days)
         }
-        Err(_) => "".to_string()
+        Err(_) => "".to_string(),
     }
 }
 
 pub fn spawn_orphan_process<I, S>(cmd: &str, args: I)
 where
-    I: IntoIterator<Item=S>,
+    I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-
     // The fact that we don't have a `?` or `unrwap` here is intentional
     // This disowns the process, which is what we want.
     let _ = std::process::Command::new(cmd)
@@ -218,9 +216,13 @@ where
         .stderr(std::process::Stdio::null())
         .spawn();
 }
-pub fn lock_file<T>(file: &str, cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>) -> Result<T, Box<dyn Error>> {
+pub fn lock_file<T>(
+    file: &str,
+    cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>>>,
+) -> Result<T, Box<dyn Error>> {
     let lock_path = Path::new(file);
-    let lock_file = File::create(lock_path).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
+    let lock_file =
+        File::create(lock_path).map_err(|e| anyhow!("failed to create/open lock file: {}", e))?;
     info!("waiting for lock on {}", lock_path.display());
     lock_file.lock_exclusive()?;
     info!("locked {}", lock_path.display());
@@ -233,12 +235,15 @@ pub fn lock_file<T>(file: &str, cb: Box<dyn FnOnce() -> Result<T, Box<dyn Error>
 fn write_manifest_to_file(manifest: &str) -> Result<String, Box<dyn Error>> {
     let file_path = format!("/tmp/skate-{}.yaml", hash_string(manifest));
     let mut file = File::create(file_path.clone()).expect("failed to open file for manifests");
-    file.write_all(manifest.as_ref()).expect("failed to write manifest to file");
+    file.write_all(manifest.as_ref())
+        .expect("failed to write manifest to file");
     Ok(file_path)
 }
 
-
-pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> Result<(), Box<dyn Error>> {
+pub fn apply_play(
+    execer: &Box<dyn ShellExec>,
+    object: &SupportedResources,
+) -> Result<(), Box<dyn Error>> {
     let file_path = write_manifest_to_file(&serde_yaml::to_string(object)?)?;
 
     let mut args = vec!["play", "kube", &file_path, "--start"];
@@ -256,37 +261,49 @@ pub fn apply_play(execer: &Box<dyn ShellExec>, object: &SupportedResources) -> R
 
 pub fn version(long: bool) -> String {
     let tag = crate::build::TAG;
-    let short_version =  if tag.is_empty() {
+    let short_version = if tag.is_empty() {
         crate::build::COMMIT_HASH
     } else {
         tag
     };
 
     if !long {
-        return format!("{}", short_version)
+        return format!("{}", short_version);
     }
-    format!(r#"{}
+    format!(
+        r#"{}
 branch:{}
 commit_hash:{}
-build_time:{}"#, short_version, crate::build::BRANCH, crate::build::COMMIT_HASH, crate::build::BUILD_TIME)
+build_time:{}"#,
+        short_version,
+        crate::build::BRANCH,
+        crate::build::COMMIT_HASH,
+        crate::build::BUILD_TIME
+    )
 }
 
-
-pub fn tabled_display_option<T>(o: &Option<T>) -> String where T: Display{
+pub fn tabled_display_option<T>(o: &Option<T>) -> String
+where
+    T: Display,
+{
     match o {
         Some(s) => format!("{}", s),
-        None => "-".to_string()
+        None => "-".to_string(),
     }
 }
 
 pub fn transfer_file_cmd(contents: &str, remote_path: &str) -> String {
-    format!("sudo bash -c -eu 'echo {}| base64 --decode > {}'", general_purpose::STANDARD.encode(contents), remote_path)
+    format!(
+        "sudo bash -c -eu 'echo {}| base64 --decode > {}'",
+        general_purpose::STANDARD.encode(contents),
+        remote_path
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Duration, Local};
     use crate::util::age;
+    use chrono::{Duration, Local};
 
     #[test]
     fn test_age() {
@@ -294,8 +311,8 @@ mod tests {
             (Local::now(), "0s"),
             (Local::now() - Duration::seconds(20), "20s"),
             (Local::now() - Duration::minutes(20), "20m"),
-            (Local::now() - Duration::minutes(20*60), "20h"),
-            (Local::now() - Duration::minutes(20*60*24), "20d"),
+            (Local::now() - Duration::minutes(20 * 60), "20h"),
+            (Local::now() - Duration::minutes(20 * 60 * 24), "20d"),
         ];
 
         for (input, expect) in conditions {
@@ -305,9 +322,6 @@ mod tests {
     }
 }
 
-pub static RE_CIDR: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap()
-});
-pub static RE_IP: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap()
-});
+pub static RE_CIDR: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
+pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());

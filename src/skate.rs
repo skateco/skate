@@ -1,30 +1,27 @@
 #![allow(unused)]
 
-use crate::util;
-use clap::{Args, Parser, Subcommand};
-use serde::{Deserialize, Serialize};
 use crate::apply::{Apply, ApplyArgs, ApplyDeps};
-use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
-use strum_macros::Display;
-use std::fmt::{Display, Formatter};
-use crate::config;
 use crate::cluster::{Cluster, ClusterArgs, ClusterDeps};
+use crate::config;
 use crate::config_cmd::ConfigArgs;
 use crate::cordon::{Cordon, CordonArgs, CordonDeps, UncordonArgs};
 use crate::create::{Create, CreateArgs, CreateDeps};
 use crate::delete::{Delete, DeleteArgs, DeleteDeps};
 use crate::deps::Deps;
-use crate::get::{Get, GetArgs, GetDeps};
 use crate::describe::{Describe, DescribeArgs, DescribeDeps};
 use crate::errors::SkateError;
+use crate::get::{Get, GetArgs, GetDeps};
 use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::node_shell::{NodeShell, NodeShellArgs, NodeShellDeps};
+use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
 use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
-
-
-
+use crate::util;
+use clap::{Args, Parser, Subcommand};
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
+use strum_macros::Display;
 
 #[derive(Debug, Parser)]
 #[command(name = "skate")]
@@ -64,12 +61,16 @@ enum Commands {
     #[command(long_about = "Upgrade actions")]
     Upgrade(UpgradeArgs),
     #[command(long_about = "Start a shell on a node")]
-    NodeShell(NodeShellArgs)
+    NodeShell(NodeShellArgs),
 }
 
 #[derive(Debug, Clone, Args)]
 pub struct ConfigFileArgs {
-    #[arg(long, long_help = "Configuration for skate.", default_value = "~/.skate/config.yaml")]
+    #[arg(
+        long,
+        long_help = "Configuration for skate.",
+        default_value = "~/.skate/config.yaml"
+    )]
     pub skateconfig: String,
     #[arg(long, long_help = "Name of the context to use.")]
     pub context: Option<String>,
@@ -80,19 +81,33 @@ impl ClusterDeps for Deps {}
 impl CreateDeps for Deps {}
 impl DeleteDeps for Deps {}
 impl CordonDeps for Deps {}
-impl RefreshDeps for Deps{}
-impl GetDeps for Deps{}
-impl DescribeDeps for Deps{}
-impl LogsDeps for Deps{}
-impl RolloutDeps for Deps{}
+impl RefreshDeps for Deps {}
+impl GetDeps for Deps {}
+impl DescribeDeps for Deps {}
+impl LogsDeps for Deps {}
+impl RolloutDeps for Deps {}
 
-impl UpgradeDeps for Deps{}
+impl UpgradeDeps for Deps {}
 
-impl NodeShellDeps for Deps{}
+impl NodeShellDeps for Deps {}
 
-pub trait AllDeps: ApplyDeps + ClusterDeps + CreateDeps + DeleteDeps + CordonDeps + RefreshDeps + GetDeps + DescribeDeps + LogsDeps + RolloutDeps + UpgradeDeps + NodeShellDeps{}
+pub trait AllDeps:
+    ApplyDeps
+    + ClusterDeps
+    + CreateDeps
+    + DeleteDeps
+    + CordonDeps
+    + RefreshDeps
+    + GetDeps
+    + DescribeDeps
+    + LogsDeps
+    + RolloutDeps
+    + UpgradeDeps
+    + NodeShellDeps
+{
+}
 
-impl AllDeps for Deps{}
+impl AllDeps for Deps {}
 
 async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateError> {
     config::ensure_config();
@@ -107,32 +122,32 @@ async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateErro
         }
 
         Commands::Apply(args) => {
-            let apply = Apply { deps, };
+            let apply = Apply { deps };
             apply.apply_self(args).await
         }
         Commands::Refresh(args) => {
-            let refresh = Refresh{deps};
+            let refresh = Refresh { deps };
             refresh.refresh(args).await
-        },
+        }
         Commands::Get(args) => {
-            let get= Get{deps};
+            let get = Get { deps };
             get.get(args).await
-        },
+        }
         Commands::Describe(args) => {
-            let describe = Describe{deps};
+            let describe = Describe { deps };
             describe.describe(args).await
-        },
+        }
         Commands::Logs(args) => {
-            let logs= Logs{deps};
+            let logs = Logs { deps };
             logs.logs(args).await
-        },
+        }
         Commands::Config(args) => crate::config_cmd::config(args),
         Commands::Cordon(args) => {
-            let cordon = Cordon {deps};
+            let cordon = Cordon { deps };
             cordon.cordon(args).await
         }
         Commands::Uncordon(args) => {
-            let cordon = Cordon {deps };
+            let cordon = Cordon { deps };
             cordon.uncordon(args).await
         }
         Commands::Cluster(args) => {
@@ -140,15 +155,15 @@ async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateErro
             cluster.cluster(args).await
         }
         Commands::Rollout(args) => {
-            let rollout = Rollout{deps};
+            let rollout = Rollout { deps };
             rollout.rollout(args).await
-        },
+        }
         Commands::Upgrade(args) => {
-            let upgrade = Upgrade{deps};
+            let upgrade = Upgrade { deps };
             upgrade.upgrade(args).await
-        },
+        }
         Commands::NodeShell(args) => {
-            let node_shell = NodeShell{deps};
+            let node_shell = NodeShell { deps };
             node_shell.node_shell(args).await
         }
     }?;
@@ -160,8 +175,7 @@ pub async fn skate<D: AllDeps>(deps: D) -> Result<(), SkateError> {
     skate_with_args(deps, args).await
 }
 
-
-#[derive(Debug, Clone, PartialEq,Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Platform {
     pub arch: String,
     pub distribution: Distribution,
@@ -169,7 +183,10 @@ pub struct Platform {
 
 impl Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("arch: {}, distribution: {}", self.arch, self.distribution))
+        f.write_str(&format!(
+            "arch: {}, distribution: {}",
+            self.arch, self.distribution
+        ))
     }
 }
 
@@ -188,14 +205,13 @@ impl From<&str> for Distribution {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,
             s if s.starts_with("ubuntu") => Ubuntu,
-            _ => Unknown
+            _ => Unknown,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{skate, AllDeps};
     use crate::apply::ApplyDeps;
     use crate::cluster::ClusterDeps;
     use crate::cordon::CordonDeps;
@@ -208,16 +224,17 @@ mod tests {
     use crate::node_shell::NodeShellDeps;
     use crate::refresh::{RefreshArgs, RefreshDeps};
     use crate::rollout::RolloutDeps;
-    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
     use crate::skate::Commands::Refresh;
+    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
     use crate::test_helpers::ssh_mocks::MockSshManager;
     use crate::upgrade::UpgradeDeps;
+    use crate::{skate, AllDeps};
 
-    struct TestDeps{}
+    struct TestDeps {}
 
-    impl With<dyn SshManager> for TestDeps{
+    impl With<dyn SshManager> for TestDeps {
         fn get(&self) -> Box<dyn SshManager> {
-            Box::new(MockSshManager{}) as Box<dyn SshManager>
+            Box::new(MockSshManager {}) as Box<dyn SshManager>
         }
     }
 
@@ -234,24 +251,24 @@ mod tests {
     impl UpgradeDeps for TestDeps {}
     impl NodeShellDeps for TestDeps {}
 
-    impl AllDeps for TestDeps{}
+    impl AllDeps for TestDeps {}
 
     #[tokio::test]
     async fn test_runs() {
-        let deps = TestDeps{};
+        let deps = TestDeps {};
 
-        skate_with_args(deps, Cli{ command: Refresh(RefreshArgs{
-            json: false,
-            config: ConfigFileArgs{
-                skateconfig: "".to_string(),
-                context: None,
+        skate_with_args(
+            deps,
+            Cli {
+                command: Refresh(RefreshArgs {
+                    json: false,
+                    config: ConfigFileArgs {
+                        skateconfig: "".to_string(),
+                        context: None,
+                    },
+                }),
             },
-        }) }).await;
-
+        )
+        .await;
     }
 }
-
-
-
-
-

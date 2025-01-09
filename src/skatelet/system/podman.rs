@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Local};
-use serde::{Deserialize, Serialize};
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use strum_macros::{Display, EnumString};
 use tabled::Tabled;
 
@@ -53,7 +53,8 @@ impl PodmanPodStatus {
             PodmanPodStatus::Degraded => "Running",
             PodmanPodStatus::Created => "Pending",
             PodmanPodStatus::Error => "Failed",
-        }.to_string()
+        }
+        .to_string()
     }
     fn from_pod_phase(phase: &str) -> Self {
         match phase {
@@ -81,30 +82,50 @@ pub struct PodmanPodInfo {
     pub containers: Option<Vec<PodmanContainerInfo>>,
 }
 
-
 impl PodmanPodInfo {
     pub fn name(&self) -> String {
-        self.labels.get("skate.io/name").cloned().unwrap_or("".to_string())
+        self.labels
+            .get("skate.io/name")
+            .cloned()
+            .unwrap_or("".to_string())
     }
     pub fn namespace(&self) -> String {
-        self.labels.get("skate.io/namespace").cloned().unwrap_or("".to_string())
+        self.labels
+            .get("skate.io/namespace")
+            .cloned()
+            .unwrap_or("".to_string())
     }
     pub fn deployment(&self) -> String {
-        self.labels.get("skate.io/deployment").cloned().unwrap_or("".to_string())
+        self.labels
+            .get("skate.io/deployment")
+            .cloned()
+            .unwrap_or("".to_string())
     }
     pub fn daemonset(&self) -> String {
-        self.labels.get("skate.io/daemonset").cloned().unwrap_or("".to_string())
+        self.labels
+            .get("skate.io/daemonset")
+            .cloned()
+            .unwrap_or("".to_string())
     }
 }
-
 
 impl From<Pod> for PodmanPodInfo {
     fn from(value: Pod) -> Self {
         PodmanPodInfo {
             id: value.metadata.uid.unwrap_or("".to_string()),
             name: value.metadata.name.unwrap_or("".to_string()),
-            status: PodmanPodStatus::from_pod_phase(value.status.and_then(|s| s.phase).unwrap_or("".to_string()).as_str()),
-            created: value.metadata.creation_timestamp.map(|ts| DateTime::from(ts.0)).unwrap_or(Local::now()),
+            status: PodmanPodStatus::from_pod_phase(
+                value
+                    .status
+                    .and_then(|s| s.phase)
+                    .unwrap_or("".to_string())
+                    .as_str(),
+            ),
+            created: value
+                .metadata
+                .creation_timestamp
+                .map(|ts| DateTime::from(ts.0))
+                .unwrap_or(Local::now()),
             labels: value.metadata.labels.unwrap_or_default(),
             containers: None, // TODO
         }
@@ -116,7 +137,9 @@ impl From<PodmanPodInfo> for Pod {
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
-                creation_timestamp: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(DateTime::from(val.created))),
+                creation_timestamp: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Time(
+                    DateTime::from(val.created),
+                )),
                 deletion_grace_period_seconds: None,
                 deletion_timestamp: None,
                 finalizers: None,
@@ -124,13 +147,18 @@ impl From<PodmanPodInfo> for Pod {
                 generation: None,
                 labels: match val.labels.len() {
                     0 => None,
-                    _ => Some(val.labels.iter().filter_map(|(k, v)| {
-                        if k.starts_with("nodeselector/") {
-                            None
-                        } else {
-                            Some((k.clone(), v.clone()))
-                        }
-                    }).collect())
+                    _ => Some(
+                        val.labels
+                            .iter()
+                            .filter_map(|(k, v)| {
+                                if k.starts_with("nodeselector/") {
+                                    None
+                                } else {
+                                    Some((k.clone(), v.clone()))
+                                }
+                            })
+                            .collect(),
+                    ),
                 },
                 managed_fields: None,
                 name: Some(val.name.clone()),
@@ -158,13 +186,24 @@ impl From<PodmanPodInfo> for Pod {
                 image_pull_secrets: None,
                 init_containers: None,
                 node_name: None,
-                node_selector: Some(val.labels.iter().filter_map(|(k, v)| {
-                    if k.starts_with("nodeselector/") {
-                        Some(((*k.clone()).strip_prefix("nodeselector/").unwrap_or(k).to_string(), (*v).clone()))
-                    } else {
-                        None
-                    }
-                }).collect::<BTreeMap<String, String>>()),
+                node_selector: Some(
+                    val.labels
+                        .iter()
+                        .filter_map(|(k, v)| {
+                            if k.starts_with("nodeselector/") {
+                                Some((
+                                    (*k.clone())
+                                        .strip_prefix("nodeselector/")
+                                        .unwrap_or(k)
+                                        .to_string(),
+                                    (*v).clone(),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<BTreeMap<String, String>>(),
+                ),
                 os: None,
                 overhead: None,
                 preemption_policy: None,
@@ -187,8 +226,7 @@ impl From<PodmanPodInfo> for Pod {
                 topology_spread_constraints: None,
                 volumes: None,
             }), // TODO
-            status: Some(K8sPodStatus
-            {
+            status: Some(K8sPodStatus {
                 conditions: None,
                 container_statuses: None,
                 ephemeral_container_statuses: None,

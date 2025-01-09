@@ -1,9 +1,9 @@
+use crate::filestore::ObjectListItem;
+use crate::get::GetObjectArgs;
+use crate::skatelet::SystemInfo;
+use crate::state::state::ClusterState;
 use itertools::Itertools;
 use tabled::Tabled;
-use crate::filestore::ObjectListItem;
-use crate::get::{GetObjectArgs};
-use crate::skatelet::{SystemInfo};
-use crate::state::state::ClusterState;
 
 pub(crate) trait NameFilters {
     fn id(&self) -> String {
@@ -14,7 +14,7 @@ pub(crate) trait NameFilters {
     fn filter_names(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
             true => "",
-            false => ns
+            false => ns,
         };
 
         if !ns.is_empty() && self.namespace() != ns {
@@ -60,19 +60,19 @@ pub(crate) trait Lister<T> {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 
-
-        let resources = state.nodes.iter().flat_map(|node| {
-            match &node.host_info {
+        let resources = state
+            .nodes
+            .iter()
+            .flat_map(|node| match &node.host_info {
                 Some(hi) => match &hi.system_info {
                     Some(si) => self.selector(si, &ns, &id),
-                    _ => vec![]
-                }
-                None => vec![]
-            }
-        }).unique_by(|i| format!("{}.{}", i.name(), i.namespace())).collect();
+                    _ => vec![],
+                },
+                None => vec![],
+            })
+            .unique_by(|i| format!("{}.{}", i.name(), i.namespace()))
+            .collect();
 
         resources
     }
 }
-
-

@@ -1,19 +1,17 @@
-use std::error::Error;
+use crate::exec::ShellExec;
+use crate::resource::SupportedResources;
+use crate::util::apply_play;
 use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Pod;
-use crate::resource::SupportedResources;
-use crate::exec::{ShellExec};
-use crate::util::apply_play;
+use std::error::Error;
 
 pub struct PodController {
-    execer: Box<dyn ShellExec>
+    execer: Box<dyn ShellExec>,
 }
 
 impl PodController {
     pub fn new(execer: Box<dyn ShellExec>) -> Self {
-        PodController {
-            execer
-        }
+        PodController { execer }
     }
 
     pub fn apply(&self, pod: &Pod) -> Result<(), Box<dyn Error>> {
@@ -25,15 +23,18 @@ impl PodController {
         self.delete_podman_pod(name, grace_period)
     }
 
-    pub fn delete_podman_pods(&self, ids: Vec<&str>, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
-        let failures: Vec<_> = ids.iter().filter_map(|id| {
-            match self.delete_podman_pod(id, grace_period) {
+    pub fn delete_podman_pods(
+        &self,
+        ids: Vec<&str>,
+        grace_period: Option<usize>,
+    ) -> Result<(), Box<dyn Error>> {
+        let failures: Vec<_> = ids
+            .iter()
+            .filter_map(|id| match self.delete_podman_pod(id, grace_period) {
                 Ok(_) => None,
-                Err(e) => {
-                    Some(e)
-                }
-            }
-        }).collect();
+                Err(e) => Some(e),
+            })
+            .collect();
 
         if !failures.is_empty() {
             let mut err = anyhow!("failures when removing pods");
@@ -43,7 +44,11 @@ impl PodController {
         Ok(())
     }
 
-    fn delete_podman_pod(&self, id: &str, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {
+    fn delete_podman_pod(
+        &self,
+        id: &str,
+        grace_period: Option<usize>,
+    ) -> Result<(), Box<dyn Error>> {
         if id.is_empty() {
             return Err(anyhow!("no metadata.name found").into());
         }
@@ -53,13 +58,22 @@ impl PodController {
         let grace_str = format!("{}", grace);
         println!("gracefully stopping {}", id);
 
-        let containers = self.execer.exec("podman", &["pod", "inspect", id, "--format={{range.Containers}}{{.Id}} {{end}}"])?;
+        let containers = self.execer.exec(
+            "podman",
+            &[
+                "pod",
+                "inspect",
+                id,
+                "--format={{range.Containers}}{{.Id}} {{end}}",
+            ],
+        )?;
         let containers = containers.split_ascii_whitespace().collect();
 
-        let _ = self.execer.exec("podman", &["pod", "kill", "--signal", "SIGTERM", id]);
+        let _ = self
+            .execer
+            .exec("podman", &["pod", "kill", "--signal", "SIGTERM", id]);
 
-
-        let args = [vec!(&grace_str, "podman", "wait"), containers].concat();
+        let args = [vec![&grace_str, "podman", "wait"], containers].concat();
         let result = self.execer.exec("timeout", &args);
 
         if result.is_err() {
@@ -68,10 +82,7 @@ impl PodController {
 
         println!("removing {}", id);
 
-        let rm_cmd = [
-            vec!("pod", "rm", "--force"),
-            vec!(&id),
-        ].concat();
+        let rm_cmd = [vec!["pod", "rm", "--force"], vec![&id]].concat();
 
         let output = self.execer.exec("podman", &rm_cmd)?;
 

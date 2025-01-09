@@ -1,38 +1,38 @@
-mod skate;
-mod skatelet;
 mod apply;
-mod refresh;
-mod ssh;
 mod config;
-mod scheduler;
-mod util;
 mod create;
 mod delete;
+mod refresh;
+mod scheduler;
+mod skate;
+mod skatelet;
+mod ssh;
+mod util;
 
-mod state;
 mod get;
+mod state;
 
-mod describe;
-mod filestore;
-mod cron;
-mod logs;
-mod oci;
 mod config_cmd;
-mod spec;
-mod template;
 mod controllers;
 mod cordon;
+mod cron;
+mod describe;
+mod filestore;
+mod logs;
+mod oci;
+mod spec;
+mod template;
 
-pub mod errors;
 mod cluster;
-mod rollout;
-mod resource;
-mod exec;
 pub mod deps;
-mod test_helpers;
-mod upgrade;
+pub mod errors;
+mod exec;
 mod github;
 mod node_shell;
+mod resource;
+mod rollout;
+mod test_helpers;
+mod upgrade;
 
 pub use skate::skate;
 pub use skate::AllDeps;

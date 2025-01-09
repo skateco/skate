@@ -1,10 +1,10 @@
-use std::panic;
-use clap::{Args, Subcommand};
 use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
+use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
-use crate::skatelet::services::dns::{DnsService};
+use clap::{Args, Subcommand};
+use std::panic;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
@@ -20,12 +20,11 @@ pub struct DnsArgs {
     command: Command,
 }
 
-pub trait DnsDeps: With<dyn ShellExec>{}
+pub trait DnsDeps: With<dyn ShellExec> {}
 
 pub struct Dns<D: DnsDeps> {
     pub deps: D,
 }
-
 
 #[derive(Debug, Args)]
 pub struct AddArgs {
@@ -46,21 +45,19 @@ pub struct RemoveArgs {
     pub pod_id: Option<String>,
 }
 
-
 impl<D: DnsDeps> Dns<D> {
-    
     pub fn dns(&self, args: DnsArgs) -> Result<(), SkateError> {
-        panic::set_hook(Box::new(move |info| {
-            log_panic(info)
-        }));
-        
+        panic::set_hook(Box::new(move |info| log_panic(info)));
+
         let execer = With::<dyn ShellExec>::get(&self.deps);
         let svc = DnsService::new("/var/lib/skate/dns", &execer);
         match args.command {
             Command::Add(add_args) => svc.add(add_args.container_id, add_args.ip),
-            Command::Remove(remove_args) => svc.remove(remove_args.container_id, remove_args.pod_id),
+            Command::Remove(remove_args) => {
+                svc.remove(remove_args.container_id, remove_args.pod_id)
+            }
             Command::Enable(enable_args) => svc.wait_and_enable_healthy(enable_args.container_id),
-            Command::Reload => svc.reload()
+            Command::Reload => svc.reload(),
         }
     }
 }

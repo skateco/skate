@@ -1,14 +1,14 @@
-use anyhow::anyhow;
-use clap::Args;
-use futures::stream::FuturesUnordered;
 use crate::config::Config;
-use crate::skate::ConfigFileArgs;
-use crate::ssh;
-use futures::StreamExt;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::resource::ResourceType;
-use crate::ssh::{SshClients};
+use crate::skate::ConfigFileArgs;
+use crate::ssh;
+use crate::ssh::SshClients;
+use anyhow::anyhow;
+use clap::Args;
+use futures::stream::FuturesUnordered;
+use futures::StreamExt;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
@@ -24,12 +24,14 @@ pub struct LogArgs {
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
     #[arg(name = "POD | TYPE/NAME")]
-    identifier: String
+    identifier: String,
 }
 
 impl LogArgs {
     pub fn to_podman_log_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names", "--timestamps"].map(String::from).to_vec();
+        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names", "--timestamps"]
+            .map(String::from)
+            .to_vec();
 
         if self.follow {
             cmd.push("--follow".to_string());
@@ -42,7 +44,15 @@ impl LogArgs {
     }
 
     pub fn to_journalctl_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = ["sudo", "journalctl", "--output", "short-iso-precise", "--quiet"].map(String::from).to_vec();
+        let mut cmd: Vec<_> = [
+            "sudo",
+            "journalctl",
+            "--output",
+            "short-iso-precise",
+            "--quiet",
+        ]
+        .map(String::from)
+        .to_vec();
 
         if self.follow {
             cmd.push("-f".to_string());
@@ -53,7 +63,6 @@ impl LogArgs {
         }
         cmd.push("-u".to_string());
         cmd
-
     }
 }
 
@@ -63,12 +72,13 @@ pub struct Logs<D: LogsDeps> {
     pub deps: D,
 }
 
-impl<D:LogsDeps> Logs<D> {
+impl<D: LogsDeps> Logs<D> {
     pub async fn logs(&self, args: LogArgs) -> Result<(), SkateError> {
         let config = Config::load(Some(args.config.skateconfig.clone()))?;
         let mgr = self.deps.get();
-        let (conns, errors) = mgr.cluster_connect(config.active_cluster(args.config.context.clone())?).await;
-
+        let (conns, errors) = mgr
+            .cluster_connect(config.active_cluster(args.config.context.clone())?)
+            .await;
 
         if conns.is_none() {
             if errors.is_some() {
@@ -90,56 +100,84 @@ impl<D:LogsDeps> Logs<D> {
 
         let (resource_type, name) = name.split_once("/").unwrap_or(("pod", &name));
 
-
         match resource_type {
-            "pod" => {
-                self.log_pod(&conns, name, ns, &args).await
-            }
+            "pod" => self.log_pod(&conns, name, ns, &args).await,
             "deployment" => {
-                self.log_child_pods(&conns, ResourceType::Deployment, name, ns, &args).await
+                self.log_child_pods(&conns, ResourceType::Deployment, name, ns, &args)
+                    .await
             }
             "daemonset" => {
-                self.log_child_pods(&conns, ResourceType::DaemonSet, name, ns, &args).await
+                self.log_child_pods(&conns, ResourceType::DaemonSet, name, ns, &args)
+                    .await
             }
             "cronjob" => {
-                self.log_journalctl(&conns, ResourceType::CronJob, name, ns, &args).await
+                self.log_journalctl(&conns, ResourceType::CronJob, name, ns, &args)
+                    .await
             }
-            _ => {
-                Err(anyhow!("Unexpected resource type {}", resource_type).into())
-            }
+            _ => Err(anyhow!("Unexpected resource type {}", resource_type).into()),
         }
     }
 
-    pub async fn log_pod(&self, conns: &ssh::SshClients, name: &str, _ns: String, args: &LogArgs) -> Result<(), SkateError> {
+    pub async fn log_pod(
+        &self,
+        conns: &ssh::SshClients,
+        name: &str,
+        _ns: String,
+        args: &LogArgs,
+    ) -> Result<(), SkateError> {
         let mut cmd = args.to_podman_log_args();
 
         cmd.push(name.to_string());
 
         let cmd = cmd.join(" ");
 
-        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_stdout(&cmd, false, false)).collect();
+        let fut: FuturesUnordered<_> = conns
+            .clients
+            .iter()
+            .map(|c| c.execute_stdout(&cmd, false, false))
+            .collect();
 
         let result: Vec<_> = fut.collect().await;
 
         if result.iter().all(|r| r.is_err()) {
-            return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
+            return Err(format!(
+                "{:?}",
+                result
+                    .into_iter()
+                    .map(|r| r.err().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            )
+            .into());
         }
 
         for res in result {
-            if let Err(e) = res { eprintln!("{}", e) }
+            if let Err(e) = res {
+                eprintln!("{}", e)
+            }
         }
 
         Ok(())
     }
 
-    pub async fn log_child_pods(&self, conns: &SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
+    pub async fn log_child_pods(
+        &self,
+        conns: &SshClients,
+        resource_type: ResourceType,
+        name: &str,
+        ns: String,
+        args: &LogArgs,
+    ) -> Result<(), SkateError> {
         let log_cmd = args.to_podman_log_args().join(" ");
 
         let cmd = format!("for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;", resource_type.to_string().to_lowercase(), name, ns, log_cmd);
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 
-        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_to_sender(&cmd, tx.clone())).collect();
+        let fut: FuturesUnordered<_> = conns
+            .clients
+            .iter()
+            .map(|c| c.execute_to_sender(&cmd, tx.clone()))
+            .collect();
 
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
@@ -150,24 +188,49 @@ impl<D:LogsDeps> Logs<D> {
         let result: Vec<_> = fut.collect().await;
 
         if result.iter().all(|r| r.is_err()) {
-            return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
+            return Err(format!(
+                "{:?}",
+                result
+                    .into_iter()
+                    .map(|r| r.err().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            )
+            .into());
         }
 
         for res in result {
-            if let Err(e) = res { eprintln!("{}", e) }
+            if let Err(e) = res {
+                eprintln!("{}", e)
+            }
         }
 
         Ok(())
     }
-    pub async fn log_journalctl(&self, conns: &SshClients, resource_type: ResourceType, name: &str, ns: String, args: &LogArgs) -> Result<(), SkateError> {
+    pub async fn log_journalctl(
+        &self,
+        conns: &SshClients,
+        resource_type: ResourceType,
+        name: &str,
+        ns: String,
+        args: &LogArgs,
+    ) -> Result<(), SkateError> {
         let mut cmd = args.to_journalctl_args();
-        cmd.push(format!("skate-{}-{}.{}.service", resource_type.to_string(), name, ns));
+        cmd.push(format!(
+            "skate-{}-{}.{}.service",
+            resource_type.to_string(),
+            name,
+            ns
+        ));
 
         let cmd = cmd.join(" ");
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 
-        let fut: FuturesUnordered<_> = conns.clients.iter().map(|c| c.execute_to_sender(&cmd, tx.clone())).collect();
+        let fut: FuturesUnordered<_> = conns
+            .clients
+            .iter()
+            .map(|c| c.execute_to_sender(&cmd, tx.clone()))
+            .collect();
 
         tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
@@ -175,15 +238,23 @@ impl<D:LogsDeps> Logs<D> {
             }
         });
 
-
         let result: Vec<_> = fut.collect().await;
 
         if result.iter().all(|r| r.is_err()) {
-            return Err(format!("{:?}", result.into_iter().map(|r| r.err().unwrap().to_string()).collect::<Vec<String>>()).into());
+            return Err(format!(
+                "{:?}",
+                result
+                    .into_iter()
+                    .map(|r| r.err().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            )
+            .into());
         }
 
         for res in result {
-            if let Err(e) = res { eprintln!("{}", e) }
+            if let Err(e) = res {
+                eprintln!("{}", e)
+            }
         }
 
         Ok(())

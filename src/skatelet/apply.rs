@@ -1,10 +1,7 @@
 use clap::{Args, Subcommand};
 
-use std::{io};
+use std::io;
 
-
-use std::io::{Read};
-use crate::deps::With;
 use crate::controllers::clusterissuer::ClusterIssuerController;
 use crate::controllers::cronjob::CronjobController;
 use crate::controllers::daemonset::DaemonSetController;
@@ -13,10 +10,12 @@ use crate::controllers::ingress::IngressController;
 use crate::controllers::pod::PodController;
 use crate::controllers::secret::SecretController;
 use crate::controllers::service::ServiceController;
+use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::resource::SupportedResources;
+use std::io::Read;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
@@ -31,14 +30,13 @@ pub struct ApplyArgs {
     command: StdinCommand,
 }
 
-
 #[derive(Debug, Subcommand, Clone)]
 pub enum StdinCommand {
     #[command(name = "-", about = "feed manifest yaml via stdin")]
     Stdin {},
 }
 
-pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec>{}
+pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec> {}
 
 pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
@@ -50,20 +48,22 @@ pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateEr
         }
     };
 
-
-    let object: SupportedResources = serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
+    let object: SupportedResources =
+        serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
     apply_supported_resource(deps, &object)
 }
 
-fn apply_supported_resource< D: ApplyDeps>(deps: D, object: &SupportedResources) -> Result<(),SkateError> {
-    let execer  = With::<dyn ShellExec>::get;
-    let store  = With::<dyn Store>::get;
-
+fn apply_supported_resource<D: ApplyDeps>(
+    deps: D,
+    object: &SupportedResources,
+) -> Result<(), SkateError> {
+    let execer = With::<dyn ShellExec>::get;
+    let store = With::<dyn Store>::get;
 
     match object {
         SupportedResources::Deployment(deployment) => {
             let pod_controller = PodController::new(execer(&deps));
-            let ctrl = DeploymentController::new(store(&deps), execer(&deps),pod_controller);
+            let ctrl = DeploymentController::new(store(&deps), execer(&deps), pod_controller);
             ctrl.apply(deployment)?;
         }
         SupportedResources::DaemonSet(daemonset) => {
@@ -88,7 +88,12 @@ fn apply_supported_resource< D: ApplyDeps>(deps: D, object: &SupportedResources)
             ctrl.apply(cron)?;
         }
         SupportedResources::Service(service) => {
-            let ctrl = ServiceController::new(store(&deps), execer(&deps), "/var/lib/skate", "/etc/systemd/system");
+            let ctrl = ServiceController::new(
+                store(&deps),
+                execer(&deps),
+                "/var/lib/skate",
+                "/etc/systemd/system",
+            );
             ctrl.apply(service)?;
         }
         SupportedResources::ClusterIssuer(issuer) => {
@@ -99,4 +104,3 @@ fn apply_supported_resource< D: ApplyDeps>(deps: D, object: &SupportedResources)
     }
     Ok(())
 }
-

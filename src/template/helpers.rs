@@ -16,4 +16,3 @@ handlebars_helper!(join: |{sep:str=","}, *args|
 handlebars_helper!(default: |value: Value, def: Value|
     if value.is_null() { def } else { value }
 );
-

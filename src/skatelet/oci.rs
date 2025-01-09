@@ -1,12 +1,12 @@
-use std::panic;
-use clap::{Args, Subcommand};
-use log::{error, info};
-use strum_macros::EnumString;
 use crate::errors::SkateError;
 use crate::exec::{RealExec, ShellExec};
 use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
 use crate::util::spawn_orphan_process;
+use clap::{Args, Subcommand};
+use log::{error, info};
+use std::panic;
+use strum_macros::EnumString;
 
 #[derive(EnumString, Debug, Subcommand)]
 pub enum Commands {
@@ -19,10 +19,8 @@ pub struct OciArgs {
     pub commands: Commands,
 }
 
-pub(crate) fn oci(args: OciArgs) -> Result<(),SkateError> {
-    panic::set_hook(Box::new(move |info| {
-        log_panic(info)
-    }));
+pub(crate) fn oci(args: OciArgs) -> Result<(), SkateError> {
+    panic::set_hook(Box::new(move |info| log_panic(info)));
     let result = match args.commands {
         Commands::Poststart => post_start(),
         Commands::Poststop => post_stop(),
@@ -50,7 +48,7 @@ fn post_start() -> Result<(), SkateError> {
 fn post_stop() -> Result<(), SkateError> {
     info!("poststop");
     let id = container_id()?;
-    let execer: Box<dyn ShellExec> = Box::new(RealExec{});
+    let execer: Box<dyn ShellExec> = Box::new(RealExec {});
     let dns = DnsService::new("/var/lib/skate/dns", &execer);
     dns.remove(Some(id), None)
 }

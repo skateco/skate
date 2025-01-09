@@ -1,10 +1,10 @@
+use crate::errors::SkateError;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::fs;
 use std::fs::{create_dir, File};
-use std::hash::{Hash};
-use crate::errors::SkateError;
+use std::hash::Hash;
+use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -21,7 +21,6 @@ pub struct Cluster {
     pub nodes: Vec<Node>,
 }
 
-
 fn default_string() -> String {
     "".to_string()
 }
@@ -29,7 +28,7 @@ fn default_string() -> String {
 pub struct Node {
     pub name: String,
     pub host: String,
-    #[serde(default="default_string")]
+    #[serde(default = "default_string")]
     pub peer_host: String,
     pub subnet_cidr: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -46,28 +45,43 @@ impl Config {
             return Err(anyhow!("no clusters in config").into());
         }
 
-        let first = &(self.clusters).first().ok_or("no first cluster".to_string())?;
+        let first = &(self.clusters)
+            .first()
+            .ok_or("no first cluster".to_string())?;
 
-        let cluster_name = self.current_context.clone().unwrap_or(name.unwrap_or(first.name.to_owned()));
+        let cluster_name = self
+            .current_context
+            .clone()
+            .unwrap_or(name.unwrap_or(first.name.to_owned()));
 
-        let cluster = self.clusters.iter().find(|c| c.name == cluster_name)
+        let cluster = self
+            .clusters
+            .iter()
+            .find(|c| c.name == cluster_name)
             .ok_or(format!("found no cluster by name of {}", cluster_name))?;
         Ok(cluster)
     }
 
     pub fn replace_cluster(&mut self, cluster: &Cluster) -> Result<(), SkateError> {
-        let idx = self.clusters.iter().position(|c| c.name == cluster.name).ok_or("cluster not found".to_string())?;
+        let idx = self
+            .clusters
+            .iter()
+            .position(|c| c.name == cluster.name)
+            .ok_or("cluster not found".to_string())?;
         self.clusters[idx] = cluster.clone();
         Ok(())
     }
 
     pub fn delete_cluster(&mut self, cluster: &Cluster) -> Result<(), SkateError> {
-        let idx = self.clusters.iter().position(|c| c.name == cluster.name).ok_or("cluster not found".to_string())?;
+        let idx = self
+            .clusters
+            .iter()
+            .position(|c| c.name == cluster.name)
+            .ok_or("cluster not found".to_string())?;
         self.clusters.remove(idx);
         Ok(())
     }
 }
-
 
 pub fn config_dir() -> String {
     return shellexpand::tilde("~/.skate").to_string();
@@ -114,20 +128,22 @@ impl Config {
     fn path(path: Option<String>) -> String {
         let path = match path {
             Some(path) => path,
-            None => config_dir() + "/config.yaml"
+            None => config_dir() + "/config.yaml",
         };
         shellexpand::tilde(&path).to_string()
     }
     pub fn load(path: Option<String>) -> Result<Config, SkateError> {
         let path = Config::path(path);
         let path = Path::new(&path);
-        let f = fs::File::open(path).map_err(|e|anyhow!(e).context("failed to open config file"))?;
-        let mut data: Config = serde_yaml::from_reader(f).map_err(|e|anyhow!(e).context("failed to read config file"))?;
+        let f =
+            fs::File::open(path).map_err(|e| anyhow!(e).context("failed to open config file"))?;
+        let mut data: Config = serde_yaml::from_reader(f)
+            .map_err(|e| anyhow!(e).context("failed to read config file"))?;
         data.enrich();
         Ok(data)
     }
 
-    fn enrich(&mut self)  {
+    fn enrich(&mut self) {
         self.clusters.iter_mut().for_each(|c| {
             c.nodes.iter_mut().for_each(|n| {
                 if n.peer_host.is_empty() {
@@ -137,11 +153,12 @@ impl Config {
         });
     }
 
-
     pub fn persist(&self, path: Option<String>) -> Result<(), SkateError> {
         let path = Config::path(path);
-        let state_file = File::create(Path::new(&path)).map_err(|e| anyhow!(e).context("unable to read config file"))?;
-        serde_yaml::to_writer(state_file, self).map_err(|e|anyhow!(e).context("failed to write config file"))?;
+        let state_file = File::create(Path::new(&path))
+            .map_err(|e| anyhow!(e).context("unable to read config file"))?;
+        serde_yaml::to_writer(state_file, self)
+            .map_err(|e| anyhow!(e).context("failed to write config file"))?;
         Ok(())
     }
 }

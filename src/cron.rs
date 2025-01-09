@@ -1,12 +1,12 @@
-use std::error::Error;
-use std::str::FromStr;
 use anyhow::anyhow;
 use cron::{Schedule, TimeUnitSpec};
-
+use std::error::Error;
+use std::str::FromStr;
 
 pub(crate) fn cron_to_systemd(cron_expr: &str, time_zone: &str) -> Result<String, Box<dyn Error>> {
     let schedule = &format!("0 {}", cron_expr);
-    let schedule = Schedule::from_str(schedule).map_err(|e| anyhow!(e).context(format!("failed to parse schedule from {}", schedule)))?;
+    let schedule = Schedule::from_str(schedule)
+        .map_err(|e| anyhow!(e).context(format!("failed to parse schedule from {}", schedule)))?;
 
     let timer_format = format!(
         //DOW Y-M-D H:M:S TZ
@@ -22,8 +22,7 @@ pub(crate) fn cron_to_systemd(cron_expr: &str, time_zone: &str) -> Result<String
     return Ok(timer_format.trim().to_string());
 }
 
-fn linearize_time_unit(input: &(impl TimeUnitSpec + Sized), star: &str) -> String
-{
+fn linearize_time_unit(input: &(impl TimeUnitSpec + Sized), star: &str) -> String {
     if input.is_all() {
         star.to_owned()
     } else {
@@ -43,7 +42,6 @@ mod tests {
 
     #[test]
     fn test_cron_to_systemd() {
-
         let conditions = &[
             ("* * * * *", "*-*-* *:*:00"),
             ("*/10 * * * *", "*-*-* *:0,10,20,30,40,50:00"),

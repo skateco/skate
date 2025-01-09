@@ -34,7 +34,6 @@ impl Metadata for ClusterIssuer {
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 pub struct ClusterIssuerSpec {
     pub acme: Acme,
-
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
@@ -102,26 +101,39 @@ impl<'de> serde::Deserialize<'de> for ClusterIssuer {
             where
                 A: serde::de::MapAccess<'de>,
             {
-                let mut value_metadata: Option<apimachinery::pkg::apis::meta::v1::ObjectMeta> = None;
+                let mut value_metadata: Option<apimachinery::pkg::apis::meta::v1::ObjectMeta> =
+                    None;
                 let mut value_spec: Option<ClusterIssuerSpec> = None;
 
                 while let Some(key) = serde::de::MapAccess::next_key::<Field>(&mut map)? {
                     match key {
                         Field::Key_api_version => {
-                            let value_api_version: String = serde::de::MapAccess::next_value(&mut map)?;
+                            let value_api_version: String =
+                                serde::de::MapAccess::next_value(&mut map)?;
                             if value_api_version != <Self::Value as Resource>::API_VERSION {
-                                return Err(serde::de::Error::invalid_value(serde::de::Unexpected::Str(&value_api_version), &<Self::Value as Resource>::API_VERSION));
+                                return Err(serde::de::Error::invalid_value(
+                                    serde::de::Unexpected::Str(&value_api_version),
+                                    &<Self::Value as Resource>::API_VERSION,
+                                ));
                             }
                         }
                         Field::Key_kind => {
                             let value_kind: String = serde::de::MapAccess::next_value(&mut map)?;
                             if value_kind != <Self::Value as Resource>::KIND {
-                                return Err(serde::de::Error::invalid_value(serde::de::Unexpected::Str(&value_kind), &<Self::Value as Resource>::KIND));
+                                return Err(serde::de::Error::invalid_value(
+                                    serde::de::Unexpected::Str(&value_kind),
+                                    &<Self::Value as Resource>::KIND,
+                                ));
                             }
                         }
-                        Field::Key_metadata => value_metadata = serde::de::MapAccess::next_value(&mut map)?,
+                        Field::Key_metadata => {
+                            value_metadata = serde::de::MapAccess::next_value(&mut map)?
+                        }
                         Field::Key_spec => value_spec = serde::de::MapAccess::next_value(&mut map)?,
-                        Field::Other => { let _: serde::de::IgnoredAny = serde::de::MapAccess::next_value(&mut map)?; }
+                        Field::Other => {
+                            let _: serde::de::IgnoredAny =
+                                serde::de::MapAccess::next_value(&mut map)?;
+                        }
                     }
                 }
 
@@ -134,12 +146,7 @@ impl<'de> serde::Deserialize<'de> for ClusterIssuer {
 
         deserializer.deserialize_struct(
             <Self as Resource>::KIND,
-            &[
-                "apiVersion",
-                "kind",
-                "metadata",
-                "spec",
-            ],
+            &["apiVersion", "kind", "metadata", "spec"],
             Visitor,
         )
     }
@@ -152,10 +159,13 @@ impl serde::Serialize for ClusterIssuer {
     {
         let mut state = serializer.serialize_struct(
             <Self as Resource>::KIND,
-            3 +
-                self.spec.as_ref().map_or(0, |_| 1),
+            3 + self.spec.as_ref().map_or(0, |_| 1),
         )?;
-        serde::ser::SerializeStruct::serialize_field(&mut state, "apiVersion", <Self as Resource>::API_VERSION)?;
+        serde::ser::SerializeStruct::serialize_field(
+            &mut state,
+            "apiVersion",
+            <Self as Resource>::API_VERSION,
+        )?;
         serde::ser::SerializeStruct::serialize_field(&mut state, "kind", <Self as Resource>::KIND)?;
         serde::ser::SerializeStruct::serialize_field(&mut state, "metadata", &self.metadata)?;
         if let Some(value) = &self.spec {
@@ -164,4 +174,3 @@ impl serde::Serialize for ClusterIssuer {
         serde::ser::SerializeStruct::end(state)
     }
 }
-
