@@ -52,6 +52,34 @@
   pre-commit.hooks.rustfmt.enable = true;
 
   # See full reference at https://devenv.sh/reference/options/
+  scripts.e2e-multipass.exec = ''
+	set -xeuo pipefail
+	[ -f ''${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ''${SSH_PRIVATE_KEY} -q -N ""
+	echo "SSH_PRIVATE_KEY=''${SSH_PRIVATE_KEY}" > ./hack/.clusterplz.env
+	# start vms
+	./hack/clusterplz create || exit 0
+	cargo run --bin skate -q -- delete cluster e2e-test --yes || exit 0
+	cargo run --bin skate -q -- create cluster e2e-test
+	cargo run --bin skate -q -- config use-context e2e-test
+	./hack/clusterplz skatelet
+	./hack/clusterplz skate
+    # the ignored tests are the e2e tests. This is not optimal.
+	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
+  '';
+
+  scripts.e2e-docker.exec = ''
+	set -xeuo pipefail
+	[ -f ''${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ''${SSH_PRIVATE_KEY} -q -N ""
+	echo "SSH_PRIVATE_KEY=''${SSH_PRIVATE_KEY}" > ./hack/.sindplz.env
+	# start vms
+	./hack/sindplz create || exit 0
+	cargo run --bin skate -q -- delete cluster e2e-test --yes || exit 0
+	cargo run --bin skate -q -- create cluster e2e-test
+	cargo run --bin skate -q -- config use-context e2e-test
+	./hack/sindplz skatelet
+	./hack/sindplz skate
+	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
+  '';
 
   languages.rust = {
     enable = true;
