@@ -20,7 +20,7 @@ pub struct OciArgs {
 }
 
 pub(crate) fn oci(args: OciArgs) -> Result<(), SkateError> {
-    panic::set_hook(Box::new(move |info| log_panic(info)));
+    panic::set_hook(Box::new(log_panic));
     let result = match args.commands {
         Commands::Poststart => post_start(),
         Commands::Poststop => post_stop(),

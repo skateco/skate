@@ -215,12 +215,7 @@ impl<D: LogsDeps> Logs<D> {
         args: &LogArgs,
     ) -> Result<(), SkateError> {
         let mut cmd = args.to_journalctl_args();
-        cmd.push(format!(
-            "skate-{}-{}.{}.service",
-            resource_type.to_string(),
-            name,
-            ns
-        ));
+        cmd.push(format!("skate-{}-{}.{}.service", resource_type, name, ns));
 
         let cmd = cmd.join(" ");
 

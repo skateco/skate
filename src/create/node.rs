@@ -617,7 +617,7 @@ async fn create_replace_routes_file(
     let path = "/etc/systemd/system/skate-routes.service";
     let unit_file = include_str!("../resources/skate-routes.service");
 
-    conn.execute_stdout(&util::transfer_file_cmd(&unit_file, path), true, true)
+    conn.execute_stdout(&util::transfer_file_cmd(unit_file, path), true, true)
         .await?;
 
     conn.execute_stdout("sudo systemctl daemon-reload", true, true)

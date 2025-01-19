@@ -67,9 +67,7 @@ impl Release {
         Ok(result)
     }
     pub fn find_skatelet_archive(&self, platform: &Platform) -> Option<String> {
-        if self.assets.is_none() {
-            return None;
-        }
+        self.assets.as_ref()?;
         let asset = self.assets.as_ref().unwrap().iter().find(|asset| {
             let (dl_arch, dl_gnu) = match platform.arch.as_str() {
                 "amd64" => ("x86_64", "gnu"),
@@ -95,12 +93,10 @@ impl Release {
                 return false;
             }
 
-            return true;
+            true
         });
 
-        if asset.is_none() {
-            return None;
-        }
+        asset?;
 
         Some(asset.unwrap().browser_download_url.clone().unwrap())
     }

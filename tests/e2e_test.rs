@@ -200,7 +200,7 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 6 {
             assert_eq!(parts[0], "test-deployment");
-            assert_eq!(true, parts[1].starts_with("dpl-nginx-"));
+            assert!(parts[1].starts_with("dpl-nginx-"));
             assert_eq!(parts[2], "2/2");
             assert_eq!(parts[3], "Running");
             assert_eq!(parts[4], "0");
@@ -266,7 +266,7 @@ async fn test_service() -> Result<(), anyhow::Error> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 6 {
             assert_eq!(parts[0], "test-deployment");
-            assert_eq!(true, parts[1].starts_with("nginx"));
+            assert!(parts[1].starts_with("nginx"));
             assert_eq!(parts[4], "80");
         }
     }

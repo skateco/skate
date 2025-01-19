@@ -6,7 +6,7 @@ async fn main() {
     match skatelet().await {
         Ok(_) => (),
         Err(e) => {
-            eprintln!("{}", e.to_string());
+            eprintln!("{}", e);
             std::process::exit(1);
         }
     }

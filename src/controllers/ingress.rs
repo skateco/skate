@@ -59,7 +59,7 @@ impl IngressController {
         for port in [80, 443] {
             // convert manifest to json
             // set "port" key
-            let mut json_ingress = serde_json::to_value(&ingress)
+            let mut json_ingress = serde_json::to_value(ingress)
                 .map_err(|e| anyhow!(e).context("failed to serialize manifest to json"))?;
             json_ingress["port"] = json!(port);
 

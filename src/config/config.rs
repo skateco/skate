@@ -84,7 +84,7 @@ impl Config {
 }
 
 pub fn config_dir() -> String {
-    return shellexpand::tilde("~/.skate").to_string();
+    shellexpand::tilde("~/.skate").to_string()
 }
 
 pub fn cache_dir() -> String {

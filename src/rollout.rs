@@ -75,20 +75,17 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
         state.nodes.iter_mut().for_each(|n| {
             if let Some(hi) = n.host_info.as_mut() {
                 if let Some(si) = hi.system_info.as_mut() {
-                    match &mut si.pods {
-                        Some(v) => {
-                            v.iter_mut().for_each(|item| {
-                                for name in &names {
-                                    if &name_selector(item) != name {
-                                        return;
-                                    }
-                                    let mut labels = item.labels.clone();
-                                    labels.insert("skate.io/hash".to_string(), "".to_string());
-                                    item.labels = labels;
+                    if let Some(v) = &mut si.pods {
+                        v.iter_mut().for_each(|item| {
+                            for name in &names {
+                                if &name_selector(item) != name {
+                                    return;
                                 }
-                            });
-                        }
-                        None => {}
+                                let mut labels = item.labels.clone();
+                                labels.insert("skate.io/hash".to_string(), "".to_string());
+                                item.labels = labels;
+                            }
+                        });
                     }
                 };
             }

@@ -47,7 +47,7 @@ pub struct RemoveArgs {
 
 impl<D: DnsDeps> Dns<D> {
     pub fn dns(&self, args: DnsArgs) -> Result<(), SkateError> {
-        panic::set_hook(Box::new(move |info| log_panic(info)));
+        panic::set_hook(Box::new(log_panic));
 
         let execer = With::<dyn ShellExec>::get(&self.deps);
         let svc = DnsService::new("/var/lib/skate/dns", &execer);

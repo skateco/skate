@@ -275,15 +275,11 @@ impl SupportedResources {
                             env_list
                                 .into_iter()
                                 .map(|mut e| {
-                                    match e.value_from.as_mut() {
-                                        Some(value) => match value.secret_key_ref.as_mut() {
-                                            Some(key_ref) => {
-                                                // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
-                                                key_ref.name = format!("{}.{}", &key_ref.name, &ns);
-                                            }
-                                            _ => {}
-                                        },
-                                        _ => {}
+                                    if let Some(value) = e.value_from.as_mut() {
+                                        if let Some(key_ref) = value.secret_key_ref.as_mut() {
+                                            // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
+                                            key_ref.name = format!("{}.{}", &key_ref.name, &ns);
+                                        }
                                     };
                                     e
                                 })

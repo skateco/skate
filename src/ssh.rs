@@ -107,7 +107,7 @@ impl HostInfo {
     pub fn healthy(&self) -> Result<(), Vec<String>> {
         let mut errs = Vec::new();
         // TODO - actual checks for things that matter
-        if !self.skatelet_version.is_some() {
+        if self.skatelet_version.is_none() {
             errs.push("Failed to find skatelet version".to_string());
         }
         let cordoned = self
@@ -256,9 +256,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
                         host_info.skatelet_version = match v {
                             "" => None,
                             _ => Some(if v.starts_with("v") {
-                                v.strip_prefix("v")
-                                    .and_then(|v| Some(v.to_string()))
-                                    .unwrap()
+                                v.strip_prefix("v").map(|v| v.to_string()).unwrap()
                             } else {
                                 v.to_string()
                             }),
@@ -295,15 +293,12 @@ echo ovs="$(cat /tmp/ovs-$$)";
             }
         }
 
-        match &arch {
-            Some(arch) => {
-                host_info.platform.arch = arch.clone();
-                host_info.system_info = host_info.system_info.map(|mut sys_info| {
-                    sys_info.platform.arch = arch.clone();
-                    sys_info
-                })
-            }
-            None => {}
+        if let Some(arch) = &arch {
+            host_info.platform.arch = arch.clone();
+            host_info.system_info = host_info.system_info.map(|mut sys_info| {
+                sys_info.platform.arch = arch.clone();
+                sys_info
+            })
         }
 
         if host_info.skatelet_version.is_some() && host_info.system_info.is_none() {

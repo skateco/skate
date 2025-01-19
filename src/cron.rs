@@ -19,7 +19,7 @@ pub(crate) fn cron_to_systemd(cron_expr: &str, time_zone: &str) -> Result<String
         time_zone,
     );
 
-    return Ok(timer_format.trim().to_string());
+    Ok(timer_format.trim().to_string())
 }
 
 fn linearize_time_unit(input: &(impl TimeUnitSpec + Sized), star: &str) -> String {

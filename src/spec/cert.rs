@@ -63,7 +63,7 @@ impl<'de> serde::Deserialize<'de> for ClusterIssuer {
             {
                 struct Visitor;
 
-                impl<'de> serde::de::Visitor<'de> for Visitor {
+                impl serde::de::Visitor<'_> for Visitor {
                     type Value = Field;
 
                     fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

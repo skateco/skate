@@ -1137,13 +1137,13 @@ mod tests {
         };
 
         let result = DefaultScheduler::plan_deployment(&state, &deployment);
-        assert_eq!(true, result.is_ok());
+        assert!(result.is_ok());
 
         let result = &result.unwrap();
         assert_eq!(1, result.actions.len());
 
         let ops = result.actions.get(&ns_name);
-        assert_eq!(true, ops.is_some());
+        assert!(ops.is_some());
 
         let ops = ops.unwrap();
         assert_eq!(4, ops.len());
@@ -1156,12 +1156,9 @@ mod tests {
             })
             .collect_vec();
         assert_eq!(2, deployment_ops.len());
-        assert_eq!(
-            true,
-            deployment_ops.iter().all(|o| o.operation == OpType::Create
-                && o.node.is_some()
-                && !o.node.as_ref().unwrap().node_name.is_empty())
-        );
+        assert!(deployment_ops.iter().all(|o| o.operation == OpType::Create
+            && o.node.is_some()
+            && !o.node.as_ref().unwrap().node_name.is_empty()));
 
         let pod_ops = ops
             .iter()
@@ -1171,12 +1168,9 @@ mod tests {
             })
             .collect_vec();
         assert_eq!(2, pod_ops.len());
-        assert_eq!(
-            true,
-            pod_ops
-                .iter()
-                .all(|o| o.operation == OpType::Create && o.node.is_none())
-        );
+        assert!(pod_ops
+            .iter()
+            .all(|o| o.operation == OpType::Create && o.node.is_none()));
 
         println!(
             "{:?}",
@@ -1246,7 +1240,7 @@ mod tests {
 
         let sup_deployment = SupportedResources::Deployment(deployment);
         let sup_deployment = sup_deployment.fixup();
-        assert_eq!(true, sup_deployment.is_ok());
+        assert!(sup_deployment.is_ok());
         let sup_deployment = sup_deployment.unwrap();
 
         let deployment = match sup_deployment {
@@ -1293,7 +1287,7 @@ mod tests {
         assert_eq!(1, result.actions.len());
 
         let ops = result.actions.get(&ns_name);
-        assert_eq!(true, ops.is_some());
+        assert!(ops.is_some());
 
         let ops = ops.unwrap();
         assert_eq!(2 + existing_replicas + requested_replicas, ops.len());
@@ -1306,12 +1300,9 @@ mod tests {
             })
             .collect_vec();
         assert_eq!(2, deployment_ops.len());
-        assert_eq!(
-            true,
-            deployment_ops.iter().all(|o| o.operation == OpType::Create
-                && o.node.is_some()
-                && !o.node.as_ref().unwrap().node_name.is_empty())
-        );
+        assert!(deployment_ops.iter().all(|o| o.operation == OpType::Create
+            && o.node.is_some()
+            && !o.node.as_ref().unwrap().node_name.is_empty()));
 
         let pod_ops = ops
             .iter()
@@ -1351,7 +1342,7 @@ mod tests {
 
         for i in 0..existing_replicas {
             let node_index: usize = (i + 1) % 2; // 0 or 1 alternating
-            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i as usize])
+            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i])
         }
 
         let state = ClusterState {
@@ -1367,7 +1358,7 @@ mod tests {
         let result = &result.unwrap();
 
         assert_eq!(
-            1 + max(requested_replicas, existing_replicas) as usize,
+            1 + max(requested_replicas, existing_replicas),
             result.actions.len()
         );
 
@@ -1384,17 +1375,14 @@ mod tests {
 
         assert_eq!(2, deployment_ops.len());
 
-        assert_eq!(
-            true,
-            deployment_ops.iter().all(|o| o.operation == OpType::Create
-                && o.node.is_some()
-                && !o.node.as_ref().unwrap().node_name.is_empty())
-        );
+        assert!(deployment_ops.iter().all(|o| o.operation == OpType::Create
+            && o.node.is_some()
+            && !o.node.as_ref().unwrap().node_name.is_empty()));
 
         for i in 0..existing_replicas {
-            let pod_name = metadata_name(&pods[i as usize]);
+            let pod_name = metadata_name(&pods[i]);
             let pod_ops = result.actions.get(&pod_name);
-            assert_eq!(true, pod_ops.is_some());
+            assert!(pod_ops.is_some());
 
             let pod_ops = pod_ops.unwrap();
             assert_eq!(2, pod_ops.len());

@@ -129,10 +129,10 @@ pub struct NamespacedName {
 impl From<&str> for NamespacedName {
     fn from(s: &str) -> Self {
         let parts: Vec<_> = s.split('.').collect();
-        return Self {
+        Self {
             name: parts.first().unwrap_or(&"").to_string(),
             namespace: parts.last().unwrap_or(&"").to_string(),
-        };
+        }
     }
 }
 
@@ -268,7 +268,7 @@ pub fn version(long: bool) -> String {
     };
 
     if !long {
-        return format!("{}", short_version);
+        return short_version.to_string();
     }
     format!(
         r#"{}
@@ -300,6 +300,10 @@ pub fn transfer_file_cmd(contents: &str, remote_path: &str) -> String {
     )
 }
 
+pub static RE_CIDR: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
+pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
+
 #[cfg(test)]
 mod tests {
     use crate::util::age;
@@ -321,7 +325,3 @@ mod tests {
         }
     }
 }
-
-pub static RE_CIDR: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
-pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
