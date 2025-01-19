@@ -1150,10 +1150,7 @@ mod tests {
 
         let deployment_ops = ops
             .iter()
-            .filter(|o| match o.resource {
-                SupportedResources::Deployment(_) => true,
-                _ => false,
-            })
+            .filter(|o| matches!(o.resource, SupportedResources::Deployment(_)))
             .collect_vec();
         assert_eq!(2, deployment_ops.len());
         assert!(deployment_ops.iter().all(|o| o.operation == OpType::Create
@@ -1162,10 +1159,7 @@ mod tests {
 
         let pod_ops = ops
             .iter()
-            .filter(|o| match o.resource {
-                SupportedResources::Pod(_) => true,
-                _ => false,
-            })
+            .filter(|o| matches!(o.resource, SupportedResources::Pod(_)))
             .collect_vec();
         assert_eq!(2, pod_ops.len());
         assert!(pod_ops
@@ -1268,9 +1262,9 @@ mod tests {
 
         let mut nodes = [node1, node2];
 
-        for i in 0..existing_replicas {
+        for (i, pod) in pods.iter().enumerate().take(existing_replicas) {
             let node_index: usize = (i + 1) % 2; // 0 or 1 alternating
-            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i])
+            nodes[node_index] = nodes[node_index].clone().with_pod(pod)
         }
 
         let state = ClusterState {
@@ -1294,10 +1288,7 @@ mod tests {
 
         let deployment_ops = ops
             .iter()
-            .filter(|o| match o.resource {
-                SupportedResources::Deployment(_) => true,
-                _ => false,
-            })
+            .filter(|o| matches!(o.resource, SupportedResources::Deployment(_)))
             .collect_vec();
         assert_eq!(2, deployment_ops.len());
         assert!(deployment_ops.iter().all(|o| o.operation == OpType::Create
@@ -1306,10 +1297,7 @@ mod tests {
 
         let pod_ops = ops
             .iter()
-            .filter(|o| match o.resource {
-                SupportedResources::Pod(_) => true,
-                _ => false,
-            })
+            .filter(|o| matches!(o.resource, SupportedResources::Pod(_)))
             .collect_vec();
         assert_eq!(4, pod_ops.len());
 
@@ -1340,9 +1328,9 @@ mod tests {
 
         let mut nodes = [node1, node2];
 
-        for i in 0..existing_replicas {
+        for (i, pod) in pods.iter().enumerate().take(existing_replicas) {
             let node_index: usize = (i + 1) % 2; // 0 or 1 alternating
-            nodes[node_index] = nodes[node_index].clone().with_pod(&pods[i])
+            nodes[node_index] = nodes[node_index].clone().with_pod(pod)
         }
 
         let state = ClusterState {
@@ -1367,10 +1355,7 @@ mod tests {
             .get(&ns_name)
             .unwrap()
             .iter()
-            .filter(|o| match o.resource {
-                SupportedResources::Deployment(_) => true,
-                _ => false,
-            })
+            .filter(|o| matches!(o.resource, SupportedResources::Deployment(_)))
             .collect_vec();
 
         assert_eq!(2, deployment_ops.len());
@@ -1379,8 +1364,8 @@ mod tests {
             && o.node.is_some()
             && !o.node.as_ref().unwrap().node_name.is_empty()));
 
-        for i in 0..existing_replicas {
-            let pod_name = metadata_name(&pods[i]);
+        for pod in pods.iter().take(existing_replicas) {
+            let pod_name = metadata_name(pod);
             let pod_ops = result.actions.get(&pod_name);
             assert!(pod_ops.is_some());
 
