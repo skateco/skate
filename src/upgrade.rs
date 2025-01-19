@@ -30,7 +30,7 @@ pub struct Upgrade<D: UpgradeDeps> {
 impl<D: UpgradeDeps> Upgrade<D> {
     pub async fn upgrade(&self, args: UpgradeArgs) -> Result<(), SkateError> {
         match &(args.command) {
-            Commands::Node(node_args) => self.upgrade_node(&args, &node_args).await?,
+            Commands::Node(node_args) => self.upgrade_node(&args, node_args).await?,
         }
         Ok(())
     }

@@ -3,6 +3,7 @@
 {
   # https://devenv.sh/basics/
   env.GREET = "devenv";
+  env.SSH_PRIVATE_KEY = "/tmp/skate-e2e-key";
 
   # https://devenv.sh/packages/
     packages = [
@@ -27,12 +28,11 @@
 
   # https://devenv.sh/scripts/
   scripts.hello.exec = ''
-    echo hello from $GREET
+    echo Welcome to skate
   '';
 
   enterShell = ''
     hello
-    git --version
   '';
 
   # https://devenv.sh/tasks/
@@ -80,6 +80,11 @@
 	./hack/sindplz skate
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
   '';
+
+  scripts = {
+    "clippy:run".exec = "cargo clippy --all";
+    "clippy:fix".exec = "cargo clippy --fix --all";
+  };
 
   languages.rust = {
     enable = true;
