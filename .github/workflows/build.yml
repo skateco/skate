@@ -23,7 +23,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: e2e-cargo-registry
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
       - uses: actions/checkout@v4
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker

@@ -27,7 +27,6 @@ lint:
 lint-fix:
 	cargo clippy --fix --all --allow-dirty --allow-staged
 
-
 .PHONY: run-e2e-tests
 run-e2e-tests: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
 run-e2e-tests:

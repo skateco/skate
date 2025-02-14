@@ -1,29 +1,37 @@
-use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
-use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
-use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::api::batch::v1::CronJob;
-use serde_yaml::Value;
-use std::error::Error;
-use anyhow::anyhow;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use std::collections::HashMap;
-use k8s_openapi::Resource;
 use crate::filestore::ObjectListItem;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::{SshClients};
+use crate::ssh::SshClients;
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName};
+use anyhow::anyhow;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
+use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+use k8s_openapi::Resource;
+use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
+use std::collections::HashMap;
+use std::error::Error;
+use strum_macros::{Display, EnumString};
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, EnumString, PartialEq)]
 #[strum(ascii_case_insensitive)]
 pub enum ResourceType {
     #[strum(serialize = "pods", serialize = "pod", to_string = "pod")]
     Pod,
-    #[strum(serialize = "deployments", serialize = "deployment", to_string = "deployment")]
+    #[strum(
+        serialize = "deployments",
+        serialize = "deployment",
+        to_string = "deployment"
+    )]
     Deployment,
-    #[strum(serialize = "daemonsets", serialize = "daemonset", to_string = "daemonset")]
+    #[strum(
+        serialize = "daemonsets",
+        serialize = "daemonset",
+        to_string = "daemonset"
+    )]
     DaemonSet,
     #[strum(serialize = "ingress", to_string = "ingress")]
     Ingress,
@@ -33,7 +41,11 @@ pub enum ResourceType {
     Secret,
     #[strum(serialize = "services", serialize = "service", to_string = "service")]
     Service,
-    #[strum(serialize = "clusterissuers", serialize = "clusterissuer", to_string = "clusterissuer")]
+    #[strum(
+        serialize = "clusterissuers",
+        serialize = "clusterissuer",
+        to_string = "clusterissuer"
+    )]
     ClusterIssuer,
 }
 
@@ -55,7 +67,6 @@ pub enum SupportedResources {
     Service(Service),
     #[strum(serialize = "ClusterIssuer")]
     ClusterIssuer(ClusterIssuer),
-
 }
 
 impl TryFrom<&ObjectListItem> for SupportedResources {
@@ -76,60 +87,43 @@ impl TryFrom<&Value> for SupportedResources {
         let api_version_key = Value::String("apiVersion".to_owned());
         let kind_key = Value::String("kind".to_owned());
 
-
         let api_version = value.get(&api_version_key).and_then(Value::as_str);
         let kind = value.get(&kind_key).and_then(Value::as_str);
         match (api_version, kind) {
             (Some(api_version), Some(kind)) => {
-                if api_version == Pod::API_VERSION &&
-                    kind == Pod::KIND
-                {
+                if api_version == Pod::API_VERSION && kind == Pod::KIND {
                     let pod: Pod = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Pod(pod))
-                } else if api_version == Deployment::API_VERSION &&
-                    kind == Deployment::KIND
-                {
+                } else if api_version == Deployment::API_VERSION && kind == Deployment::KIND {
                     let deployment: Deployment = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Deployment(deployment))
-                } else if api_version == DaemonSet::API_VERSION &&
-                    kind == DaemonSet::KIND
-                {
+                } else if api_version == DaemonSet::API_VERSION && kind == DaemonSet::KIND {
                     let daemonset: DaemonSet = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::DaemonSet(daemonset))
-                } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND
-                {
+                } else if api_version == Ingress::API_VERSION && kind == Ingress::KIND {
                     let ingress: Ingress = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Ingress(ingress))
-                } else if
-                api_version == CronJob::API_VERSION &&
-                    kind == CronJob::KIND
-                {
+                } else if api_version == CronJob::API_VERSION && kind == CronJob::KIND {
                     let cronjob: CronJob = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::CronJob(cronjob))
-                } else if
-                api_version == Secret::API_VERSION &&
-                    kind == Secret::KIND
-                {
+                } else if api_version == Secret::API_VERSION && kind == Secret::KIND {
                     let secret: Secret = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Secret(secret))
-                } else if
-                api_version == Service::API_VERSION &&
-                    kind == Service::KIND
-                {
+                } else if api_version == Service::API_VERSION && kind == Service::KIND {
                     let service: Service = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::Service(service))
-                } else if
-                api_version == ClusterIssuer::API_VERSION &&
-                    kind == ClusterIssuer::KIND {
+                } else if api_version == ClusterIssuer::API_VERSION && kind == ClusterIssuer::KIND {
                     let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::ClusterIssuer(clusterissuer))
                 } else {
-                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind)).context("unsupported resource type").into())
+                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind))
+                        .context("unsupported resource type")
+                        .into())
                 }
             }
-            _ => {
-                Err(anyhow!("missing 'kind' and 'apiVersion' fields").context("unsupported resource type").into())
-            }
+            _ => Err(anyhow!("missing 'kind' and 'apiVersion' fields")
+                .context("unsupported resource type")
+                .into()),
         }
     }
 }
@@ -148,20 +142,31 @@ impl SupportedResources {
         }
     }
 
-    pub async fn pre_remove_hook(&self, node: &NodeState, conns: &SshClients) -> Result<(), Box<dyn Error>> {
+    pub async fn pre_remove_hook(
+        &self,
+        node: &NodeState,
+        conns: &SshClients,
+    ) -> Result<(), Box<dyn Error>> {
         match self {
             SupportedResources::Pod(pod) => {
-                let mut errs = vec!();
+                let mut errs = vec![];
                 // remove the pod ip from dns on deployed node
-                let ips: Vec<_> = match conns.find(&node.node_name).unwrap()
-                    .execute(&format!("sudo skatelet dns remove --pod-id {}", &pod.metadata.name.clone().unwrap())).await {
+                let ips: Vec<_> = match conns
+                    .find(&node.node_name)
+                    .unwrap()
+                    .execute(&format!(
+                        "sudo skatelet dns remove --pod-id {}",
+                        &pod.metadata.name.clone().unwrap()
+                    ))
+                    .await
+                {
                     Ok(ips) => {
                         let ips: Vec<_> = ips.lines().map(|l| l.to_string()).collect();
                         ips
                     }
                     Err(e) => {
                         errs.push(e);
-                        vec!()
+                        vec![]
                     }
                 };
 
@@ -173,10 +178,17 @@ impl SupportedResources {
                     return Ok(());
                 }
                 let deployment = deployment.unwrap().clone();
-                let fq_deployment_name = NamespacedName { name: deployment, namespace: name.namespace };
+                let fq_deployment_name = NamespacedName {
+                    name: deployment,
+                    namespace: name.namespace,
+                };
 
-
-                let cmd = format!(r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#, &fq_deployment_name, ips.join(" "), &fq_deployment_name);
+                let cmd = format!(
+                    r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#,
+                    &fq_deployment_name,
+                    ips.join(" "),
+                    &fq_deployment_name
+                );
                 let res = conns.execute(&cmd).await;
                 res.into_iter().for_each(|(_node, result)| {
                     if result.is_err() {
@@ -186,68 +198,125 @@ impl SupportedResources {
                 });
 
                 if !errs.is_empty() {
-                    return Err(anyhow!(errs.iter().map(|e|e.to_string()).collect::<Vec<String>>().join(". ")).context("failed to run pre-remove hook").into());
+                    return Err(anyhow!(errs
+                        .iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<String>>()
+                        .join(". "))
+                    .context("failed to run pre-remove hook")
+                    .into());
                 }
 
                 Ok(())
             }
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
 
     // whether there's host network set
     pub fn host_network(&self) -> bool {
         match self {
-            SupportedResources::Pod(p) => p.clone().spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::Deployment(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
-            SupportedResources::DaemonSet(d) => d.clone().spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::Pod(p) => p
+                .clone()
+                .spec
+                .unwrap_or_default()
+                .host_network
+                .unwrap_or_default(),
+            SupportedResources::Deployment(d) => d
+                .clone()
+                .spec
+                .unwrap_or_default()
+                .template
+                .spec
+                .unwrap_or_default()
+                .host_network
+                .unwrap_or_default(),
+            SupportedResources::DaemonSet(d) => d
+                .clone()
+                .spec
+                .unwrap_or_default()
+                .template
+                .spec
+                .unwrap_or_default()
+                .host_network
+                .unwrap_or_default(),
             SupportedResources::Ingress(_) => false,
-            SupportedResources::CronJob(c) => c.clone().spec.unwrap_or_default().job_template.spec.unwrap_or_default().template.spec.unwrap_or_default().host_network.unwrap_or_default(),
+            SupportedResources::CronJob(c) => c
+                .clone()
+                .spec
+                .unwrap_or_default()
+                .job_template
+                .spec
+                .unwrap_or_default()
+                .template
+                .spec
+                .unwrap_or_default()
+                .host_network
+                .unwrap_or_default(),
             SupportedResources::Secret(_) => false,
             SupportedResources::Service(_) => false,
             SupportedResources::ClusterIssuer(_) => false,
         }
     }
-    fn fixup_pod_template(template: PodTemplateSpec, ns: &str) -> Result<PodTemplateSpec, Box<dyn Error>> {
+    fn fixup_pod_template(
+        template: PodTemplateSpec,
+        ns: &str,
+    ) -> Result<PodTemplateSpec, Box<dyn Error>> {
         let mut template = template.clone();
         template.spec = match template.spec {
             Some(ref mut spec) => {
                 // first do env-var secrets
-                spec.containers = spec.containers.clone().into_iter().map(|mut container| {
-                    container.env = container.env.map(|env_list| env_list.into_iter().map(|mut e| {
-                        match e.value_from.as_mut() {
-                            Some(value) => match value.secret_key_ref.as_mut() {
-                                Some(key_ref) =>  {
-                                    // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
-                                    key_ref.name = format!("{}.{}", &key_ref.name, &ns);
-                                },
-                                _ => {}
-                            },
-                            _ => {},
-                        };
-                        e
-                    }).collect());
-                    container
-                }).collect();
+                spec.containers = spec
+                    .containers
+                    .clone()
+                    .into_iter()
+                    .map(|mut container| {
+                        container.env = container.env.map(|env_list| {
+                            env_list
+                                .into_iter()
+                                .map(|mut e| {
+                                    if let Some(value) = e.value_from.as_mut() {
+                                        if let Some(key_ref) = value.secret_key_ref.as_mut() {
+                                            // the secret names have to be suffixed with .<namespace> in order for them not to be available across namespace
+                                            key_ref.name = format!("{}.{}", &key_ref.name, &ns);
+                                        }
+                                    };
+                                    e
+                                })
+                                .collect()
+                        });
+                        container
+                    })
+                    .collect();
                 // now do volume secrets
-                spec.volumes = spec.volumes.clone().map(|volumes| volumes.into_iter().map(|mut volume| {
-                    volume.secret = volume.secret.clone().map(|mut secret| {
-                        secret.secret_name = secret.secret_name.clone().map(|secret_name| format!("{}.{}", secret_name, ns));
-                        secret
-                    });
-                    volume
-                }).collect());
-
+                spec.volumes = spec.volumes.clone().map(|volumes| {
+                    volumes
+                        .into_iter()
+                        .map(|mut volume| {
+                            volume.secret = volume.secret.clone().map(|mut secret| {
+                                secret.secret_name = secret
+                                    .secret_name
+                                    .clone()
+                                    .map(|secret_name| format!("{}.{}", secret_name, ns));
+                                secret
+                            });
+                            volume
+                        })
+                        .collect()
+                });
 
                 Some(spec.clone())
             }
-            None => None
+            None => None,
         };
 
         Ok(template)
     }
 
-    fn fixup_metadata(meta: ObjectMeta, extra_labels: Option<HashMap<String, String>>) -> Result<ObjectMeta, Box<dyn Error>> {
+    fn fixup_metadata(
+        meta: ObjectMeta,
+        extra_labels: Option<HashMap<String, String>>,
+    ) -> Result<ObjectMeta, Box<dyn Error>> {
         let mut meta = meta.clone();
         let ns = meta.namespace.clone().unwrap_or("default".to_string());
         let name = meta.name.clone().unwrap();
@@ -257,7 +326,9 @@ impl SupportedResources {
         labels.insert("skate.io/name".to_string(), name.clone());
         labels.insert("skate.io/namespace".to_string(), ns.clone());
 
-        if let Some(extra_labels) = extra_labels { labels.extend(extra_labels) };
+        if let Some(extra_labels) = extra_labels {
+            labels.extend(extra_labels)
+        };
         meta.labels = Some(labels);
 
         let mut annotations = meta.annotations.unwrap_or_default();
@@ -281,7 +352,11 @@ impl SupportedResources {
                 }
 
                 s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
-                s.metadata.name = Some(format!("{}.{}", original_name, s.metadata.namespace.clone().unwrap()));
+                s.metadata.name = Some(format!(
+                    "{}.{}",
+                    original_name,
+                    s.metadata.namespace.clone().unwrap()
+                ));
                 resource
             }
             SupportedResources::CronJob(ref mut c) => {
@@ -293,16 +368,15 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let extra_labels = HashMap::from([
-                    ("skate.io/cronjob".to_string(), original_name)
-                ]);
+                let extra_labels = HashMap::from([("skate.io/cronjob".to_string(), original_name)]);
                 c.metadata = Self::fixup_metadata(c.metadata.clone(), None)?;
                 c.spec = match c.spec.clone() {
                     Some(mut spec) => {
                         match spec.job_template.spec {
                             Some(mut job_spec) => {
                                 job_spec.template.metadata = {
-                                    let mut meta = job_spec.template.metadata.clone().unwrap_or_default();
+                                    let mut meta =
+                                        job_spec.template.metadata.clone().unwrap_or_default();
                                     // forward the namespace
                                     meta.namespace = c.metadata.namespace.clone();
                                     // if no name is set, set it to the cronjob name
@@ -313,14 +387,17 @@ impl SupportedResources {
                                     Some(meta)
                                 };
 
-                                job_spec.template = Self::fixup_pod_template(job_spec.template.clone(), c.metadata.namespace.as_ref().unwrap())?;
+                                job_spec.template = Self::fixup_pod_template(
+                                    job_spec.template.clone(),
+                                    c.metadata.namespace.as_ref().unwrap(),
+                                )?;
                                 spec.job_template.spec = Some(job_spec);
                                 Some(spec)
                             }
-                            None => None
+                            None => None,
                         }
                     }
-                    None => None
+                    None => None,
                 };
                 resource
             }
@@ -361,9 +438,8 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let extra_labels = HashMap::from([
-                    ("skate.io/deployment".to_string(), original_name.clone())
-                ]);
+                let extra_labels =
+                    HashMap::from([("skate.io/deployment".to_string(), original_name.clone())]);
                 d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
 
                 d.spec = match d.spec.clone() {
@@ -379,10 +455,13 @@ impl SupportedResources {
                             Some(meta)
                         };
 
-                        spec.template = Self::fixup_pod_template(spec.template.clone(), d.metadata.namespace.as_ref().unwrap())?;
+                        spec.template = Self::fixup_pod_template(
+                            spec.template.clone(),
+                            d.metadata.namespace.as_ref().unwrap(),
+                        )?;
                         Some(spec)
                     }
-                    None => None
+                    None => None,
                 };
                 resource
             }
@@ -395,9 +474,8 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let extra_labels = HashMap::from([
-                    ("skate.io/daemonset".to_string(), original_name.clone())
-                ]);
+                let extra_labels =
+                    HashMap::from([("skate.io/daemonset".to_string(), original_name.clone())]);
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
                 ds.spec = match ds.spec.clone() {
                     Some(mut spec) => {
@@ -412,10 +490,13 @@ impl SupportedResources {
                             Some(meta)
                         };
 
-                        spec.template = Self::fixup_pod_template(spec.template.clone(), ds.metadata.namespace.as_ref().unwrap())?;
+                        spec.template = Self::fixup_pod_template(
+                            spec.template.clone(),
+                            ds.metadata.namespace.as_ref().unwrap(),
+                        )?;
                         Some(spec)
                     }
-                    None => None
+                    None => None,
                 };
                 resource
             }
@@ -426,7 +507,6 @@ impl SupportedResources {
                 if s.metadata.namespace.is_none() {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
-
 
                 s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
                 // set name to be name.namespace

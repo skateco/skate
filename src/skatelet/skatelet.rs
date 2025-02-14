@@ -1,4 +1,5 @@
-use crate::util;
+use crate::deps::Deps;
+use crate::errors::SkateError;
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
@@ -9,21 +10,25 @@ use crate::skatelet::ipvs::{IPVSDeps, IpvsArgs, IPVS};
 use crate::skatelet::oci::{oci, OciArgs};
 use crate::skatelet::system::{system, SystemArgs, SystemDeps};
 use crate::skatelet::template::{template, TemplateArgs};
+use crate::util;
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use std::panic::PanicInfo;
 use std::{process, thread};
-use anyhow::anyhow;
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
-use crate::deps::{Deps};
-use crate::errors::SkateError;
 
 pub const VAR_PATH: &str = "/var/lib/skate";
 
 #[derive(Debug, Parser)]
 #[command(name = "skatelet")]
-#[command(about = "Skatelet", version, long_about = "Skate agent to be run on nodes", arg_required_else_help = true)]
+#[command(
+    about = "Skatelet",
+    version,
+    long_about = "Skate agent to be run on nodes",
+    arg_required_else_help = true
+)]
 #[clap(version = util::version(false), long_version = util::version(true))]
 struct Cli {
     #[command(subcommand)]
@@ -45,7 +50,6 @@ enum Commands {
 }
 
 pub fn log_panic(info: &PanicInfo) {
-
     let thread = thread::current();
     let thread = thread.name().unwrap_or("<unnamed>");
 
@@ -60,31 +64,30 @@ pub fn log_panic(info: &PanicInfo) {
     match info.location() {
         Some(location) => {
             error!(
-                        target: "panic", "thread '{}' panicked at '{}': {}:{}",
-                        thread,
-                        msg,
-                        location.file(),
-                        location.line(),
-                    );
+                target: "panic", "thread '{}' panicked at '{}': {}:{}",
+                thread,
+                msg,
+                location.file(),
+                location.line(),
+            );
         }
         None => error!(
-                    target: "panic",
-                    "thread '{}' panicked at '{}'",
-                    thread,
-                    msg,
-                ),
+            target: "panic",
+            "thread '{}' panicked at '{}'",
+            thread,
+            msg,
+        ),
     }
 }
 
-impl ApplyDeps for Deps{}
-impl SystemDeps for Deps{}
-impl CreateDeps for Deps{}
-impl DeleteDeps for Deps{}
-impl DnsDeps for Deps{}
-impl IPVSDeps for Deps{}
+impl ApplyDeps for Deps {}
+impl SystemDeps for Deps {}
+impl CreateDeps for Deps {}
+impl DeleteDeps for Deps {}
+impl DnsDeps for Deps {}
+impl IPVSDeps for Deps {}
 
 pub async fn skatelet() -> Result<(), SkateError> {
-
     let args = Cli::parse();
 
     let cmd_name: &'static str = (&args.command).into();
@@ -100,32 +103,30 @@ pub async fn skatelet() -> Result<(), SkateError> {
     };
 
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-        .map(|()| log::set_max_level(LevelFilter::Debug)).map_err(|e| anyhow!(e))?;
+        .map(|()| log::set_max_level(LevelFilter::Debug))
+        .map_err(|e| anyhow!(e))?;
 
-    
-    let deps = Deps{
-    };
-    
+    let deps = Deps {};
 
     let result = match args.command {
         Commands::Apply(args) => apply::apply(deps, args),
         Commands::System(args) => system(deps, args).await,
         Commands::Delete(args) => {
-            let deleter = Deleter{deps};
+            let deleter = Deleter { deps };
             deleter.delete(args)
-        },
+        }
         // TODO - deps
         Commands::Template(args) => template(args),
         Commands::Dns(args) => {
-            let dns = Dns{deps};
+            let dns = Dns { deps };
             dns.dns(args)
-        },
+        }
         // TODO - deps
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => {
-            let ipvs = IPVS{deps};
+            let ipvs = IPVS { deps };
             ipvs.ipvs(args)
-        },
+        }
         Commands::Create(args) => create(deps, args),
         Commands::Cordon(args) => cordon(args),
         Commands::Uncordon(args) => uncordon(args),
@@ -139,6 +140,3 @@ pub async fn skatelet() -> Result<(), SkateError> {
         }
     }
 }
-
-
-

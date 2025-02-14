@@ -1,8 +1,8 @@
-use thiserror::Error;
-use std::error::Error as RustError;
-use handlebars::RenderError;
-use validator::{ValidationErrors};
 use crate::ssh::SshError;
+use handlebars::RenderError;
+use std::error::Error as RustError;
+use thiserror::Error;
+use validator::ValidationErrors;
 
 #[derive(Error, Debug)]
 pub enum SkateError {
@@ -15,7 +15,7 @@ pub enum SkateError {
     #[error("Error: {0}")]
     Syslog(#[from] syslog::Error),
     #[error("Error: {0}")]
-    Boxed(#[from]Box<dyn RustError>),
+    Boxed(#[from] Box<dyn RustError>),
     #[error("Error: {0}")]
     Render(#[from] RenderError),
     #[error("Error: {0}")]

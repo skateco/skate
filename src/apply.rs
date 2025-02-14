@@ -1,23 +1,27 @@
-use anyhow::anyhow;
-use clap::Args;
-use std::error::Error;
-use serde_yaml::Value;
-use std::{fs, io};
-use std::io::Read;
-use serde::Deserialize;
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::refresh::{Refresh, RefreshDeps};
 use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
+use anyhow::anyhow;
+use clap::Args;
+use serde::Deserialize;
+use serde_yaml::Value;
+use std::error::Error;
+use std::io::Read;
+use std::{fs, io};
 
 use crate::skate::ConfigFileArgs;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
 pub struct ApplyArgs {
-    #[arg(short, long, long_help = "The files that contain the configurations to apply.")]
+    #[arg(
+        short,
+        long,
+        long_help = "The files that contain the configurations to apply."
+    )]
     pub filename: Vec<String>,
     #[arg(long, default_value_t = - 1, long_help = "Period of time in seconds given to the resource to terminate gracefully. Ignored if negative. Set to 1 for \
 immediate shutdown.")]
@@ -28,10 +32,10 @@ immediate shutdown.")]
     pub dry_run: bool,
 }
 
-pub trait ApplyDeps: With<dyn SshManager> + RefreshDeps{}
+pub trait ApplyDeps: With<dyn SshManager> + RefreshDeps {}
 
-pub struct Apply<D: ApplyDeps>{
-    pub deps: D
+pub struct Apply<D: ApplyDeps> {
+    pub deps: D,
 }
 
 impl<D: ApplyDeps> Apply<D> {
@@ -40,12 +44,17 @@ impl<D: ApplyDeps> Apply<D> {
         let objects = read_manifests(args.filename)?;
         Self::apply_supported_resources(deps, &config, objects, args.dry_run).await
     }
-    
+
     pub async fn apply_self(&self, args: ApplyArgs) -> Result<(), SkateError> {
         Self::apply(&self.deps, args).await
     }
 
-    pub(crate) async fn apply_supported_resources(deps: &D, config: &Config, resources: Vec<SupportedResources>, dry_run: bool) -> Result<(), SkateError> {
+    pub(crate) async fn apply_supported_resources(
+        deps: &D,
+        config: &Config,
+        resources: Vec<SupportedResources>,
+        dry_run: bool,
+    ) -> Result<(), SkateError> {
         let cluster = config.active_cluster(config.current_context.clone())?;
         let ssh_manager = deps.get();
         let (conns, errors) = ssh_manager.cluster_connect(cluster).await;
@@ -64,10 +73,15 @@ impl<D: ApplyDeps> Apply<D> {
 
         let conns = conns.ok_or("no clients".to_string())?;
 
-        let mut state = Refresh::<D>::refreshed_state(&cluster.name, &conns, config).await.expect("failed to refresh state");
+        let mut state = Refresh::<D>::refreshed_state(&cluster.name, &conns, config)
+            .await
+            .expect("failed to refresh state");
 
         let scheduler = DefaultScheduler {};
-        match scheduler.schedule(&conns, &mut state, objects, dry_run).await {
+        match scheduler
+            .schedule(&conns, &mut state, objects, dry_run)
+            .await
+        {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("{}", e);
@@ -101,6 +115,6 @@ pub fn read_manifests(filenames: Vec<String>) -> Result<Vec<SupportedResources>,
                 result.push(SupportedResources::try_from(&value)?)
             }
         }
-    };
+    }
     Ok(result)
 }

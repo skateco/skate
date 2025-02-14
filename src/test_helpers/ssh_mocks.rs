@@ -1,9 +1,9 @@
-use async_trait::async_trait;
 use crate::config::{Cluster, Node};
 use crate::deps::SshManager;
 use crate::ssh::{SshClient, SshClients, SshError, SshErrors};
+use async_trait::async_trait;
 
-pub struct MockSshManager{}
+pub struct MockSshManager {}
 
 #[async_trait]
 impl SshManager for MockSshManager {
