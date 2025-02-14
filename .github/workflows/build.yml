@@ -54,7 +54,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: build-cargo-registry-${{matrix.TARGET}}
+          key: ${{ runner.os }}-${{ matrix.TARGET }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.TARGET }}-cargo-build-
       - name: Install and configure dependencies
         run: |
           # dependencies are only needed on ubuntu as that's the only place where
