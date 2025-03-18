@@ -14,7 +14,7 @@ use crate::util;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use std::panic::PanicInfo;
+use std::panic::PanicHookInfo;
 use std::{process, thread};
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
@@ -49,7 +49,7 @@ enum Commands {
     Uncordon(UncordonArgs),
 }
 
-pub fn log_panic(info: &PanicInfo) {
+pub fn log_panic(info: &PanicHookInfo) {
     let thread = thread::current();
     let thread = thread.name().unwrap_or("<unnamed>");
 
