@@ -174,6 +174,18 @@ async fn test_cluster_creation() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
+
+async fn curl_for_content(node: String, ip: String, content: String) -> Result<(), anyhow::Error> {
+    let (stdout, _stderr) = skate(
+        "node-shell",
+        &[&node, "--", "curl", "--fail", "--silent", &ip],
+    )
+    .await?;
+    if !stdout.contains(&content) {
+        return Err(anyhow!("{}: expected {}, got {}", node, content, stdout));
+    }
+    Ok(())
+}
 async fn test_deployment() -> Result<(), anyhow::Error> {
     let root = env::var("CARGO_MANIFEST_DIR")?;
 
@@ -208,7 +220,7 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
     }
 
     let results = retry_all_nodes(10, 1, |node: String| async move {
-        match skate(
+        let result = skate(
             "node-shell",
             &[
                 &node,
@@ -218,8 +230,9 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
                 "nginx.test-deployment.pod.cluster.skate",
             ],
         )
-        .await
-        {
+        .await;
+
+        match result {
             Ok((stdout, _)) => {
                 if stdout.trim().lines().count() != 3 {
                     return Err(anyhow!(
@@ -234,11 +247,44 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
     })
     .await;
 
+    assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
+
+    let results = retry_all_nodes(10, 1, |node: String| async move {
+        let args = vec![
+            &node,
+            "--",
+            "dig",
+            "+short",
+            "nginx.test-deployment.pod.cluster.skate",
+        ];
+        let result = skate("node-shell", &args)
+            .await
+            .expect("failed to get dns entries");
+        let ips = result.0.trim().lines().collect::<Vec<_>>();
+        assert_eq!(3, ips.len());
+
+        let futures: FuturesUnordered<_> = ips
+            .iter()
+            .map(|ip| {
+                curl_for_content(
+                    node.to_string(),
+                    ip.to_string(),
+                    "Welcome to nginx!".to_string(),
+                )
+            })
+            .collect();
+
+        let results: Vec<_> = futures.collect().await;
+
+        assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
+
+        Ok(())
+    })
+    .await;
+
     assert!(results.iter().all(|r| r.is_ok()));
 
     // TODO - check healthchecks work
-    //      - dns entries exist
-    //      - addresses are reachable from each node
 
     Ok(())
 }
