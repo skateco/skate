@@ -67,14 +67,25 @@ where
                     println!("retried {} times", n);
                 }
 
-                if let Ok(res) = f(node.to_string()).await {
+                let result = f(node.to_string()).await;
+                if let Ok(res) = result {
                     return Ok(res);
+                } else if n == attempts - 1 {
+                    return Err(anyhow!(
+                        "{} => error after {} attempts: {:?}",
+                        node.to_owned(),
+                        attempts,
+                        result.err()
+                    ));
                 }
 
                 sleep(Duration::from_secs(delay)).await;
             }
-
-            Err(anyhow!("error after {} attempts", attempts))
+            Err(anyhow!(
+                "{} => error after {} attempts: ? shouldn't get here ?",
+                node.to_owned(),
+                attempts
+            ))
         })
         .collect();
 
@@ -220,7 +231,7 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
     }
 
     let results = retry_all_nodes(10, 1, |node: String| async move {
-        let result = skate(
+        let (stdout, _) = skate(
             "node-shell",
             &[
                 &node,
@@ -230,38 +241,17 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
                 "nginx.test-deployment.pod.cluster.skate",
             ],
         )
-        .await;
+        .await?;
 
-        match result {
-            Ok((stdout, _)) => {
-                if stdout.trim().lines().count() != 3 {
-                    return Err(anyhow!(
-                        "expected 3 dns entries, got {}",
-                        stdout.trim().lines().count()
-                    ));
-                }
-                Ok(())
-            }
-            Err(err) => Err(err.into()),
+        let ips = stdout.trim().lines().collect::<Vec<_>>();
+
+        if ips.len() != 3 {
+            return Err(anyhow!(
+                "expected 3 dns entries, got {}: {:?}",
+                ips.len(),
+                ips,
+            ));
         }
-    })
-    .await;
-
-    assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
-
-    let results = retry_all_nodes(10, 1, |node: String| async move {
-        let args = vec![
-            &node,
-            "--",
-            "dig",
-            "+short",
-            "nginx.test-deployment.pod.cluster.skate",
-        ];
-        let result = skate("node-shell", &args)
-            .await
-            .expect("failed to get dns entries");
-        let ips = result.0.trim().lines().collect::<Vec<_>>();
-        assert_eq!(3, ips.len());
 
         let futures: FuturesUnordered<_> = ips
             .iter()
@@ -278,13 +268,13 @@ async fn test_deployment() -> Result<(), anyhow::Error> {
 
         assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
 
+        // TODO - check healthchecks work
+
         Ok(())
     })
     .await;
 
-    assert!(results.iter().all(|r| r.is_ok()));
-
-    // TODO - check healthchecks work
+    assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
 
     Ok(())
 }
@@ -333,19 +323,17 @@ async fn test_service() -> Result<(), anyhow::Error> {
     let host = "nginx.test-deployment.svc.cluster.skate";
 
     let results = retry_all_nodes(10, 1, |node: String| async move {
-        let result = skate("node-shell", &[&node, "--", "dig", "+short", host]).await;
+        let (stdout, _) = skate("node-shell", &[&node, "--", "dig", "+short", host]).await?;
 
-        match result {
-            Ok((stdout, _)) => {
-                if stdout.trim().lines().count() != 1 {
-                    return Err(anyhow!(
-                        "expected 1 dns entry, got {}",
-                        stdout.trim().lines().count()
-                    ));
-                }
-            }
-            Err(err) => return Err(err.into()),
-        };
+        let service_ips = stdout.trim().lines().collect::<Vec<_>>();
+
+        if service_ips.len() != 1 {
+            return Err(anyhow!(
+                "expected 1 dns entry, got {}: {:?}",
+                service_ips.len(),
+                service_ips,
+            ));
+        }
 
         for _ in 0..5 {
             curl_for_content(
@@ -355,14 +343,54 @@ async fn test_service() -> Result<(), anyhow::Error> {
             )
             .await?;
         }
+        let service_ip = service_ips[0];
+
+        ensure_lvs_realservers(service_ip.to_string(), 80, 3).await?;
 
         Ok(())
     })
     .await;
 
-    assert!(results.iter().all(|r| r.is_ok()));
+    assert!(results.iter().all(|r| r.is_ok()), "{:?}", results);
 
-    // TODO
-    //      - keepalived realservers exist
+    Ok(())
+}
+
+async fn ensure_lvs_realservers(
+    vs_host: String,
+    vs_port: u16,
+    assert_realservers: usize,
+) -> Result<(), anyhow::Error> {
+    let (stdout, _stderr) = skate(
+        "node-shell",
+        &[
+            "node-1",
+            "--",
+            "sudo",
+            "ipvsadm",
+            "-L",
+            "-n",
+            "-t",
+            &format!("{}:{}", vs_host, vs_port),
+        ],
+    )
+    .await
+    .map_err(|e| anyhow!(e).context("ipvsadm command failed"))?;
+
+    let lines = stdout.trim().lines().collect::<Vec<_>>();
+
+    let realservers = lines.iter().skip(3);
+
+    let realservers = realservers.collect::<Vec<_>>();
+
+    if realservers.len() != assert_realservers {
+        return Err(anyhow!(
+            "expected {} realservers, got {}: {:?}",
+            assert_realservers,
+            realservers.len(),
+            realservers,
+        ));
+    }
+
     Ok(())
 }
