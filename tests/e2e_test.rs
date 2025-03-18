@@ -361,7 +361,7 @@ async fn ensure_lvs_realservers(
     vs_port: u16,
     assert_realservers: usize,
 ) -> Result<(), anyhow::Error> {
-    let (stdout, stderr) = skate(
+    let (stdout, _stderr) = skate(
         "node-shell",
         &[
             "node-1",
