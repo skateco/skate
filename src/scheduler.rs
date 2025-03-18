@@ -665,6 +665,14 @@ impl DefaultScheduler {
     fn plan_service(state: &ClusterState, service: &Service) -> Result<ApplyPlan, Box<dyn Error>> {
         let name = metadata_name(service);
 
+        if let Some(spec) = &service.spec {
+            if let Some(selector) = &spec.selector {
+                if selector.is_empty() {
+                    return Err(anyhow!("service selector can not be empty").into());
+                }
+            }
+        }
+
         let mut actions = vec![];
 
         let mut new_service = service.clone();

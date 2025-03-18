@@ -4,15 +4,15 @@ use crate::errors::SkateError;
 use crate::refresh::{Refresh, RefreshDeps};
 use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
+use crate::skate::ConfigFileArgs;
 use anyhow::anyhow;
 use clap::Args;
+use itertools::{Either, Itertools};
 use serde::Deserialize;
 use serde_yaml::Value;
 use std::error::Error;
 use std::io::Read;
 use std::{fs, io};
-
-use crate::skate::ConfigFileArgs;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
@@ -69,7 +69,17 @@ impl<D: ApplyDeps> Apply<D> {
         };
 
         let objects: Vec<Result<_, _>> = resources.into_iter().map(|sr| sr.fixup()).collect();
-        let objects: Vec<_> = objects.into_iter().map(|sr| sr.unwrap()).collect();
+
+        // gather errors
+        let (objects, errors): (Vec<_>, Vec<_>) = objects.into_iter().partition_map(|r| match r {
+            Ok(o) => Either::Left(o),
+            Err(e) => Either::Right(e),
+        });
+
+        for e in errors {
+            eprintln!("{}", e);
+            return Err(anyhow!("some resources were invalid").into());
+        }
 
         let conns = conns.ok_or("no clients".to_string())?;
 
