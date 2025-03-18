@@ -175,10 +175,10 @@ async fn test_cluster_creation() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn curl_for_content(node: String, ip: String, content: String) -> Result<(), anyhow::Error> {
+async fn curl_for_content(node: String, url: String, content: String) -> Result<(), anyhow::Error> {
     let (stdout, _stderr) = skate(
         "node-shell",
-        &[&node, "--", "curl", "--fail", "--silent", &ip],
+        &[&node, "--", "curl", "--fail", "--silent", &url],
     )
     .await?;
     if !stdout.contains(&content) {
@@ -330,20 +330,12 @@ async fn test_service() -> Result<(), anyhow::Error> {
     .await;
 
     assert!(results.iter().all(|r| r.is_ok()));
+    let host = "nginx.test-deployment.svc.cluster.skate";
 
     let results = retry_all_nodes(10, 1, |node: String| async move {
-        match skate(
-            "node-shell",
-            &[
-                &node,
-                "--",
-                "dig",
-                "+short",
-                "nginx.test-deployment.svc.cluster.skate",
-            ],
-        )
-        .await
-        {
+        let result = skate("node-shell", &[&node, "--", "dig", "+short", host]).await;
+
+        match result {
             Ok((stdout, _)) => {
                 if stdout.trim().lines().count() != 1 {
                     return Err(anyhow!(
@@ -351,10 +343,20 @@ async fn test_service() -> Result<(), anyhow::Error> {
                         stdout.trim().lines().count()
                     ));
                 }
-                Ok(())
             }
-            Err(err) => Err(err.into()),
+            Err(err) => return Err(err.into()),
+        };
+
+        for _ in 0..5 {
+            curl_for_content(
+                node.to_string(),
+                host.to_string(),
+                "Welcome to nginx!".to_string(),
+            )
+            .await?;
         }
+
+        Ok(())
     })
     .await;
 
@@ -362,6 +364,5 @@ async fn test_service() -> Result<(), anyhow::Error> {
 
     // TODO
     //      - keepalived realservers exist
-    //      - service is reachable
     Ok(())
 }
