@@ -1,6 +1,7 @@
 use crate::config::{Cluster, Node};
 use crate::exec::{RealExec, ShellExec};
 use crate::filestore::{FileStore, Store};
+use crate::skatelet::VAR_PATH;
 use crate::ssh::{RealSsh, SshClient, SshClients, SshError, SshErrors};
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
@@ -19,7 +20,7 @@ pub struct Deps {}
 
 impl With<dyn Store> for Deps {
     fn get(&self) -> Box<dyn Store> {
-        Box::new(FileStore::new())
+        Box::new(FileStore::new(format!("{}/store", VAR_PATH)))
     }
 }
 

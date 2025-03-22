@@ -2,6 +2,7 @@ use crate::errors::SkateError;
 use crate::exec::{RealExec, ShellExec};
 use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
+use crate::skatelet::VAR_PATH;
 use crate::util::spawn_orphan_process;
 use clap::{Args, Subcommand};
 use log::{error, info};
@@ -49,7 +50,7 @@ fn post_stop() -> Result<(), SkateError> {
     info!("poststop");
     let id = container_id()?;
     let execer: Box<dyn ShellExec> = Box::new(RealExec {});
-    let dns = DnsService::new("/var/lib/skate/dns", &execer);
+    let dns = DnsService::new(&format!("{}/dns", VAR_PATH), &execer);
     dns.remove(Some(id), None)
 }
 

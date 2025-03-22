@@ -18,6 +18,7 @@ use crate::filestore::{FileStore, ObjectListItem, Store};
 use crate::resource::ResourceType;
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
+use crate::skatelet::skatelet::VAR_PATH;
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::NamespacedName;
 use podman::PodmanPodInfo;
@@ -162,7 +163,7 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&pod_list_result)
         .map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
-    let store = FileStore::new();
+    let store = FileStore::new(format!("{}/store", VAR_PATH));
     let ingresses = store.list_objects("ingress")?;
     let cronjobs = store.list_objects("cronjob")?;
     let services = store.list_objects("service")?;

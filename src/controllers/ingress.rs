@@ -1,5 +1,6 @@
 use crate::exec::ShellExec;
 use crate::filestore::Store;
+use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
 use anyhow::anyhow;
@@ -14,11 +15,16 @@ use std::{fs, process};
 pub struct IngressController {
     store: Box<dyn Store>,
     execer: Box<dyn ShellExec>,
+    ingress_path: String,
 }
 
 impl IngressController {
     pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
-        IngressController { store, execer }
+        IngressController {
+            store,
+            execer,
+            ingress_path: format!("{}/ingress", VAR_PATH),
+        }
     }
 
     pub fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
@@ -28,7 +34,7 @@ impl IngressController {
 
         self.execer.exec(
             "mkdir",
-            &["-p", &format!("/var/lib/skate/ingress/services/{}", name)],
+            &["-p", &format!("{}/services/{}", self.ingress_path, name)],
         )?;
 
         // manifest goes into store
@@ -64,11 +70,18 @@ impl IngressController {
             json_ingress["port"] = json!(port);
 
             let json_ingress_string = json_ingress.to_string();
+            let ingress_path = &self.ingress_path;
 
             let child = process::Command::new("bash")
-                .args(["-c", &format!("skatelet template --file /var/lib/skate/ingress/service.conf.tmpl - > /var/lib/skate/ingress/services/{}/{}.conf", name, port)])
+                .args([
+                    "-c",
+                    &format!(
+                        "skatelet template --file {ingress_path}/service.conf.tmpl - > {ingress_path}/services/{name}/{port}.conf",
+                    ),
+                ])
                 .stdin(Stdio::piped())
-                .stdout(Stdio::piped()).spawn()?;
+                .stdout(Stdio::piped())
+                .spawn()?;
 
             let _ = child
                 .stdin
@@ -98,7 +111,7 @@ impl IngressController {
 
     pub fn delete(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(ingress);
-        let dir = format!("/var/lib/skate/ingress/services/{}", ns_name);
+        let dir = format!("{}/services/{}", self.ingress_path, ns_name);
         let result = fs::remove_dir_all(&dir);
         if result.is_err() && result.as_ref().unwrap_err().kind() != std::io::ErrorKind::NotFound {
             return Err(anyhow!(result.unwrap_err())
@@ -198,9 +211,10 @@ impl IngressController {
                 "allowDomains": le_allow_domains
             },
         });
+        let ingress_path = &self.ingress_path;
 
         let child = process::Command::new("bash")
-            .args(["-c", "skatelet template --file /var/lib/skate/ingress/nginx.conf.tmpl - > /var/lib/skate/ingress/nginx.conf"])
+            .args(["-c", &format!("skatelet template --file {ingress_path}/nginx.conf.tmpl - > {ingress_path}/nginx.conf")])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
