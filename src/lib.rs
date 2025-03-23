@@ -31,6 +31,7 @@ mod github;
 mod node_shell;
 mod resource;
 mod rollout;
+pub mod sind;
 mod test_helpers;
 mod upgrade;
 
