@@ -22,7 +22,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     let shell_exec: Box<dyn ShellExec> = deps.get();
 
     println!("Removing existing nodes");
-    shell_exec.exec(
+    shell_exec.exec_stdout(
         "docker",
         &[
             vec!["rm", "-fv"],
@@ -36,7 +36,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
     println!("Creating new nodes");
     for (index, name) in tuples {
-        let _ = shell_exec.exec(
+        let _ = shell_exec.exec_stdout(
             "docker",
             &[
                 "run",
@@ -63,7 +63,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         )?;
 
         // inject public key in authorized_keys
-        let _ = shell_exec.exec(
+        let _ = shell_exec.exec_stdout(
             "docker",
             &[
                 "exec",
