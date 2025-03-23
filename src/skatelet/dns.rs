@@ -3,6 +3,7 @@ use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
+use crate::skatelet::VAR_PATH;
 use clap::{Args, Subcommand};
 use std::panic;
 
@@ -50,7 +51,7 @@ impl<D: DnsDeps> Dns<D> {
         panic::set_hook(Box::new(log_panic));
 
         let execer = With::<dyn ShellExec>::get(&self.deps);
-        let svc = DnsService::new("/var/lib/skate/dns", &execer);
+        let svc = DnsService::new(&format!("{VAR_PATH}/dns"), &execer);
         match args.command {
             Command::Add(add_args) => svc.add(add_args.container_id, add_args.ip),
             Command::Remove(remove_args) => {

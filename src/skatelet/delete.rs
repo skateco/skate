@@ -21,6 +21,7 @@ use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
+use crate::skatelet::VAR_PATH;
 use crate::spec;
 use k8s_openapi::api::core::v1::Service as K8sService;
 use k8s_openapi::api::networking::v1::Ingress as K8sIngress;
@@ -266,7 +267,7 @@ impl<D: DeleteDeps> Deleter<D> {
                 let ctrl = ServiceController::new(
                     self.store(),
                     self.execer(),
-                    "/var/lib/skate",
+                    VAR_PATH,
                     "/etc/systemd/system",
                 );
                 ctrl.delete(service)?;

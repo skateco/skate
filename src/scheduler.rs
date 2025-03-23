@@ -583,11 +583,11 @@ impl DefaultScheduler {
             .cloned();
 
         let op_types = match existing_cron {
-            Some(c) => {
-                if c.0.manifest_hash == new_hash && c.1.schedulable() {
-                    vec![(OpType::Unchanged, Some(c.1.clone()))]
+            Some((item, node)) => {
+                if item.manifest_hash == new_hash && node.schedulable() {
+                    vec![(OpType::Unchanged, Some(node.clone()))]
                 } else {
-                    vec![(OpType::Delete, Some(c.1.clone())), (OpType::Create, None)]
+                    vec![(OpType::Delete, Some(node.clone())), (OpType::Create, None)]
                 }
             }
             None => {
@@ -632,18 +632,18 @@ impl DefaultScheduler {
             let existing_secret = existing_secrets.first();
 
             op_types.extend(match existing_secret {
-                Some(c) => {
-                    if !c.1.schedulable() {
-                        vec![(OpType::Delete, c.1.clone())]
-                    } else if c.0.manifest_hash == new_hash {
-                        vec![(OpType::Unchanged, c.1.clone())]
+                Some((item, node)) => {
+                    if !node.schedulable() {
+                        vec![(OpType::Delete, &**node)]
+                    } else if item.manifest_hash == new_hash {
+                        vec![(OpType::Unchanged, &**node)]
                     } else {
-                        vec![(OpType::Clobber, node.clone())]
+                        vec![(OpType::Clobber, &**node)]
                     }
                 }
                 None => {
                     if node.schedulable() {
-                        vec![(OpType::Create, node.clone())]
+                        vec![(OpType::Create, &*node)]
                     } else {
                         vec![]
                     }
@@ -691,10 +691,10 @@ impl DefaultScheduler {
                 .cloned();
 
             let op_types = match existing_service {
-                Some(c) => {
-                    if !c.1.schedulable() {
+                Some((item, node)) => {
+                    if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if c.0.manifest_hash == new_hash {
+                    } else if item.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
@@ -746,10 +746,10 @@ impl DefaultScheduler {
                 .cloned();
 
             let op_types = match existing_ingress {
-                Some(c) => {
-                    if !c.1.schedulable() {
+                Some((item, node)) => {
+                    if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if c.0.manifest_hash == new_hash {
+                    } else if item.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
@@ -803,10 +803,10 @@ impl DefaultScheduler {
                 .cloned();
 
             let op_types = match existing {
-                Some(c) => {
+                Some((item, node)) => {
                     if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if c.0.manifest_hash == new_hash {
+                    } else if item.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]

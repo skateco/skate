@@ -175,10 +175,8 @@ impl From<&ClusterIssuer> for ObjectListItem {
 }
 
 impl FileStore {
-    pub fn new() -> Self {
-        FileStore {
-            base_path: "/var/lib/skate/store".to_string(),
-        }
+    pub fn new(base_path: String) -> Self {
+        FileStore { base_path }
     }
 
     fn get_path(&self, parts: &[&str]) -> String {

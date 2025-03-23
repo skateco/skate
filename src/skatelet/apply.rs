@@ -15,6 +15,7 @@ use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::resource::SupportedResources;
+use crate::skatelet::VAR_PATH;
 use std::io::Read;
 
 #[derive(Debug, Args)]
@@ -91,7 +92,7 @@ fn apply_supported_resource<D: ApplyDeps>(
             let ctrl = ServiceController::new(
                 store(&deps),
                 execer(&deps),
-                "/var/lib/skate",
+                VAR_PATH,
                 "/etc/systemd/system",
             );
             ctrl.apply(service)?;

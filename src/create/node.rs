@@ -6,6 +6,7 @@ use crate::refresh::Refresh;
 use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
+use crate::skatelet::VAR_PATH;
 use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP};
@@ -174,10 +175,10 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec![] });
 
     let skate_dirs = [
-        "/var/lib/skate/ingress",
-        "/var/lib/skate/ingress/letsencrypt_storage",
-        "/var/lib/skate/dns",
-        "/var/lib/skate/keepalived",
+        &format!("{VAR_PATH}/ingress"),
+        &format!("{VAR_PATH}/ingress/letsencrypt_storage"),
+        &format!("{VAR_PATH}/dns"),
+        &format!("{VAR_PATH}/keepalived"),
         "/etc/skate",
     ];
 
