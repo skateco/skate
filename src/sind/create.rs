@@ -5,7 +5,11 @@ use clap::Args;
 use std::env;
 
 #[derive(Debug, Args, Clone)]
-pub struct CreateArgs {}
+pub struct CreateArgs {
+    // force
+    #[arg(short, long, long_help = "Force removal of existing containers")]
+    force: bool,
+}
 
 pub trait CreateDeps: With<dyn ShellExec> {}
 
@@ -21,18 +25,20 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     // remove existing nodes
     let shell_exec: Box<dyn ShellExec> = deps.get();
 
-    println!("Removing existing nodes");
-    shell_exec.exec_stdout(
-        "docker",
-        &[
-            vec!["rm", "-fv"],
-            tuples
-                .iter()
-                .map(|(_, name)| name.as_str())
-                .collect::<Vec<_>>(),
-        ]
-        .concat(),
-    )?;
+    if main_args.force {
+        println!("Removing existing nodes");
+        shell_exec.exec_stdout(
+            "docker",
+            &[
+                vec!["rm", "-fv"],
+                tuples
+                    .iter()
+                    .map(|(_, name)| name.as_str())
+                    .collect::<Vec<_>>(),
+            ]
+            .concat(),
+        )?;
+    }
 
     println!("Creating new nodes");
     for (index, name) in tuples {
