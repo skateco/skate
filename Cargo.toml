@@ -36,7 +36,7 @@ handlebars = "6.2.0"
 cron = "0.12.1"
 russh = "=0.45.0"
 syslog = "7.0.0"
-tabled = "0.16.0"
+tabled = "0.18.0"
 dialoguer = "0.11.0"
 reqwest = { version = "0.12.9", features = ["json"] }
 shadow-rs = "0.35.2"

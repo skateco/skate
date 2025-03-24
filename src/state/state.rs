@@ -39,7 +39,7 @@ pub enum NodeStatus {
 pub struct NodeState {
     pub node_name: String,
     pub status: NodeStatus,
-    #[tabled(display_with = "tabled_display_option")]
+    #[tabled(display("tabled_display_option"))]
     pub message: Option<String>,
     #[tabled(skip)]
     pub host_info: Option<HostInfo>,
