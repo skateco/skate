@@ -131,11 +131,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
 
 async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
-    let sys = System::new_with_specifics(
-        RefreshKind::new()
-            .with_cpu(CpuRefreshKind::everything())
-            .with_memory(MemoryRefreshKind::everything()),
-    );
+    let sys = System::new_with_specifics(RefreshKind::everything());
 
     let pod_list_result = match execer.exec(
         "sudo",
@@ -275,10 +271,10 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
         total_swap_mib: sys.total_swap() / BYTES_IN_MIB,
         used_swap_mib: sys.used_swap() / BYTES_IN_MIB,
         num_cpus: sys.cpus().len(),
-        cpu_freq_mhz: sys.global_cpu_info().frequency(),
-        cpu_usage: sys.global_cpu_info().cpu_usage(),
-        cpu_brand: sys.global_cpu_info().brand().to_string(),
-        cpu_vendor_id: sys.global_cpu_info().vendor_id().to_string(),
+        cpu_freq_mhz: sys.cpus().iter().map(|c| c.frequency()).sum(),
+        cpu_usage: sys.global_cpu_usage(),
+        cpu_brand: sys.cpus().first().unwrap().brand().to_string(),
+        cpu_vendor_id: sys.cpus().first().unwrap().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
         ingresses: (!ingresses.is_empty()).then_some(ingresses),
