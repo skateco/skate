@@ -14,12 +14,13 @@ pub struct CreateArgs {
 pub trait CreateDeps: With<dyn ShellExec> {}
 
 const NUM_NODES: usize = 2;
+pub const CONTAINER_LABEL: &str = "io.github.skateco.sind=true";
 
 pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
     let public_key = ensure_public_key()?;
 
     let tuples = (1..=NUM_NODES)
-        .map(|f| (f, format!("node-{}", f)))
+        .map(|f| (f, format!("sind-node-{}", f)))
         .collect::<Vec<_>>();
 
     // remove existing nodes
@@ -62,6 +63,8 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "/run",
                 "--tmpfs",
                 "/run/lock",
+                "--label",
+                CONTAINER_LABEL,
                 "--name",
                 &name,
                 "ghcr.io/skateco/sind",
