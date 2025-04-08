@@ -9,7 +9,7 @@ pub struct IpsArgs {}
 
 pub trait IpsDeps: With<dyn ShellExec> {}
 
-pub async fn ips<D: IpsDeps>(deps: D, main_args: IpsArgs) -> Result<(), SkateError> {
+pub async fn ips<D: IpsDeps>(deps: D, _: IpsArgs) -> Result<(), SkateError> {
     let shell_exec: Box<dyn ShellExec> = deps.get();
     let container_ids = shell_exec.exec(
         "docker",

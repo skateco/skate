@@ -3,6 +3,8 @@ use crate::errors::SkateError;
 use crate::sind::create::{CreateArgs, CreateDeps};
 use crate::sind::ips::{IpsArgs, IpsDeps};
 use crate::sind::remove::{RemoveArgs, RemoveDeps};
+use crate::sind::start::{StartArgs, StartDeps};
+use crate::sind::stop::{StopArgs, StopDeps};
 use crate::util;
 use clap::{Parser, Subcommand};
 
@@ -27,21 +29,25 @@ enum Commands {
     Create(CreateArgs),
     #[command(long_about = "Remove cluster")]
     Remove(RemoveArgs),
-    // #[command(long_about = "Stop cluster nodes")]
-    // Stop(StopArgs),
-    // #[command(long_about = "Start cluster nodes")]
-    // Start(StartArgs),
+    #[command(long_about = "Stop cluster nodes")]
+    Stop(StopArgs),
+    #[command(long_about = "Start cluster nodes")]
+    Start(StartArgs),
     #[command(long_about = "Print node ips")]
     Ips(IpsArgs),
 }
 impl CreateDeps for Deps {}
 impl IpsDeps for Deps {}
 impl RemoveDeps for Deps {}
+impl StartDeps for Deps {}
+impl StopDeps for Deps {}
 pub async fn sind(deps: Deps) -> Result<(), SkateError> {
     let args = Cli::parse();
     match args.command {
         Commands::Create(args) => create::create(deps, args).await,
         Commands::Ips(args) => ips::ips(deps, args).await,
         Commands::Remove(args) => remove::remove(deps, args).await,
+        Commands::Start(args) => start::start(deps, args).await,
+        Commands::Stop(args) => stop::stop(deps, args).await,
     }
 }

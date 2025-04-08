@@ -2,7 +2,6 @@ use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use clap::Args;
-use std::env;
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
