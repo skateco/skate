@@ -1,7 +1,7 @@
 use crate::deps::Deps;
 use crate::errors::SkateError;
 use crate::sind::create::{CreateArgs, CreateDeps};
-use crate::sind::ips::{IpsArgs, IpsDeps};
+use crate::sind::ports::{PortsArgs, PortsDeps};
 use crate::sind::remove::{RemoveArgs, RemoveDeps};
 use crate::sind::start::{StartArgs, StartDeps};
 use crate::sind::stop::{StopArgs, StopDeps};
@@ -9,7 +9,7 @@ use crate::util;
 use clap::{Parser, Subcommand};
 
 pub mod create;
-pub mod ips;
+pub mod ports;
 pub mod remove;
 pub mod start;
 pub mod stop;
@@ -34,10 +34,10 @@ enum Commands {
     #[command(long_about = "Start cluster nodes")]
     Start(StartArgs),
     #[command(long_about = "Print node ips")]
-    Ips(IpsArgs),
+    Ports(PortsArgs),
 }
 impl CreateDeps for Deps {}
-impl IpsDeps for Deps {}
+impl PortsDeps for Deps {}
 impl RemoveDeps for Deps {}
 impl StartDeps for Deps {}
 impl StopDeps for Deps {}
@@ -45,7 +45,7 @@ pub async fn sind(deps: Deps) -> Result<(), SkateError> {
     let args = Cli::parse();
     match args.command {
         Commands::Create(args) => create::create(deps, args).await,
-        Commands::Ips(args) => ips::ips(deps, args).await,
+        Commands::Ports(args) => ports::ports(deps, args).await,
         Commands::Remove(args) => remove::remove(deps, args).await,
         Commands::Start(args) => start::start(deps, args).await,
         Commands::Stop(args) => stop::stop(deps, args).await,

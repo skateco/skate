@@ -12,7 +12,7 @@ pub struct CreateArgs {
 
 pub trait CreateDeps: With<dyn ShellExec> {}
 
-const NUM_NODES: usize = 2;
+pub const NUM_NODES: usize = 2;
 pub const CONTAINER_LABEL: &str = "io.github.skateco.sind=true";
 
 pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
@@ -49,7 +49,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "-d",
                 "--privileged",
                 "-p",
-                &format!("222{index}:22",),
+                &format!("127.0.0.1:222{index}:22",),
                 "--dns",
                 "127.0.0.1",
                 "--cgroupns",

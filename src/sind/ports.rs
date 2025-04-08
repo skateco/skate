@@ -5,11 +5,11 @@ use crate::sind::create::CONTAINER_LABEL;
 use clap::Args;
 
 #[derive(Debug, Args, Clone)]
-pub struct IpsArgs {}
+pub struct PortsArgs {}
 
-pub trait IpsDeps: With<dyn ShellExec> {}
+pub trait PortsDeps: With<dyn ShellExec> {}
 
-pub async fn ips<D: IpsDeps>(deps: D, _: IpsArgs) -> Result<(), SkateError> {
+pub async fn ports<D: PortsDeps>(deps: D, _: PortsArgs) -> Result<(), SkateError> {
     let shell_exec: Box<dyn ShellExec> = deps.get();
     let container_ids = shell_exec.exec(
         "docker",
@@ -27,18 +27,12 @@ pub async fn ips<D: IpsDeps>(deps: D, _: IpsArgs) -> Result<(), SkateError> {
     if container_ids.is_empty() {
         return Ok(());
     }
-    let ips = shell_exec.exec(
-        "docker",
-        &[
-            vec![
-                "inspect",
-                "-f",
-                "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-            ],
-            container_ids,
-        ]
-        .concat(),
-    )?;
-    println!("{ips}");
+
+    for id in container_ids {
+        let ports = shell_exec.exec("docker", &["port", id, "22"])?;
+
+        println!("{}", ports.lines().next().unwrap_or(&"".to_string()));
+    }
+
     Ok(())
 }
