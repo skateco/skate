@@ -29,9 +29,11 @@ pub async fn ports<D: PortsDeps>(deps: D, _: PortsArgs) -> Result<(), SkateError
     }
 
     for id in container_ids {
-        let ports = shell_exec.exec("docker", &["port", id, "22"])?;
+        let name = shell_exec.exec("docker", &["inspect", "-f", "{{.Name}}", id])?;
+        let name = name.strip_prefix("/").unwrap_or_default();
+        let ports = shell_exec.exec("docker", &["port", id])?;
 
-        println!("{}", ports.lines().next().unwrap_or(&"".to_string()));
+        println!("{name} {}", ports.lines().next().unwrap_or(&"".to_string()));
     }
 
     Ok(())
