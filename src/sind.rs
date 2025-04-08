@@ -6,7 +6,7 @@ use crate::sind::remove::{RemoveArgs, RemoveDeps};
 use crate::sind::start::{StartArgs, StartDeps};
 use crate::sind::stop::{StopArgs, StopDeps};
 use crate::util;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 pub mod create;
 pub mod ports;
@@ -21,6 +21,12 @@ pub mod stop;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct GlobalArgs {
+    #[arg(long, short, long_help = "Name of the cluster to use/create.", default_value_t = String::from("sind"))]
+    cluster: String,
 }
 
 #[derive(Debug, Subcommand)]

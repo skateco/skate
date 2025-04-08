@@ -2,10 +2,14 @@ use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::sind::create::CONTAINER_LABEL;
+use crate::sind::GlobalArgs;
 use clap::Args;
 
 #[derive(Debug, Args, Clone)]
-pub struct PortsArgs {}
+pub struct PortsArgs {
+    #[command(flatten)]
+    global: GlobalArgs,
+}
 
 pub trait PortsDeps: With<dyn ShellExec> {}
 
