@@ -11,7 +11,7 @@ shadow-rs = "0.35.2"
 [dependencies]
 anyhow = "1.0.97"
 async-ssh2-tokio = { version = "0.8.12", features = ["openssl"] }
-async-trait = "0.1.83"
+async-trait = "0.1.88"
 clap = { version = "4.5.32", features = ["derive", "env", "string"] }
 futures = "0.3.31"
 k8s-openapi = { version = "0.23.0", features = ["latest"] }
