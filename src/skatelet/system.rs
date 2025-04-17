@@ -2,7 +2,7 @@ pub(crate) mod podman;
 
 use std::env::consts::ARCH;
 use std::error::Error;
-use sysinfo::{CpuRefreshKind, DiskKind, Disks, MemoryRefreshKind, RefreshKind, System};
+use sysinfo::{DiskKind, Disks, RefreshKind, System};
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
