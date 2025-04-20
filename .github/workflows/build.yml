@@ -84,6 +84,7 @@ jobs:
           path: |
             target/${{matrix.TARGET}}/release/skate
             target/${{matrix.TARGET}}/release/skatelet
+            target/${{matrix.TARGET}}/release/sind
   create-release:
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
@@ -119,8 +120,10 @@ jobs:
           cd dist 
           cp ../target/$TARGET/release/skate .
           cp ../target/$TARGET/release/skatelet .
+          cp ../target/$TARGET/release/sind .
           chmod +x skate
           chmod +x skatelet
           tar -cvf skate-$TARGET.tar.gz skate
           tar -cvf skatelet-$TARGET.tar.gz skatelet
+          tar -cvf sind-$TARGET.tar.gz sind
           gh release upload ${{github.ref_name}}  *.tar.gz
