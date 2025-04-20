@@ -43,6 +43,12 @@ Lets-encrypt provides the certificates.
 
 See the [quickstart](https://skateco.github.io/docs/getting-started/) for a guide on how to get started.
 
+Or leeroy jenkins it:
+
+```shell
+curl -sL https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skate.sh | bash
+```
+
 ### Built on
 - Podman
 - Openresty
