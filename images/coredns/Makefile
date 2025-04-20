@@ -2,7 +2,11 @@
 build-and-push: build
 	docker buildx build --platform linux/arm64,linux/amd64  -t ghcr.io/skateco/coredns:latest --push .
 .PHONY: build
-build:
+build: binaries
+	docker buildx build --platform linux/arm64,linux/amd64  -t ghcr.io/skateco/coredns:latest .
+
+.PHONY: binaries
+binaries:
 #	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 go build -ldflags="-w -s" -o build/armv6/coredns .
 #	GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -ldflags="-w -s" -o build/armv7/coredns .
 	GOOS=linux GOARCH=arm64  CGO_ENABLED=0 go build -ldflags="-w -s" -o build/arm64/coredns .
