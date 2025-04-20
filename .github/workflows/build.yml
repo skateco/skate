@@ -10,6 +10,30 @@ on:
       - v[0-9]+.*
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    # Required permissions
+    #    permissions:
+    #      pull-requests: read
+    # Set job outputs to values from filter step
+    outputs:
+      images-coredns: ${{ steps.filter.outputs.images-coredns }}
+      images-nginx-ingress: ${{ steps.filter.outputs.images-nginx-ingress }}
+      images-sind: ${{ steps.filter.outputs.images-sind }}
+    steps:
+      - uses: actions/checkout@v4
+      # For pull requests it's not necessary to checkout the code
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            images-coredns:
+              - 'images/coredns/**'
+            images-nginx-ingress:
+              - 'images/nginx-ingress/**'
+            images-sind:
+               - 'images/sind/**'
+
   install-script-test:
     strategy:
       matrix:
@@ -33,28 +57,63 @@ jobs:
         run: |
           ./hack/install-sind.sh
           which sind
-
-  verify-images-build:
+  images-coredns:
+    if: ${{ needs.changes.outputs.images-coredns == 'true' }}
+    needs: [changes]
     runs-on: ubuntu-latest
     steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-        - uses: actions/cache@v4
-          with:
-            path: |
-              ~/.cache/go-build
-              ~/go/pkg/mod
-            key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-            restore-keys: ${{ runner.os }}-go-
-        - # Add support for more platforms with QEMU (optional)
-          # https://github.com/docker/setup-qemu-action
-          name: Set up QEMU
-          uses: docker/setup-qemu-action@v3
-        - name: Set up Docker Buildx
-          uses: docker/setup-buildx-action@v3
-        - name: Build images
-          run: |
-            make verify-images-build
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+      - # Add support for more platforms with QEMU (optional)
+        # https://github.com/docker/setup-qemu-action
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/coredns
+          make build
+
+  images-nginx-ingress:
+    if: ${{ needs.changes.outputs.images-nginx-ingress == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/nginx-ingress
+          make build
+  images-sind:
+    if: ${{ needs.changes.outputs.images-sind == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/sind
+          make build
+    
+
   e2e-test:
     runs-on: ubuntu-latest
     steps:
