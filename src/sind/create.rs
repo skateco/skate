@@ -148,12 +148,6 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         // wait for port to open
         let ssh_port = &format!("222{index}");
 
-        let ssh_port_u16 = ssh_port
-            .parse::<u16>()
-            .map_err(|_| format!("Failed to parse port {}", ssh_port))?;
-
-        let mut attempt = 0;
-
         // cargo run --bin skate create node --name node-$f --host 127.0.0.1 --peer-host $peer_host --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
         let _ = shell_exec.exec_stdout(
             "skate",
