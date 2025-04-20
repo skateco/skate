@@ -21,6 +21,8 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
     runs-on: ${{ matrix.os }}
+    env:
+      DEBUG: true
     steps:
       - uses: actions/checkout@v4
       - name: Run skate install script
