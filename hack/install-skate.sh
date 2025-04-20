@@ -8,12 +8,14 @@ fi
 
 os=$(uname -o)
 arch=$(uname -m)
+vendor="unknown"
 
 # make these more elegant later
 if [[ "$os" == "GNU/Linux" ]]; then
-  os="unknown-linux-gnu"
+  os="linux-gnu"
 elif [[ "$os" == "Darwin" ]]; then
-  os="apple-darwin"
+  os="darwin"
+  vendor="apple"
 else
   echo "Unsupported OS: $os"
   exit 1
@@ -41,7 +43,7 @@ get_install_alternatives(){
 
 # Find for our triple
 
-triple="$arch-$os"
+triple="$arch-$vendor-$os"
 echo "Triple: $triple"
 
 archive_name="skate-$triple.tar.gz"
