@@ -33,6 +33,7 @@ else
   exit 1
 fi
 
+
 get_install_alternatives(){
   curl -s https://api.github.com/repos/skateco/skate/releases/latest \
     | grep "browser_download_url.*tar.gz" \
@@ -47,6 +48,11 @@ triple="$arch-$vendor-$os"
 echo "Triple: $triple"
 
 archive_name="skate-$triple.tar.gz"
+
+
+if [[ -n "$DEBUG" ]]; then
+  curl -s https://api.github.com/repos/skateco/skate/releases/latest
+fi
 
 install_url=$(get_install_alternatives|grep "$archive_name" | head -n 1)
 
