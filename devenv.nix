@@ -10,6 +10,7 @@
       pkgs.git
       pkgs.openssl
       pkgs.docker
+      pkgs.go
     ] ++ lib.optionals pkgs.stdenv.isDarwin [
       # Seems like some part of sqlx needs this if on mac
       # Symptom was "ld: framework not found SystemConfiguration"

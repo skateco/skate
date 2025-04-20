@@ -34,6 +34,14 @@ jobs:
           ./hack/install-sind.sh
           which sind
 
+  verify-images-build:
+    runs-on: ubuntu-latest
+    steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+        - name: Build images
+          run: |
+            make verify-images-build
   e2e-test:
     runs-on: ubuntu-latest
     steps:

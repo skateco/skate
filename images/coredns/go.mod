@@ -1,6 +1,7 @@
 module github.com/skateco/skate/images/coredns
 
-go 1.21.1
+go 1.23.0
+
 toolchain go1.24.1
 
 require (

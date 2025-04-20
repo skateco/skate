@@ -58,3 +58,8 @@ run-e2e-tests-docker:
 	./hack/sindplz skate
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
+.PHONY: verify-images-build
+verify-images-build:
+	cd ./images/coredns && make build
+	cd ./images/nginx-ingress && make build
+	cd ./images/sind && make build
