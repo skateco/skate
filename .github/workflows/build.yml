@@ -17,9 +17,11 @@ jobs:
       - name: Run skate install script
         run: |
           ./hack/install-skate.sh
+          which skate
       - name: Run sind install script
         run: |
           ./hack/install-sind.sh
+          which sind
 
   e2e-test:
     runs-on: ubuntu-latest
