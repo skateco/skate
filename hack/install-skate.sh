@@ -11,7 +11,7 @@ arch=$(uname -m)
 
 # make these more elegant later
 if [[ "$os" == "GNU/Linux" ]]; then
-  os="unknown-linux"
+  os="unknown-linux-gnu"
 elif [[ "$os" == "Darwin" ]]; then
   os="apple-darwin"
 else
