@@ -129,8 +129,8 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
-      - name: Build skate
-        run: cargo build --locked --bin skate
+      - name: Build binaries
+        run: cargo build --locked
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker
   build:
