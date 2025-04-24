@@ -18,11 +18,12 @@ impl ShellExec for RealExec {
             .map_err(|e| anyhow!(e).context("failed to run command"))?;
         if !output.status.success() {
             return Err(anyhow!(
-                "exit code {}, stderr: {}",
+                "{} {} failed, exit code {}, stderr: {}",
+                command,
+                args.join(" "),
                 output.status,
                 String::from_utf8_lossy(&output.stderr).to_string()
             )
-            .context(format!("{} {} failed", command, args.join(" ")))
             .into());
         }
 
