@@ -153,7 +153,7 @@ async fn e2e_test() {
         return;
     }
 
-    skate_stdout("config", &["use-context", "e2e-test"])
+    skate_stdout("config", &["use-context", "sind"])
         .await
         .expect("failed to set context");
 
@@ -180,9 +180,9 @@ async fn test_cluster_creation() -> Result<(), anyhow::Error> {
     let node1 = state["nodes"][0].clone();
     let node2 = state["nodes"][1].clone();
 
-    assert_eq!(node1["node_name"], "node-1");
+    assert_eq!(node1["node_name"], "sind-node-1");
     assert_eq!(node1["status"], "Healthy");
-    assert_eq!(node2["node_name"], "node-2");
+    assert_eq!(node2["node_name"], "sind-node-2");
     assert_eq!(node2["status"], "Healthy");
 
     Ok(())
