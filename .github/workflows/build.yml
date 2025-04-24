@@ -130,7 +130,7 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
       - name: Build binaries
-        run: cargo build --locked
+        run: cargo build --locked --bin
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker
   build:
