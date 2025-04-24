@@ -46,7 +46,7 @@ run-e2e-tests:
 .PHONY: run-e2e-tests-docker
 run-e2e-tests-docker: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
 run-e2e-tests-docker: SSH_PUBLIC_KEY=/tmp/skate-e2e-key.pub
-run-e2e-tests-docker: export PATH := $(shell pwd)/target/debug:${PATH}
+run-e2e-tests-docker: export PATH := $(shell pwd)/target/release:${PATH}
 run-e2e-tests-docker:
 	set -xeuo pipefail
 	which skatelet
@@ -54,8 +54,8 @@ run-e2e-tests-docker:
 	# start vms
 	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY}
 	cargo run --bin skate -- config use-context sind
-	docker cp target/debug/skatelet sind-node-1:/usr/local/bin/skatelet
-	docker cp target/debug/skatelet sind-node-2:/usr/local/bin/skatelet
+	docker cp target/release/skatelet sind-node-1:/usr/local/bin/skatelet
+	docker cp target/release/skatelet sind-node-2:/usr/local/bin/skatelet
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
 .PHONY: verify-images-build
