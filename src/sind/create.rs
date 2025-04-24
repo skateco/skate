@@ -16,6 +16,11 @@ pub struct CreateArgs {
     ssh_private_key: String,
     #[arg(long, long_help = "SSH public key path", default_value_t= String::from("~/.ssh/id_rsa.pub"))]
     ssh_public_key: String,
+    #[arg(
+        long,
+        long_help = "Path to skatelet binary to use instead of downloading"
+    )]
+    skatelet_binary_path: Option<String>,
 }
 
 pub trait CreateDeps: With<dyn ShellExec> {}
@@ -143,6 +148,17 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 &name,
             ],
         )?;
+
+        if let Some(skatelet_path) = &main_args.skatelet_binary_path {
+            shell_exec.exec_stdout(
+                "docker",
+                &[
+                    "cp",
+                    skatelet_path,
+                    &format!("{name}:/usr/local/bin/skatelet"),
+                ],
+            )?;
+        }
 
         // wait for port to open
         let ssh_port = &format!("222{index}");
