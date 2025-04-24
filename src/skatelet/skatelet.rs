@@ -135,7 +135,7 @@ pub async fn skatelet() -> Result<(), SkateError> {
     match result {
         Ok(_) => Ok(()),
         Err(e) => {
-            error!("{}", e);
+            error!("{:#}", e);
             Err(e)
         }
     }
