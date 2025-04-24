@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-if [ "$(arch)" = "amd64" ]; then
+if [ "$(arch)" = "x86_64" ]; then
   binary=target/debug/skatelet
   if [ ! -f $binary ]; then
     set -x
@@ -9,7 +9,7 @@ if [ "$(arch)" = "amd64" ]; then
     set +x
   fi
 else
-  target=amd64-unknown-linux-gnu
+  target=x86_64-unknown-linux-gnu
   binary=target/$target/debug/skatelet
   if [ ! -f $binary ]; then
     set -x
