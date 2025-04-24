@@ -60,7 +60,7 @@ where
     Fu: Future<Output = Result<R, anyhow::Error>>,
 {
     let fut: FuturesUnordered<_> = ["node-1", "node-2"]
-        .iter()
+        .into_iter()
         .map(|node| async {
             for n in 0..attempts {
                 if n >= 1 {
@@ -73,7 +73,8 @@ where
                 } else if n == attempts - 1 {
                     return Err(anyhow!(
                         "{} => error after {} attempts: {:?}",
-                        node,
+                        // don't let clippy fool you, tests will not build if you pass the item directly
+                        node.to_owned(),
                         attempts,
                         result.err()
                     ));
@@ -83,7 +84,8 @@ where
             }
             Err(anyhow!(
                 "{} => error after {} attempts: ? shouldn't get here ?",
-                node,
+                // don't let clippy fool you, tests will not build if you pass the item directly
+                node.to_owned(),
                 attempts
             ))
         })
