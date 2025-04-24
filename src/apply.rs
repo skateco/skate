@@ -76,8 +76,11 @@ impl<D: ApplyDeps> Apply<D> {
             Err(e) => Either::Right(e),
         });
 
-        for e in errors {
-            eprintln!("{}", e);
+        if !errors.is_empty() {
+            for e in errors {
+                eprintln!("{}", e);
+            }
+
             return Err(anyhow!("some resources were invalid").into());
         }
 

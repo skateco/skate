@@ -73,7 +73,7 @@ where
                 } else if n == attempts - 1 {
                     return Err(anyhow!(
                         "{} => error after {} attempts: {:?}",
-                        node.to_owned(),
+                        node,
                         attempts,
                         result.err()
                     ));
@@ -83,7 +83,7 @@ where
             }
             Err(anyhow!(
                 "{} => error after {} attempts: ? shouldn't get here ?",
-                node.to_owned(),
+                node,
                 attempts
             ))
         })

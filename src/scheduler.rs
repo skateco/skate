@@ -643,7 +643,7 @@ impl DefaultScheduler {
                 }
                 None => {
                     if node.schedulable() {
-                        vec![(OpType::Create, &*node)]
+                        vec![(OpType::Create, node)]
                     } else {
                         vec![]
                     }

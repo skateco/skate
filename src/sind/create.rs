@@ -4,9 +4,6 @@ use crate::exec::ShellExec;
 use crate::sind::GlobalArgs;
 use clap::Args;
 use itertools::Itertools;
-use tokio::net;
-use tokio::net::unix::SocketAddr;
-use tokio::net::TcpStream;
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
@@ -56,7 +53,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
     println!("Creating new nodes");
     for (index, name) in &tuples {
-        let _ = shell_exec.exec_stdout(
+        shell_exec.exec_stdout(
             "docker",
             &[
                 "run",
@@ -85,11 +82,11 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         )?;
 
         // inject public key in authorized_keys
-        let _ = shell_exec.exec_stdout(
+        shell_exec.exec_stdout(
             "docker",
             &[
                 "exec",
-                &name,
+                name,
                 "bash",
                 "-c",
                 &format!(
@@ -113,12 +110,11 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     if !cluster_exists {
         // create cluster
         println!("creating cluster {}", main_args.global.cluster);
-        let _ =
-            shell_exec.exec_stdout("skate", &["create", "cluster", &main_args.global.cluster])?;
+        shell_exec.exec_stdout("skate", &["create", "cluster", &main_args.global.cluster])?;
     }
 
     // use cluster as context
-    let _ = shell_exec.exec_stdout(
+    shell_exec.exec_stdout(
         "skate",
         &["config", "use-context", &main_args.global.cluster],
     )?;
@@ -176,7 +172,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-        let _ = shell_exec.exec_stdout(
+        shell_exec.exec_stdout(
             "skate",
             &[
                 "create",
@@ -188,7 +184,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "--peer-host",
                 &peer_host,
                 "--port",
-                &ssh_port,
+                ssh_port,
                 "--subnet-cidr",
                 &format!("20.{index}.0.0/16"),
                 "--key",

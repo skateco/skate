@@ -346,8 +346,8 @@ impl<'a> DnsService<'a> {
         pod_id: Option<String>,
     ) -> Result<(), SkateError> {
         let tag = {
-            if container_id.is_some() {
-                container_id.unwrap()
+            if let Some(id) = container_id {
+                id
             } else if pod_id.is_some() {
                 // get infra container
                 let output = self
