@@ -4,6 +4,9 @@ use crate::exec::ShellExec;
 use crate::sind::GlobalArgs;
 use clap::Args;
 use itertools::Itertools;
+use tokio::net;
+use tokio::net::unix::SocketAddr;
+use tokio::net::TcpStream;
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
@@ -147,8 +150,32 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
         // wait for port to open
         let ssh_port = &format!("222{index}");
+        let ssh_port_u32 = ssh_port
+            .parse::<u32>()
+            .map_err(|e| SkateError::String(e.to_string()))?;
 
-        // cargo run --bin skate create node --name node-$f --host 127.0.0.1 --peer-host $peer_host --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
+        let mut result: Result<_, _> = Err("never ran".into());
+        for _ in 0..10 {
+            println!("Attempting to connect to node...");
+            result = resolvable("127.0.0.1".into(), ssh_port_u32, 5).await;
+            if result.is_ok() {
+                break;
+            }
+            // sleep
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        if result.is_err() {
+            return Err(format!(
+                "Failed to connect to 127.0.0.1:{} => {:?}",
+                ssh_port,
+                result.err()
+            )
+            .into());
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
         let _ = shell_exec.exec_stdout(
             "skate",
             &[
@@ -181,4 +208,17 @@ pub fn ensure_file(path: &str) -> Result<String, SkateError> {
         return Err(format!("File {} does not exist", path).into());
     }
     Ok(path)
+}
+
+async fn resolvable(
+    ip: String,
+    port: u32,
+    timeout_seconds: u64,
+) -> Result<tokio::net::TcpStream, Box<dyn std::error::Error + Send + Sync>> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_seconds),
+        tokio::net::TcpStream::connect(format!("{}:{}", ip, port)),
+    )
+    .await?
+    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>)
 }

@@ -19,6 +19,7 @@ pub async fn remove<D: RemoveDeps>(deps: D, args: RemoveArgs) -> Result<(), Skat
         "docker",
         &[
             "ps",
+            "-a",
             "-q",
             "--filter",
             &format!("label={}", CONTAINER_LABEL),
