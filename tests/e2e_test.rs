@@ -59,7 +59,7 @@ where
     F: Fn(String) -> Fu,
     Fu: Future<Output = Result<R, anyhow::Error>>,
 {
-    let fut: FuturesUnordered<_> = ["node-1", "node-2"]
+    let fut: FuturesUnordered<_> = ["sind-node-1", "sind-node-2"]
         .into_iter()
         .map(|node| async {
             for n in 0..attempts {
@@ -366,7 +366,7 @@ async fn ensure_lvs_realservers(
     let (stdout, _stderr) = skate(
         "node-shell",
         &[
-            "node-1",
+            "sind-node-1",
             "--",
             "sudo",
             "ipvsadm",
