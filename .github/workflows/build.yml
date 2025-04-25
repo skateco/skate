@@ -80,7 +80,7 @@ jobs:
       - name: Build image
         run: |
           cd images/coredns
-          make build
+          TAG=latest make build
 
   images-nginx-ingress:
     if: ${{ needs.changes.outputs.images-nginx-ingress == 'true' }}
@@ -96,7 +96,7 @@ jobs:
       - name: Build image
         run: |
           cd images/nginx-ingress
-          make build
+          TAG=latest make build
   images-sind:
     if: ${{ needs.changes.outputs.images-sind == 'true' }}
     needs: [changes]
@@ -111,7 +111,7 @@ jobs:
       - name: Build image
         run: |
           cd images/sind
-          make build
+          TAG=latest make build
     
 
   e2e-test:
