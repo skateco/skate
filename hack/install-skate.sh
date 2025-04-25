@@ -35,7 +35,13 @@ fi
 
 
 get_install_alternatives(){
-  curl --fail --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest \
+  output=$(curl --fail --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest)
+
+  if [[ -n "${DEBUG:-}" ]]; then
+    echo "$output"
+  fi
+
+  echo "$output" \
     | grep "browser_download_url.*tar.gz" \
     | cut -d : -f 2,3 \
     | tr -d \\\" \
@@ -48,11 +54,6 @@ triple="$arch-$vendor-$os"
 echo "Triple: $triple"
 
 archive_name="skate-$triple.tar.gz"
-
-
-if [[ -n "${DEBUG:-}" ]]; then
-  curl -s https://api.github.com/repos/skateco/skate/releases/latest
-fi
 
 install_url=$(get_install_alternatives|grep "$archive_name" | head -n 1)
 
