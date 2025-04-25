@@ -35,7 +35,7 @@ fi
 
 
 get_install_alternatives(){
-  curl -s https://api.github.com/repos/skateco/skate/releases/latest \
+  curl --fail --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest \
     | grep "browser_download_url.*tar.gz" \
     | cut -d : -f 2,3 \
     | tr -d \\\" \
