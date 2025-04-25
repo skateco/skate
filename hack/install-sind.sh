@@ -35,7 +35,7 @@ fi
 
 
 get_install_alternatives(){
-  output=$(curl --fail --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest)
+  output=$(curl --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest)
 
   if [[ -n "${DEBUG:-}" ]]; then
     echo "$output"
