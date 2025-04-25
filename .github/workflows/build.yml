@@ -140,20 +140,18 @@ jobs:
       - name: Get syslogs on failure
         if: failure()
         run: |
-          docker cp sind-node-1:/var/log/syslog ./sind-node-1-syslog
-          docker cp sind-node-1:/var/log/skate ./sind-node-1-skate-syslog
-          docker cp sind-node-2:/var/log/syslog ./sind-node-2-syslog
-          docker cp sind-node-2:/var/log/skate ./sind-node-2-skate-syslog
-      - name: upload syslog
+          mkdir -p evidence
+          docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
+          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate-syslog.log
+          docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
+          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate-syslog.log
+      - name: upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: syslogs
+          name: evidence
           path: |
-            sind-node-1-syslog
-            sind-node-1-skate-syslog
-            sind-node-2-syslog
-            sind-node-2-skate-syslog
+            evidence/
 
   build:
     strategy:
