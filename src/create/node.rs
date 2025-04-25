@@ -342,9 +342,6 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     )
     .await?;
 
-    // sleep a second to let coredns start
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
     // nginx ingress
 
     let nginx_yaml_path = "/tmp/skate-nginx-ingress.yaml".to_string();
