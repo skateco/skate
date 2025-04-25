@@ -50,7 +50,7 @@ echo "Triple: $triple"
 
 archive_name="sind-$triple.tar.gz"
 
-if [[ -n "$DEBUG" ]]; then
+if [[ -n "${DEBUG:-}" ]]; then
   curl -s https://api.github.com/repos/skateco/skate/releases/latest
 fi
 
