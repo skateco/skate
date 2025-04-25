@@ -323,8 +323,11 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let version = match resp.version() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("failed to get skatelet version: {}", e);
-                eprintln!("falling back to version {}", FALLBACK_SKATELET_VERSION);
+                eprintln!("ERROR: failed to get skatelet version: {}", e);
+                eprintln!(
+                    "ERROR: falling back to version {}",
+                    FALLBACK_SKATELET_VERSION
+                );
                 Version::parse(FALLBACK_SKATELET_VERSION.strip_prefix('v').unwrap())?
             }
         };
@@ -332,8 +335,8 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let download_url = match resp.find_skatelet_archive(&platform) {
             Some(url) => url,
             None => {
-                eprintln!("failed to find skatelet archive for platform");
-                eprintln!("falling back to blind url download");
+                eprintln!("ERROR: failed to find skatelet archive for platform");
+                eprintln!("ERROR: falling back to blind url download");
 
                 let (dl_arch, dl_os, dl_gnu) = platform.arch_as_linux_target_triple();
                 format!("https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz")
