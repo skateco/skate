@@ -137,6 +137,24 @@ jobs:
         run: cargo build --locked --release
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker
+      - name: Get syslogs on failure
+        if: failure()
+        run: |
+          docker cp sind-node-1:/var/log/syslog ./sind-node-1-syslog
+          docker cp sind-node-1:/var/log/skate ./sind-node-1-skate-syslog
+          docker cp sind-node-2:/var/log/syslog ./sind-node-2-syslog
+          docker cp sind-node-2:/var/log/skate ./sind-node-2-skate-syslog
+      - name: upload syslog
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: syslogs
+          path: |
+            sind-node-1-syslog
+            sind-node-1-skate-syslog
+            sind-node-2-syslog
+            sind-node-2-skate-syslog
+
   build:
     strategy:
       matrix:
