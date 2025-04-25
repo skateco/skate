@@ -22,7 +22,7 @@ spec:
           path: /var/lib/skate/dns
       containers:
       - name: coredns
-        image: ghcr.io/skateco/coredns:1.0.1
+        image: ghcr.io/skateco/coredns:1.0.2
         volumeMounts:
         - mountPath: /var/lib/skate/dns
           name: cni
