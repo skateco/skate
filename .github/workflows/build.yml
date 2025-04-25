@@ -142,9 +142,9 @@ jobs:
         run: |
           mkdir -p evidence
           docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
-          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate-syslog.log
+          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate-syslog.log || true
           docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
-          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate-syslog.log
+          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate-syslog.log || true
       - name: upload failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
