@@ -37,10 +37,6 @@ fi
 get_install_alternatives(){
   output=$(curl --retry 5 --retry-max-time 30 --silent https://api.github.com/repos/skateco/skate/releases/latest)
 
-  if [[ -n "${DEBUG:-}" ]]; then
-    echo "$output"
-  fi
-
   echo "$output" \
     | grep "browser_download_url.*tar.gz" \
     | cut -d : -f 2,3 \
