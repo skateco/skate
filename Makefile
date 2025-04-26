@@ -45,16 +45,19 @@ run-e2e-tests:
 
 .PHONY: run-e2e-tests-docker
 run-e2e-tests-docker: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
+run-e2e-tests-docker: SSH_PUBLIC_KEY=/tmp/skate-e2e-key.pub
+run-e2e-tests-docker: export PATH := $(shell pwd)/target/release:${PATH}
 run-e2e-tests-docker:
 	set -xeuo pipefail
+	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
-	echo "SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}" > ./hack/.sindplz.env
 	# start vms
-	./hack/sindplz create || exit 0
-	cargo run --bin skate -- delete cluster e2e-test --yes || exit 0
-	cargo run --bin skate -- create cluster e2e-test
-	cargo run --bin skate -- config use-context e2e-test
-	./hack/sindplz skatelet
-	./hack/sindplz skate
+	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path $(shell pwd)/target/release/skatelet
+	cargo run --bin skate -- config use-context sind
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
+.PHONY: verify-images-build
+verify-images-build:
+	cd ./images/coredns && make build
+	cd ./images/nginx-ingress && make build
+	cd ./images/sind && make build

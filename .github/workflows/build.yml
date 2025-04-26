@@ -8,8 +8,36 @@ on:
     branches: '**'
     tags:
       - v[0-9]+.*
+      -
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    # Required permissions
+    #    permissions:
+    #      pull-requests: read
+    # Set job outputs to values from filter step
+    outputs:
+      images-coredns: ${{ steps.filter.outputs.images-coredns }}
+      images-nginx-ingress: ${{ steps.filter.outputs.images-nginx-ingress }}
+      images-sind: ${{ steps.filter.outputs.images-sind }}
+    steps:
+      - uses: actions/checkout@v4
+      # For pull requests it's not necessary to checkout the code
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            images-coredns:
+              - 'images/coredns/**'
+            images-nginx-ingress:
+              - 'images/nginx-ingress/**'
+            images-sind:
+               - 'images/sind/**'
+
   install-script-test:
     strategy:
       matrix:
@@ -33,6 +61,62 @@ jobs:
         run: |
           ./hack/install-sind.sh
           which sind
+  images-coredns:
+    if: ${{ needs.changes.outputs.images-coredns == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+      - # Add support for more platforms with QEMU (optional)
+        # https://github.com/docker/setup-qemu-action
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/coredns
+          TAG=latest make build
+
+  images-nginx-ingress:
+    if: ${{ needs.changes.outputs.images-nginx-ingress == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/nginx-ingress
+          TAG=latest make build
+  images-sind:
+    if: ${{ needs.changes.outputs.images-sind == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/sind
+          TAG=latest make build
+    
 
   e2e-test:
     runs-on: ubuntu-latest
@@ -49,8 +133,28 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
+      - name: Build binaries
+        run: cargo build --locked --release
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker
+      - name: Get syslogs on failure
+        if: failure()
+        run: |
+          mkdir -p evidence
+          docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
+          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate.log || true
+          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./evidence/sind-node-1-addnhosts || true
+          docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
+          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate.log || true
+          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./evidence/sind-node-2-addnhosts || true
+      - name: upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence
+          path: |
+            evidence/
+
   build:
     strategy:
       matrix:

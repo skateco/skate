@@ -66,18 +66,12 @@ impl Release {
         )?;
         Ok(result)
     }
+
     pub fn find_skatelet_archive(&self, platform: &Platform) -> Option<String> {
         self.assets.as_ref()?;
         let asset = self.assets.as_ref().unwrap().iter().find(|asset| {
-            let (dl_arch, dl_gnu) = match platform.arch.as_str() {
-                "amd64" => ("x86_64", "gnu"),
-                "armv6l" => ("arm", "gnueabi"),
-                "armv7l" => ("arm7", "gnueabi"),
-                "arm64" => ("aarch64", "gnu"),
-                _ => (platform.arch.as_str(), "gnu"),
-            };
-
-            let filename = format!("skatelet-{}-unknown-linux-{}.tar.gz", dl_arch, dl_gnu);
+            let (dl_arch, dl_os, dl_gnu) = platform.arch_as_linux_target_triple();
+            let filename = format!("skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz");
             if asset.name.is_none() {
                 return false;
             }

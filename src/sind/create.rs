@@ -16,6 +16,11 @@ pub struct CreateArgs {
     ssh_private_key: String,
     #[arg(long, long_help = "SSH public key path", default_value_t= String::from("~/.ssh/id_rsa.pub"))]
     ssh_public_key: String,
+    #[arg(
+        long,
+        long_help = "Path to skatelet binary to use instead of downloading"
+    )]
+    skatelet_binary_path: Option<String>,
 }
 
 pub trait CreateDeps: With<dyn ShellExec> {}
@@ -53,7 +58,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
     println!("Creating new nodes");
     for (index, name) in &tuples {
-        let _ = shell_exec.exec_stdout(
+        shell_exec.exec_stdout(
             "docker",
             &[
                 "run",
@@ -82,11 +87,11 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         )?;
 
         // inject public key in authorized_keys
-        let _ = shell_exec.exec_stdout(
+        shell_exec.exec_stdout(
             "docker",
             &[
                 "exec",
-                &name,
+                name,
                 "bash",
                 "-c",
                 &format!(
@@ -110,12 +115,11 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     if !cluster_exists {
         // create cluster
         println!("creating cluster {}", main_args.global.cluster);
-        let _ =
-            shell_exec.exec_stdout("skate", &["create", "cluster", &main_args.global.cluster])?;
+        shell_exec.exec_stdout("skate", &["create", "cluster", &main_args.global.cluster])?;
     }
 
     // use cluster as context
-    let _ = shell_exec.exec_stdout(
+    shell_exec.exec_stdout(
         "skate",
         &["config", "use-context", &main_args.global.cluster],
     )?;
@@ -145,11 +149,46 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
             ],
         )?;
 
+        if let Some(skatelet_path) = &main_args.skatelet_binary_path {
+            shell_exec.exec_stdout(
+                "docker",
+                &[
+                    "cp",
+                    skatelet_path,
+                    &format!("{name}:/usr/local/bin/skatelet"),
+                ],
+            )?;
+        }
+
         // wait for port to open
         let ssh_port = &format!("222{index}");
+        let ssh_port_u32 = ssh_port
+            .parse::<u32>()
+            .map_err(|e| SkateError::String(e.to_string()))?;
 
-        // cargo run --bin skate create node --name node-$f --host 127.0.0.1 --peer-host $peer_host --port 222$f --subnet-cidr "20.${f}.0.0/16" --key $SSH_PRIVATE_KEY --user skate
-        let _ = shell_exec.exec_stdout(
+        let mut result: Result<_, _> = Err("never ran".into());
+        for _ in 0..10 {
+            println!("Attempting to connect to node...");
+            result = resolvable("127.0.0.1".into(), ssh_port_u32, 5).await;
+            if result.is_ok() {
+                break;
+            }
+            // sleep
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        if result.is_err() {
+            return Err(format!(
+                "Failed to connect to 127.0.0.1:{} => {:?}",
+                ssh_port,
+                result.err()
+            )
+            .into());
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        shell_exec.exec_stdout(
             "skate",
             &[
                 "create",
@@ -161,7 +200,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "--peer-host",
                 &peer_host,
                 "--port",
-                &ssh_port,
+                ssh_port,
                 "--subnet-cidr",
                 &format!("20.{index}.0.0/16"),
                 "--key",
@@ -181,4 +220,17 @@ pub fn ensure_file(path: &str) -> Result<String, SkateError> {
         return Err(format!("File {} does not exist", path).into());
     }
     Ok(path)
+}
+
+async fn resolvable(
+    ip: String,
+    port: u32,
+    timeout_seconds: u64,
+) -> Result<tokio::net::TcpStream, Box<dyn std::error::Error + Send + Sync>> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_seconds),
+        tokio::net::TcpStream::connect(format!("{}:{}", ip, port)),
+    )
+    .await?
+    .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync>)
 }

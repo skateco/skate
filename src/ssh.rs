@@ -15,6 +15,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use russh::{ChannelMsg, CryptoVec};
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
@@ -22,6 +23,9 @@ use std::fmt::{Debug, Formatter};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::mpsc;
+
+// TODO - move this to a config file
+const FALLBACK_SKATELET_VERSION: &str = "v0.1.55";
 
 #[async_trait]
 pub trait SshClient: Send + Sync {
@@ -316,11 +320,28 @@ echo ovs="$(cat /tmp/ovs-$$)";
 
         let resp = github_client.get_latest_release().await?;
 
-        let version = resp.version()?;
+        let version = match resp.version() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("ERROR: failed to get skatelet version: {}", e);
+                eprintln!(
+                    "ERROR: falling back to version {}",
+                    FALLBACK_SKATELET_VERSION
+                );
+                Version::parse(FALLBACK_SKATELET_VERSION.strip_prefix('v').unwrap())?
+            }
+        };
 
-        let download_url = resp
-            .find_skatelet_archive(&platform)
-            .ok_or(anyhow!("failed to find skatelet archive for platform"))?;
+        let download_url = match resp.find_skatelet_archive(&platform) {
+            Some(url) => url,
+            None => {
+                eprintln!("ERROR: failed to find skatelet archive for platform");
+                eprintln!("ERROR: falling back to blind url download");
+
+                let (dl_arch, dl_os, dl_gnu) = platform.arch_as_linux_target_triple();
+                format!("https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz")
+            }
+        };
 
         println!("installing skatelet version {}", version);
 

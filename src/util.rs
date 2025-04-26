@@ -304,6 +304,35 @@ pub static RE_CIDR: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
 pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
 
+pub enum ImageTagFormat {
+    None,
+    Digest(String),
+    Tag(String),
+}
+impl ImageTagFormat {
+    pub fn to_suffix(&self) -> String {
+        match self {
+            ImageTagFormat::None => "".to_string(),
+            ImageTagFormat::Digest(digest) => format!("@{digest}"),
+            ImageTagFormat::Tag(tag) => format!(":{tag}"),
+        }
+    }
+}
+/// Splits a container image string into its base image and tag/digest.
+pub fn split_container_image(image: &str) -> (String, ImageTagFormat) {
+    if image.contains('@') {
+        let (image, digest) = image.split_once('@').unwrap();
+        let digest = digest.to_string();
+        (image.to_string(), ImageTagFormat::Digest(digest))
+    } else if image.contains(':') {
+        let (image, tag) = image.split_once(':').unwrap();
+        let tag = tag.to_string();
+        (image.to_string(), ImageTagFormat::Tag(tag))
+    } else {
+        (image.to_string(), ImageTagFormat::None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::util::age;

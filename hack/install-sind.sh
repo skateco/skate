@@ -33,8 +33,11 @@ else
   exit 1
 fi
 
+
 get_install_alternatives(){
-  curl -s https://api.github.com/repos/skateco/skate/releases/latest \
+  output=$(curl -f --retry 5 --retry-max-time 30 --retry-all-errors --silent https://api.github.com/repos/skateco/skate/releases/latest)
+
+  echo "$output" \
     | grep "browser_download_url.*tar.gz" \
     | cut -d : -f 2,3 \
     | tr -d \\\" \
@@ -47,6 +50,7 @@ triple="$arch-$vendor-$os"
 echo "Triple: $triple"
 
 archive_name="sind-$triple.tar.gz"
+
 
 install_url=$(get_install_alternatives|grep "$archive_name" | head -n 1)
 

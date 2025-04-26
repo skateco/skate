@@ -9,11 +9,14 @@ use crate::skate::{ConfigFileArgs, Distribution};
 use crate::skatelet::VAR_PATH;
 use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
-use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP};
+use crate::util::{
+    split_container_image, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP,
+};
 use crate::{oci, util};
 use anyhow::anyhow;
 use clap::Args;
 use itertools::Itertools;
+use k8s_openapi::api::apps::v1::DaemonSet;
 use semver::{Version, VersionReq};
 use std::collections::HashMap;
 use std::error::Error;
@@ -215,7 +218,21 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
 
-    setup_networking(&conn, all_conns, &cluster, &node).await?;
+    let (coredns_image, coredns_tag) = get_coredns_image()?;
+
+    if matches!(coredns_tag, ImageTagFormat::None) {
+        return Err(anyhow!("coredns image tag not found").into());
+    }
+
+    setup_networking(
+        &conn,
+        all_conns,
+        &cluster,
+        &node,
+        coredns_image,
+        coredns_tag,
+    )
+    .await?;
 
     config.persist(Some(args.config.skateconfig.clone()))?;
 
@@ -227,6 +244,22 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     propagate_static_resources(&config, all_conns, &node, &state).await?;
 
     Ok(())
+}
+
+fn get_coredns_image() -> Result<(String, ImageTagFormat), Box<dyn Error>> {
+    let manifest: DaemonSet = serde_yaml::from_str(COREDNS_MANIFEST)?;
+
+    let image = manifest
+        .spec
+        .and_then(|s| s.template.spec.and_then(|t| t.containers[0].image.clone()));
+
+    if image.is_none() {
+        return Err(anyhow!("failed to get coredns image").into());
+    }
+
+    let image = image.unwrap();
+
+    Ok(split_container_image(&image))
 }
 
 // propagate existing resources to new node, such as secrets, ingress, services
@@ -335,6 +368,8 @@ async fn setup_networking(
     all_conns: &SshClients,
     cluster_conf: &Cluster,
     node: &Node,
+    coredns_image: String,
+    coredns_tag: ImageTagFormat,
 ) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
@@ -407,8 +442,10 @@ async fn setup_networking(
         create_replace_routes_file(conn, cluster_conf).await?;
     }
 
-    let cmd = "sudo podman image exists ghcr.io/skateco/coredns || sudo podman pull ghcr.io/skateco/coredns";
-    conn.execute_stdout(cmd, true, true).await?;
+    let coredns_tag = coredns_tag.to_suffix();
+
+    let cmd = format!("sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}");
+    conn.execute_stdout(&cmd, true, true).await?;
 
     // In ubuntu 24.04 there's an issue with apparmor and podman
     // https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2040483

@@ -181,6 +181,19 @@ pub struct Platform {
     pub distribution: Distribution,
 }
 
+impl Platform {
+    pub fn arch_as_linux_target_triple(&self) -> (&str, &str, &str) {
+        match self.arch.as_str() {
+            "amd64" => ("x86_64", "unknown-linux", "gnu"),
+            "armv6l" => ("arm", "unknown-linux", "gnueabi"),
+            "armv7l" => ("arm7", "unknown-linux", "gnueabi"),
+            "arm64" => ("aarch64", "unknown-linux", "gnu"),
+            _ => (self.arch.as_str(), "unknown-linux", "gnu"),
+        }
+        .into()
+    }
+}
+
 impl Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(

@@ -59,8 +59,8 @@ where
     F: Fn(String) -> Fu,
     Fu: Future<Output = Result<R, anyhow::Error>>,
 {
-    let fut: FuturesUnordered<_> = ["node-1", "node-2"]
-        .iter()
+    let fut: FuturesUnordered<_> = ["sind-node-1", "sind-node-2"]
+        .into_iter()
         .map(|node| async {
             for n in 0..attempts {
                 if n >= 1 {
@@ -73,6 +73,7 @@ where
                 } else if n == attempts - 1 {
                     return Err(anyhow!(
                         "{} => error after {} attempts: {:?}",
+                        // don't let clippy fool you, tests will not build if you pass the item directly
                         node.to_owned(),
                         attempts,
                         result.err()
@@ -83,6 +84,7 @@ where
             }
             Err(anyhow!(
                 "{} => error after {} attempts: ? shouldn't get here ?",
+                // don't let clippy fool you, tests will not build if you pass the item directly
                 node.to_owned(),
                 attempts
             ))
@@ -151,7 +153,7 @@ async fn e2e_test() {
         return;
     }
 
-    skate_stdout("config", &["use-context", "e2e-test"])
+    skate_stdout("config", &["use-context", "sind"])
         .await
         .expect("failed to set context");
 
@@ -178,9 +180,9 @@ async fn test_cluster_creation() -> Result<(), anyhow::Error> {
     let node1 = state["nodes"][0].clone();
     let node2 = state["nodes"][1].clone();
 
-    assert_eq!(node1["node_name"], "node-1");
+    assert_eq!(node1["node_name"], "sind-node-1");
     assert_eq!(node1["status"], "Healthy");
-    assert_eq!(node2["node_name"], "node-2");
+    assert_eq!(node2["node_name"], "sind-node-2");
     assert_eq!(node2["status"], "Healthy");
 
     Ok(())
@@ -364,7 +366,7 @@ async fn ensure_lvs_realservers(
     let (stdout, _stderr) = skate(
         "node-shell",
         &[
-            "node-1",
+            "sind-node-1",
             "--",
             "sudo",
             "ipvsadm",
