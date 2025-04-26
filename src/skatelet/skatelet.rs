@@ -14,8 +14,9 @@ use crate::util;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
+use sqlx::{Connection, SqliteConnection};
 use std::panic::PanicHookInfo;
-use std::{process, thread};
+use std::{env, process, thread};
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
 
@@ -90,6 +91,11 @@ impl IPVSDeps for Deps {}
 pub async fn skatelet() -> Result<(), SkateError> {
     let args = Cli::parse();
 
+    let db_path =
+        env::var("SKATELET_DB_PATH").unwrap_or_else(|_| "/var/lib/skate/db.sqlite".to_string());
+
+    let db = SqliteConnection::connect(&format!("sqlite:://{db_path}")).await?;
+
     let cmd_name: &'static str = (&args.command).into();
     let formatter = Formatter3164 {
         facility: Facility::LOG_USER,
@@ -106,7 +112,7 @@ pub async fn skatelet() -> Result<(), SkateError> {
         .map(|()| log::set_max_level(LevelFilter::Debug))
         .map_err(|e| anyhow!(e))?;
 
-    let deps = Deps {};
+    let deps = Deps { db };
 
     let result = match args.command {
         Commands::Apply(args) => apply::apply(deps, args),

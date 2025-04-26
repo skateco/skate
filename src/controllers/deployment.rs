@@ -3,21 +3,25 @@ use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::Deployment;
+use sqlx::SqliteConnection;
 use std::error::Error;
 
-pub struct DeploymentController {
+pub struct DeploymentController<'a> {
+    db: &'a SqliteConnection,
     store: Box<dyn Store>,
     execer: Box<dyn ShellExec>,
     pod_controller: PodController,
 }
 
-impl DeploymentController {
+impl<'a> DeploymentController<'a> {
     pub fn new(
+        db: &'a SqliteConnection,
         store: Box<dyn Store>,
         execer: Box<dyn ShellExec>,
         pod_controller: PodController,
     ) -> Self {
-        DeploymentController {
+        Self {
+            db,
             store,
             execer,
             pod_controller,
@@ -26,6 +30,7 @@ impl DeploymentController {
 
     pub fn apply(&self, deployment: &Deployment) -> Result<(), Box<dyn Error>> {
         // store the deployment manifest on the node basically
+
         self.store.write_file(
             "deployment",
             &metadata_name(deployment).to_string(),

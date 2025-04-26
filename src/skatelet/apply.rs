@@ -10,7 +10,7 @@ use crate::controllers::ingress::IngressController;
 use crate::controllers::pod::PodController;
 use crate::controllers::secret::SecretController;
 use crate::controllers::service::ServiceController;
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
@@ -37,7 +37,7 @@ pub enum StdinCommand {
     Stdin {},
 }
 
-pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec> {}
+pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
 
 pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
@@ -64,7 +64,12 @@ fn apply_supported_resource<D: ApplyDeps>(
     match object {
         SupportedResources::Deployment(deployment) => {
             let pod_controller = PodController::new(execer(&deps));
-            let ctrl = DeploymentController::new(store(&deps), execer(&deps), pod_controller);
+            let ctrl = DeploymentController::new(
+                deps.get_db(),
+                store(&deps),
+                execer(&deps),
+                pod_controller,
+            );
             ctrl.apply(deployment)?;
         }
         SupportedResources::DaemonSet(daemonset) => {

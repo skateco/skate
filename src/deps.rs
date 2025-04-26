@@ -7,16 +7,29 @@ use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::{Either, Itertools};
+use sqlx::SqliteConnection;
 
 pub trait With<T: ?Sized> {
     fn get(&self) -> Box<T>;
+}
+
+pub trait WithDB {
+    fn get_db(&self) -> &SqliteConnection;
 }
 
 pub trait WithRef<'a, T: ?Sized> {
     fn get_ref(&'a self) -> &'a Box<T>;
 }
 
-pub struct Deps {}
+pub struct Deps {
+    pub db: SqliteConnection,
+}
+
+impl WithDB for Deps {
+    fn get_db(&self) -> &SqliteConnection {
+        &self.db
+    }
+}
 
 impl With<dyn Store> for Deps {
     fn get(&self) -> Box<dyn Store> {

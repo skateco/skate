@@ -1,5 +1,6 @@
 use crate::ssh::SshError;
 use handlebars::RenderError;
+use sqlx::sqlite;
 use std::error::Error as RustError;
 use thiserror::Error;
 use validator::ValidationErrors;
@@ -28,6 +29,8 @@ pub enum SkateError {
     Multi(Vec<SkateError>),
     #[error("Error: {}", .0)]
     ValidationErrors(#[from] ValidationErrors),
+    #[error("Database Error: {0}")]
+    Sqlx(#[from] sqlx::Error),
     #[error("unknown error")]
     Unknown,
 }

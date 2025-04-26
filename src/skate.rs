@@ -20,6 +20,7 @@ use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
+use sqlx::{Connection, SqliteConnection};
 use std::fmt::{Display, Formatter};
 use strum_macros::Display;
 
@@ -111,6 +112,7 @@ impl AllDeps for Deps {}
 
 async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateError> {
     config::ensure_config();
+
     match args.command {
         Commands::Create(args) => {
             let create = Create { deps };

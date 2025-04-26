@@ -4,6 +4,8 @@
   # https://devenv.sh/basics/
   env.GREET = "devenv";
   env.SSH_PRIVATE_KEY = "/tmp/skate-e2e-key";
+  env.SKATELET_DB_PATH = "${config.devenv.root}/skatelet.db";
+  env.DATABASE_URL = "sqlite://${config.devenv.root}/skatelet.db";
 
   # https://devenv.sh/packages/
     packages = [
@@ -11,6 +13,7 @@
       pkgs.openssl
       pkgs.docker
       pkgs.go
+      pkgs.sqlite
     ] ++ lib.optionals pkgs.stdenv.isDarwin [
       # Seems like some part of sqlx needs this if on mac
       # Symptom was "ld: framework not found SystemConfiguration"

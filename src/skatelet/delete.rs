@@ -17,7 +17,7 @@ use crate::controllers::ingress::IngressController;
 use crate::controllers::pod::PodController;
 use crate::controllers::secret::SecretController;
 use crate::controllers::service::ServiceController;
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
@@ -60,7 +60,7 @@ pub struct DeleteArgs {
     command: DeleteResourceCommands,
 }
 
-pub trait DeleteDeps: With<dyn Store> + With<dyn ShellExec> {}
+pub trait DeleteDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
 
 pub struct Deleter<D: DeleteDeps> {
     pub deps: D,
@@ -243,7 +243,12 @@ impl<D: DeleteDeps> Deleter<D> {
             }
             SupportedResources::Deployment(d) => {
                 let pod_controller = PodController::new(self.execer());
-                let ctrl = DeploymentController::new(self.store(), self.execer(), pod_controller);
+                let ctrl = DeploymentController::new(
+                    self.deps.get_db(),
+                    self.store(),
+                    self.execer(),
+                    pod_controller,
+                );
                 ctrl.delete(d, grace_period)?;
             }
             SupportedResources::DaemonSet(d) => {
