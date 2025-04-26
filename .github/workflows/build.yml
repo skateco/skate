@@ -51,6 +51,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       DEBUG: true
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Run skate install script
