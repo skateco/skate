@@ -33,9 +33,14 @@ else
   exit 1
 fi
 
+declare -a EXTRA_ARGS=()
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  EXTRA_ARGS=("-H" "Authentication: Bearer $GITHUB_TOKEN")
+fi
 
 get_install_alternatives(){
-  output=$(curl -f --retry 5 --retry-max-time 30 --retry-all-errors --silent https://api.github.com/repos/skateco/skate/releases/latest)
+  # shellcheck disable=SC2068
+  output=$(curl ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} -f --retry 5 --retry-max-time 30 --retry-all-errors --silent https://api.github.com/repos/skateco/skate/releases/latest)
 
   echo "$output" \
     | grep "browser_download_url.*tar.gz" \
