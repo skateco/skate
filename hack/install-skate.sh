@@ -35,7 +35,7 @@ fi
 
 declare -a EXTRA_ARGS=()
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-  EXTRA_ARGS=("-H" "Authentication: Bearer $GITHUB_TOKEN")
+  EXTRA_ARGS=("-H" "Authorization: Bearer $GITHUB_TOKEN")
 fi
 
 get_install_alternatives(){
