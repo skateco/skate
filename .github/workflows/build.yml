@@ -215,6 +215,7 @@ jobs:
             target/${{matrix.TARGET}}/release/skatelet
             target/${{matrix.TARGET}}/release/sind
   create-release:
+    needs: [build, e2e-test]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     steps:
@@ -223,7 +224,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
   release:
-    needs: [ build, e2e-test, create-release ]
+    needs: [create-release ]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     strategy:
