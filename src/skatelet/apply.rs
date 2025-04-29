@@ -14,8 +14,8 @@ use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
-use crate::resource::SupportedResources;
 use crate::skatelet::VAR_PATH;
+use crate::supported_resources::SupportedResources;
 use std::io::Read;
 
 #[derive(Debug, Args)]
@@ -39,7 +39,7 @@ pub enum StdinCommand {
 
 pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
 
-pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
+pub async fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
         StdinCommand::Stdin {} => {
             let mut stdin = io::stdin();
@@ -51,10 +51,10 @@ pub fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateEr
 
     let object: SupportedResources =
         serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
-    apply_supported_resource(deps, &object)
+    apply_supported_resource(deps, &object).await
 }
 
-fn apply_supported_resource<D: ApplyDeps>(
+async fn apply_supported_resource<D: ApplyDeps>(
     deps: D,
     object: &SupportedResources,
 ) -> Result<(), SkateError> {
@@ -70,7 +70,7 @@ fn apply_supported_resource<D: ApplyDeps>(
                 execer(&deps),
                 pod_controller,
             );
-            ctrl.apply(deployment)?;
+            ctrl.apply(deployment).await?;
         }
         SupportedResources::DaemonSet(daemonset) => {
             let pod_controller = PodController::new(execer(&deps));

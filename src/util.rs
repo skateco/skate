@@ -1,5 +1,5 @@
 use crate::exec::ShellExec;
-use crate::resource::SupportedResources;
+use crate::supported_resources::SupportedResources;
 use anyhow::anyhow;
 use base64::engine::general_purpose;
 use base64::Engine;

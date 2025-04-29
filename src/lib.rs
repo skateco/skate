@@ -29,9 +29,9 @@ pub mod errors;
 mod exec;
 mod github;
 mod node_shell;
-mod resource;
 mod rollout;
 pub mod sind;
+pub(crate) mod supported_resources;
 mod test_helpers;
 mod upgrade;
 

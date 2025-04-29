@@ -1,4 +1,4 @@
-pub mod resource;
+pub(crate) mod resource;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

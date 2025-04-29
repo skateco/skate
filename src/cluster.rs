@@ -2,11 +2,11 @@ use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::refresh::{Refresh, RefreshDeps};
-use crate::resource::SupportedResources;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::ConfigFileArgs;
 use crate::ssh::SshClients;
 use crate::state::state::ClusterState;
+use crate::supported_resources::SupportedResources;
 use clap::{Args, Subcommand};
 use std::error::Error;
 

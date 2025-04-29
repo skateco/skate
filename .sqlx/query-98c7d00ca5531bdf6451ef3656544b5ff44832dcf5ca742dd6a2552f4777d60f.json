@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            DELETE FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "98c7d00ca5531bdf6451ef3656544b5ff44832dcf5ca742dd6a2552f4777d60f"
+}

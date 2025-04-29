@@ -12,3 +12,4 @@ devenv.local.nix
 # pre-commit
 .pre-commit-config.yaml
 skatelet.db
+.DS_Store

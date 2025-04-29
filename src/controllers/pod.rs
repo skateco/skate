@@ -1,5 +1,5 @@
 use crate::exec::ShellExec;
-use crate::resource::SupportedResources;
+use crate::supported_resources::SupportedResources;
 use crate::util::apply_play;
 use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Pod;

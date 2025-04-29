@@ -1,6 +1,6 @@
-use crate::resource::SupportedResources;
-use crate::resource::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use crate::skatelet::apply::StdinCommand;
+use crate::supported_resources::SupportedResources;
+use crate::supported_resources::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use clap::{Args, Subcommand};
 use std::collections::BTreeMap;
 use std::io;
@@ -73,29 +73,36 @@ impl<D: DeleteDeps> Deleter<D> {
     fn execer(&self) -> Box<dyn ShellExec> {
         With::<dyn ShellExec>::get(&self.deps)
     }
-    pub fn delete(&self, args: DeleteArgs) -> Result<(), SkateError> {
+    pub async fn delete(&self, args: DeleteArgs) -> Result<(), SkateError> {
         match &args.command {
             DeleteResourceCommands::Ingress(resource_args) => {
                 self.delete_ingress(args.clone(), resource_args.clone())
+                    .await
             }
-            DeleteResourceCommands::StdinCommand(_) => self.delete_stdin(args),
+            DeleteResourceCommands::StdinCommand(_) => self.delete_stdin(args).await,
             DeleteResourceCommands::Cronjob(resource_args) => {
                 self.delete_cronjob(args.clone(), resource_args.clone())
+                    .await
             }
             DeleteResourceCommands::Secret(resource_args) => {
                 self.delete_secret(args.clone(), resource_args.clone())
+                    .await
             }
             DeleteResourceCommands::Daemonset(resource_args) => {
                 self.delete_daemonset(args.clone(), resource_args.clone())
+                    .await
             }
             DeleteResourceCommands::Deployment(resource_args) => {
                 self.delete_deployment(args.clone(), resource_args.clone())
+                    .await
             }
             DeleteResourceCommands::Service(resource_args) => {
                 self.delete_service(args.clone(), resource_args.clone())
+                    .await
             }
             DeleteResourceCommands::Clusterissuer(resource_args) => {
                 self.delete_cluster_issuer(args.clone(), resource_args.clone())
+                    .await
             }
         }
     }
@@ -111,7 +118,7 @@ impl<D: DeleteDeps> Deleter<D> {
         meta
     }
 
-    fn delete_ingress(
+    async fn delete_ingress(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -124,9 +131,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_service(
+    async fn delete_service(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -139,9 +147,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_cluster_issuer(
+    async fn delete_cluster_issuer(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -153,9 +162,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_cronjob(
+    async fn delete_cronjob(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -168,9 +178,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_secret(
+    async fn delete_secret(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -185,9 +196,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_stdin(&self, args: DeleteArgs) -> Result<(), SkateError> {
+    async fn delete_stdin(&self, args: DeleteArgs) -> Result<(), SkateError> {
         let manifest = {
             let mut stdin = io::stdin();
             let mut buffer = String::new();
@@ -198,9 +210,10 @@ impl<D: DeleteDeps> Deleter<D> {
         let object: SupportedResources =
             serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
         self.manifest_delete(&object, args.termination_grace_period)
+            .await
     }
 
-    fn delete_deployment(
+    async fn delete_deployment(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -213,9 +226,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }),
             delete_args.termination_grace_period,
         )
+        .await
     }
 
-    fn delete_daemonset(
+    async fn delete_daemonset(
         &self,
         delete_args: DeleteArgs,
         resource_args: DeleteResourceArgs,
@@ -227,11 +241,12 @@ impl<D: DeleteDeps> Deleter<D> {
                 status: None,
             }),
             delete_args.termination_grace_period,
-        )?;
+        )
+        .await?;
         Ok(())
     }
 
-    fn manifest_delete(
+    async fn manifest_delete(
         &self,
         object: &SupportedResources,
         grace_period: Option<usize>,
@@ -249,7 +264,7 @@ impl<D: DeleteDeps> Deleter<D> {
                     self.execer(),
                     pod_controller,
                 );
-                ctrl.delete(d, grace_period)?;
+                ctrl.delete(d, grace_period).await?;
             }
             SupportedResources::DaemonSet(d) => {
                 let pod_controller = PodController::new(self.execer());
