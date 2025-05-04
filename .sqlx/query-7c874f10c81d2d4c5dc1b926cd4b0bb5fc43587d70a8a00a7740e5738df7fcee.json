@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT id, name, namespace, resource_type, manifest,  hash, created_at, updated_at\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "namespace",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "resource_type",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "manifest",
+        "ordinal": 4,
+        "type_info": "Null"
+      },
+      {
+        "name": "hash",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "7c874f10c81d2d4c5dc1b926cd4b0bb5fc43587d70a8a00a7740e5738df7fcee"
+}
