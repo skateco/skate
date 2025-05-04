@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT *\n            FROM resources\n            WHERE resource_type = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "namespace",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "resource_type",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "manifest",
+        "ordinal": 4,
+        "type_info": "Null"
+      },
+      {
+        "name": "hash",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "03aeff000b127f022b6c3323c7133c307c26c7e7c9b3b8eb0f371202b92546ab"
+}
