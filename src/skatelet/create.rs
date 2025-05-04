@@ -1,7 +1,7 @@
 use clap::{Args, Subcommand};
 
 use crate::controllers::cronjob::CronjobController;
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
@@ -31,7 +31,7 @@ pub enum CreateCommand {
     Job(JobArgs),
 }
 
-pub trait CreateDeps: With<dyn Store> + With<dyn ShellExec> {}
+pub trait CreateDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
 
 pub fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
     match main_args.command.clone() {
@@ -64,7 +64,7 @@ pub fn create_job_cronjob<D: CreateDeps>(
     let execer = With::<dyn ShellExec>::get(&deps);
     let store = With::<dyn Store>::get(&deps);
 
-    let ctrl = CronjobController::new(store, execer);
+    let ctrl = CronjobController::new(store, deps.get_db(), execer);
 
     ctrl.run(from_name, &create_args.namespace, args.wait)?;
     Ok(())

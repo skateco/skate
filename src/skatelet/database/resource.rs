@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteExecutor;
+use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Resource {
     pub id: uuid::Uuid,
     pub name: String,
@@ -69,6 +70,49 @@ pub async fn delete_resource(
     Ok(())
 }
 
+pub async fn get_resource(
+    db: impl SqliteExecutor<'_>,
+    resource_type: &ResourceType,
+    name: &str,
+    namespace: &str,
+) -> super::Result<Option<Resource>> {
+    let resource = sqlx::query_as!(
+        Resource,
+        r#"
+            SELECT *
+            FROM resources
+            WHERE resource_type = $1
+            AND name = $2
+            AND namespace = $3
+        "#,
+        resource_type,
+        name,
+        namespace
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(resource)
+}
+pub async fn list_resources_by_type(
+    db: impl SqliteExecutor<'_>,
+    resource_type: &ResourceType,
+) -> super::Result<Vec<Resource>> {
+    let resources = sqlx::query_as!(
+        Resource,
+        r#"
+            SELECT *
+            FROM resources
+            WHERE resource_type = $1
+        "#,
+        resource_type
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(resources)
+}
+
 #[derive(
     sqlx::Type, Debug, Serialize, Deserialize, Display, Clone, EnumString, PartialEq, Default,
 )]
@@ -103,6 +147,12 @@ pub enum ResourceType {
         to_string = "clusterissuer"
     )]
     ClusterIssuer,
+}
+
+impl From<String> for ResourceType {
+    fn from(s: String) -> Self {
+        ResourceType::from_str(&s).unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

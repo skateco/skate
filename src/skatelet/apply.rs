@@ -64,18 +64,13 @@ async fn apply_supported_resource<D: ApplyDeps>(
     match object {
         SupportedResources::Deployment(deployment) => {
             let pod_controller = PodController::new(execer(&deps));
-            let ctrl = DeploymentController::new(
-                deps.get_db(),
-                store(&deps),
-                execer(&deps),
-                pod_controller,
-            );
+            let ctrl = DeploymentController::new(deps.get_db(), execer(&deps), pod_controller);
             ctrl.apply(deployment).await?;
         }
         SupportedResources::DaemonSet(daemonset) => {
             let pod_controller = PodController::new(execer(&deps));
-            let ctrl = DaemonSetController::new(store(&deps), execer(&deps), pod_controller);
-            ctrl.apply(daemonset)?;
+            let ctrl = DaemonSetController::new(deps.get_db(), execer(&deps), pod_controller);
+            ctrl.apply(daemonset).await?;
         }
         SupportedResources::Pod(pod) => {
             let ctrl = PodController::new(execer(&deps));
@@ -86,26 +81,26 @@ async fn apply_supported_resource<D: ApplyDeps>(
             ctrl.apply(secret)?;
         }
         SupportedResources::Ingress(ingress) => {
-            let ctrl = IngressController::new(store(&deps), execer(&deps));
-            ctrl.apply(ingress)?;
+            let ctrl = IngressController::new(deps.get_db(), execer(&deps));
+            ctrl.apply(ingress).await?;
         }
         SupportedResources::CronJob(cron) => {
-            let ctrl = CronjobController::new(store(&deps), execer(&deps));
-            ctrl.apply(cron)?;
+            let ctrl = CronjobController::new(store(&deps), deps.get_db(), execer(&deps));
+            ctrl.apply(cron).await?;
         }
         SupportedResources::Service(service) => {
             let ctrl = ServiceController::new(
-                store(&deps),
+                deps.get_db(),
                 execer(&deps),
                 VAR_PATH,
                 "/etc/systemd/system",
             );
-            ctrl.apply(service)?;
+            ctrl.apply(service).await?;
         }
         SupportedResources::ClusterIssuer(issuer) => {
-            let ingress_ctrl = IngressController::new(store(&deps), execer(&deps));
-            let ctrl = ClusterIssuerController::new(store(&deps), ingress_ctrl);
-            ctrl.apply(issuer)?;
+            let ingress_ctrl = IngressController::new(deps.get_db(), execer(&deps));
+            let ctrl = ClusterIssuerController::new(deps.get_db(), ingress_ctrl);
+            ctrl.apply(issuer).await?;
         }
     }
     Ok(())

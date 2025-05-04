@@ -1,3 +1,4 @@
+use crate::skatelet::database;
 use crate::ssh::SshError;
 use handlebars::RenderError;
 use sqlx::sqlite;
@@ -31,6 +32,8 @@ pub enum SkateError {
     ValidationErrors(#[from] ValidationErrors),
     #[error("Database Error: {0}")]
     Sqlx(#[from] sqlx::Error),
+    #[error("Database Error: {0}")]
+    Database(#[from] database::Error),
     #[error("unknown error")]
     Unknown,
 }

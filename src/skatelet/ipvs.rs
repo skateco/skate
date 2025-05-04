@@ -1,7 +1,8 @@
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::util::NamespacedName;
+use crate::skatelet::database::resource::{get_resource, ResourceType};
+use crate::util::{metadata_name, NamespacedName};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use handlebars::Handlebars;
@@ -44,20 +45,21 @@ pub struct DisableIpArgs {
 pub struct SyncArgs {
     #[arg(long, long_help = "Name of the file to write keepalived config to.")]
     out: String,
+    svc_name: String,
+    // TODO - put host into the manifest somehow
     host: String,
-    file: String,
 }
 
-pub trait IPVSDeps: With<dyn ShellExec> {}
+pub trait IPVSDeps: With<dyn ShellExec> + WithDB {}
 
 pub struct IPVS<D: IPVSDeps> {
     pub deps: D,
 }
 
 impl<D: IPVSDeps> IPVS<D> {
-    pub fn ipvs(&self, args: IpvsArgs) -> Result<(), SkateError> {
+    pub async fn ipvs(&self, args: IpvsArgs) -> Result<(), SkateError> {
         match args.command {
-            Commands::Sync(args) => self.sync(args),
+            Commands::Sync(args) => self.sync(args).await,
             Commands::DisableIp(args) => self.disable_ips(args),
         }
     }
@@ -65,9 +67,22 @@ impl<D: IPVSDeps> IPVS<D> {
         Self::terminated_add(&args.host, &args.ips)
     }
 
-    fn sync(&self, args: SyncArgs) -> Result<(), SkateError> {
+    async fn sync(&self, args: SyncArgs) -> Result<(), SkateError> {
         // args.service_name is fqn like foo.bar
-        let mut manifest: Service = serde_yaml::from_str(&fs::read_to_string(args.file)?)?;
+        let name = NamespacedName::from(args.svc_name.as_str());
+        let resource = get_resource(
+            &self.deps.get_db(),
+            &ResourceType::Service,
+            &name.name,
+            &name.namespace,
+        )
+        .await?;
+        if resource.is_none() {
+            return Err(anyhow!("service {} not found", &args.svc_name).into());
+        }
+        let resource = resource.unwrap();
+        let mut manifest: Service = serde_json::from_value(resource.manifest)?;
+
         let spec = manifest.spec.clone().unwrap_or_default();
         let name = spec
             .selector

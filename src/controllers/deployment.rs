@@ -10,21 +10,14 @@ use std::error::Error;
 
 pub struct DeploymentController {
     db: SqlitePool,
-    store: Box<dyn Store>,
     execer: Box<dyn ShellExec>,
     pod_controller: PodController,
 }
 
 impl DeploymentController {
-    pub fn new(
-        db: SqlitePool,
-        store: Box<dyn Store>,
-        execer: Box<dyn ShellExec>,
-        pod_controller: PodController,
-    ) -> Self {
+    pub fn new(db: SqlitePool, execer: Box<dyn ShellExec>, pod_controller: PodController) -> Self {
         Self {
             db,
-            store,
             execer,
             pod_controller,
         }

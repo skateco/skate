@@ -132,7 +132,7 @@ pub async fn skatelet() -> Result<(), SkateError> {
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => {
             let ipvs = IPVS { deps };
-            ipvs.ipvs(args)
+            ipvs.ipvs(args).await
         }
         Commands::Create(args) => create(deps, args),
         Commands::Cordon(args) => cordon(args),

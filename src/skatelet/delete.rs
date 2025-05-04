@@ -258,26 +258,23 @@ impl<D: DeleteDeps> Deleter<D> {
             }
             SupportedResources::Deployment(d) => {
                 let pod_controller = PodController::new(self.execer());
-                let ctrl = DeploymentController::new(
-                    self.deps.get_db(),
-                    self.store(),
-                    self.execer(),
-                    pod_controller,
-                );
+                let ctrl =
+                    DeploymentController::new(self.deps.get_db(), self.execer(), pod_controller);
                 ctrl.delete(d, grace_period).await?;
             }
             SupportedResources::DaemonSet(d) => {
                 let pod_controller = PodController::new(self.execer());
-                let ctrl = DaemonSetController::new(self.store(), self.execer(), pod_controller);
-                ctrl.delete(d, grace_period)?;
+                let ctrl =
+                    DaemonSetController::new(self.deps.get_db(), self.execer(), pod_controller);
+                ctrl.delete(d, grace_period).await?;
             }
             SupportedResources::Ingress(ingress) => {
-                let ctrl = IngressController::new(self.store(), self.execer());
-                ctrl.delete(ingress)?;
+                let ctrl = IngressController::new(self.deps.get_db(), self.execer());
+                ctrl.delete(ingress).await?;
             }
             SupportedResources::CronJob(cron) => {
-                let ctrl = CronjobController::new(self.store(), self.execer());
-                ctrl.delete(cron)?;
+                let ctrl = CronjobController::new(self.store(), self.deps.get_db(), self.execer());
+                ctrl.delete(cron).await?;
             }
             SupportedResources::Secret(secret) => {
                 let ctrl = SecretController::new(self.execer());
@@ -285,17 +282,17 @@ impl<D: DeleteDeps> Deleter<D> {
             }
             SupportedResources::Service(service) => {
                 let ctrl = ServiceController::new(
-                    self.store(),
+                    self.deps.get_db(),
                     self.execer(),
                     VAR_PATH,
                     "/etc/systemd/system",
                 );
-                ctrl.delete(service)?;
+                ctrl.delete(service).await?;
             }
             SupportedResources::ClusterIssuer(issuer) => {
-                let ingress_controller = IngressController::new(self.store(), self.execer());
-                let ctrl = ClusterIssuerController::new(self.store(), ingress_controller);
-                ctrl.delete(issuer)?;
+                let ingress_controller = IngressController::new(self.deps.get_db(), self.execer());
+                let ctrl = ClusterIssuerController::new(self.deps.get_db(), ingress_controller);
+                ctrl.delete(issuer).await?;
             }
         }
         Ok(())
