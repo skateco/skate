@@ -1,11 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::SqliteExecutor;
+use sqlx::{FromRow, SqliteExecutor};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, FromRow)]
 pub struct Resource {
     pub id: uuid::Uuid,
     pub name: String,
@@ -79,7 +79,7 @@ pub async fn get_resource(
     let resource = sqlx::query_as!(
         Resource,
         r#"
-            SELECT *
+            SELECT id, name, namespace, resource_type, manifest,  hash, created_at, updated_at
             FROM resources
             WHERE resource_type = $1
             AND name = $2
@@ -101,7 +101,7 @@ pub async fn list_resources_by_type(
     let resources = sqlx::query_as!(
         Resource,
         r#"
-            SELECT *
+            SELECT id, name, namespace, resource_type, manifest, hash, created_at, updated_at
             FROM resources
             WHERE resource_type = $1
         "#,
