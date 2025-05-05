@@ -1,4 +1,3 @@
-use crate::deps::SkateDeps;
 use crate::errors::SkateError;
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
@@ -15,7 +14,7 @@ use crate::util;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
-use sqlx::{Connection, SqliteConnection, SqlitePool};
+use sqlx::{Connection, SqlitePool};
 use std::panic::PanicHookInfo;
 use std::{env, process, thread};
 use strum_macros::IntoStaticStr;

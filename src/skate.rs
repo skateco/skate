@@ -192,7 +192,6 @@ impl Platform {
             "arm64" => ("aarch64", "unknown-linux", "gnu"),
             _ => (self.arch.as_str(), "unknown-linux", "gnu"),
         }
-        .into()
     }
 }
 

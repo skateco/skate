@@ -1,11 +1,10 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::{delete_resource, insert_resource, ResourceType};
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::Deployment;
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::SqlitePool;
 use std::error::Error;
 
 pub struct DeploymentController {
@@ -38,7 +37,7 @@ impl DeploymentController {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: resource::ResourceType::Deployment,
-            manifest: serde_json::to_value(&deployment)?,
+            manifest: serde_json::to_value(deployment)?,
             hash: hash.clone(),
             ..Default::default()
         };

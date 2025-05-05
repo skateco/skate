@@ -1,12 +1,8 @@
-use chrono::format::Fixed::RFC3339;
-use chrono::{DateTime, Offset, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::sqlite::SqliteRow;
 use sqlx::types::time::OffsetDateTime;
-use sqlx::{Error, FromRow, Row, SqliteExecutor};
+use sqlx::{FromRow, Row, SqliteExecutor};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
-use uuid::Uuid;
 
 #[derive(Clone, FromRow)]
 pub struct Resource {

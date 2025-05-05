@@ -1,6 +1,5 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::database::resource;
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::DaemonSet;
@@ -36,7 +35,7 @@ impl DaemonSetController {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: resource::ResourceType::DaemonSet,
-            manifest: serde_json::to_value(&ds)?,
+            manifest: serde_json::to_value(ds)?,
             hash: hash.clone(),
             ..Default::default()
         };

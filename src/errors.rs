@@ -1,7 +1,6 @@
 use crate::skatelet::database;
 use crate::ssh::SshError;
 use handlebars::RenderError;
-use sqlx::sqlite;
 use std::error::Error as RustError;
 use thiserror::Error;
 use validator::ValidationErrors;

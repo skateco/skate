@@ -44,7 +44,7 @@ impl CronjobController {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: resource::ResourceType::CronJob,
-            manifest: serde_json::to_value(&cron_job)?,
+            manifest: serde_json::to_value(cron_job)?,
             hash: hash.clone(),
             ..Default::default()
         };

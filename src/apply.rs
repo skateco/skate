@@ -10,7 +10,6 @@ use clap::Args;
 use itertools::{Either, Itertools};
 use serde::Deserialize;
 use serde_yaml::Value;
-use sqlx::SqliteConnection;
 use std::error::Error;
 use std::io::Read;
 use std::{fs, io};

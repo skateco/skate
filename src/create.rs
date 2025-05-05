@@ -11,7 +11,6 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use node::CreateNodeArgs;
-use sqlx::SqliteConnection;
 
 mod node;
 

@@ -1,5 +1,4 @@
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::database::resource::{
     delete_resource, insert_resource, Resource, ResourceType,
 };

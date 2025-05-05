@@ -2,7 +2,7 @@ use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource::{get_resource, ResourceType};
-use crate::util::{metadata_name, NamespacedName};
+use crate::util::NamespacedName;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use handlebars::Handlebars;
