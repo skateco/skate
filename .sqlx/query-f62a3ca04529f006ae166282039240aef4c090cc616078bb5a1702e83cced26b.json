@@ -1,20 +1,20 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id, name, namespace, resource_type, manifest,  hash, created_at, updated_at\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "query": "\n            SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: OffsetDateTime\", updated_at as \"updated_at!: OffsetDateTime\"\n            FROM resources\n            WHERE resource_type = $1\n        ",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "id!: String",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "name",
+        "name": "name!: String",
         "ordinal": 1,
         "type_info": "Text"
       },
       {
-        "name": "namespace",
+        "name": "namespace!: String",
         "ordinal": 2,
         "type_info": "Text"
       },
@@ -24,28 +24,28 @@
         "type_info": "Text"
       },
       {
-        "name": "manifest",
+        "name": "manifest!: serde_json::Value",
         "ordinal": 4,
         "type_info": "Null"
       },
       {
-        "name": "hash",
+        "name": "hash!: String",
         "ordinal": 5,
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "created_at!: OffsetDateTime",
         "ordinal": 6,
         "type_info": "Datetime"
       },
       {
-        "name": "updated_at",
+        "name": "updated_at!: OffsetDateTime",
         "ordinal": 7,
         "type_info": "Datetime"
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 1
     },
     "nullable": [
       true,
@@ -58,5 +58,5 @@
       true
     ]
   },
-  "hash": "7c874f10c81d2d4c5dc1b926cd4b0bb5fc43587d70a8a00a7740e5738df7fcee"
+  "hash": "f62a3ca04529f006ae166282039240aef4c090cc616078bb5a1702e83cced26b"
 }

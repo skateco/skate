@@ -1,26 +1,45 @@
-use chrono::{DateTime, Utc};
+use chrono::format::Fixed::RFC3339;
+use chrono::{DateTime, Offset, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqliteExecutor};
+use sqlx::sqlite::SqliteRow;
+use sqlx::types::time::OffsetDateTime;
+use sqlx::{Error, FromRow, Row, SqliteExecutor};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use uuid::Uuid;
 
-#[derive(Default, Clone, FromRow)]
+#[derive(Clone, FromRow)]
 pub struct Resource {
-    pub id: uuid::Uuid,
+    pub id: String,
     pub name: String,
     pub namespace: String,
     pub resource_type: ResourceType,
     pub manifest: serde_json::Value,
     pub hash: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
 }
+
+impl Default for Resource {
+    fn default() -> Self {
+        Resource {
+            id: "".to_string(),
+            name: "".to_string(),
+            namespace: "".to_string(),
+            resource_type: ResourceType::default(),
+            manifest: serde_json::json!({}),
+            hash: "".to_string(),
+            created_at: OffsetDateTime::now_utc(),
+            updated_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 pub async fn insert_resource(
     db: impl SqliteExecutor<'_>,
     resource: &Resource,
-) -> super::Result<Uuid> {
-    let resource_id = uuid::Uuid::new_v4();
+) -> super::Result<String> {
+    let resource_id = uuid::Uuid::new_v4().to_string();
     let str_id = resource_id.to_string();
 
     let _ = sqlx::query!(
@@ -70,6 +89,14 @@ pub async fn delete_resource(
     Ok(())
 }
 
+// proc macro for select statement
+
+macro_rules! select_cols {
+    () => {
+            r#"SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime""#
+    }
+}
+
 pub async fn get_resource(
     db: impl SqliteExecutor<'_>,
     resource_type: &ResourceType,
@@ -78,8 +105,7 @@ pub async fn get_resource(
 ) -> super::Result<Option<Resource>> {
     let resource = sqlx::query_as!(
         Resource,
-        r#"
-            SELECT id, name, namespace, resource_type, manifest,  hash, created_at, updated_at
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime"
             FROM resources
             WHERE resource_type = $1
             AND name = $2
@@ -100,8 +126,7 @@ pub async fn list_resources_by_type(
 ) -> super::Result<Vec<Resource>> {
     let resources = sqlx::query_as!(
         Resource,
-        r#"
-            SELECT id, name, namespace, resource_type, manifest, hash, created_at, updated_at
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime"
             FROM resources
             WHERE resource_type = $1
         "#,
