@@ -85,14 +85,6 @@ pub async fn delete_resource(
     Ok(())
 }
 
-// proc macro for select statement
-
-macro_rules! select_cols {
-    () => {
-            r#"SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime""#
-    }
-}
-
 pub async fn get_resource(
     db: impl SqliteExecutor<'_>,
     resource_type: &ResourceType,
