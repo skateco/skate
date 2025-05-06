@@ -121,6 +121,8 @@ jobs:
 
   e2e-test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite://skatelet.db
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache

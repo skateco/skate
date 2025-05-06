@@ -150,6 +150,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         )?;
 
         if let Some(skatelet_path) = &main_args.skatelet_binary_path {
+            println!("Copying skatelet binary to node {}", name);
             shell_exec.exec_stdout(
                 "docker",
                 &[
