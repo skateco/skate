@@ -1,10 +1,10 @@
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use sqlx::types::time::OffsetDateTime;
 use sqlx::{FromRow, Row, SqliteExecutor};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 
-#[derive(Clone, FromRow)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Resource {
     pub id: String,
     pub name: String,
@@ -12,8 +12,8 @@ pub struct Resource {
     pub resource_type: ResourceType,
     pub manifest: serde_json::Value,
     pub hash: String,
-    pub created_at: OffsetDateTime,
-    pub updated_at: OffsetDateTime,
+    pub created_at: DateTime<Local>,
+    pub updated_at: DateTime<Local>,
 }
 
 impl Default for Resource {
@@ -25,8 +25,8 @@ impl Default for Resource {
             resource_type: ResourceType::default(),
             manifest: serde_json::json!({}),
             hash: "".to_string(),
-            created_at: OffsetDateTime::now_utc(),
-            updated_at: OffsetDateTime::now_utc(),
+            created_at: Local::now(),
+            updated_at: Local::now(),
         }
     }
 }

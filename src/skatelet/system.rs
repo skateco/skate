@@ -7,21 +7,21 @@ use sysinfo::{DiskKind, Disks, RefreshKind, System};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
-use k8s_openapi::api::core::v1::Secret;
-use log::error;
-use serde::{Deserialize, Serialize};
-
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::{FileStore, ObjectListItem, Store};
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
-use crate::skatelet::database::resource::ResourceType;
+use crate::skatelet::database::resource::{list_resources_by_type, Resource, ResourceType};
 use crate::skatelet::skatelet::VAR_PATH;
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::NamespacedName;
+use k8s_openapi::api::core::v1::Secret;
+use log::error;
 use podman::PodmanPodInfo;
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 
 #[derive(Debug, Args)]
 pub struct SystemArgs {
@@ -35,11 +35,11 @@ pub enum SystemCommands {
     Info,
 }
 
-pub trait SystemDeps: With<dyn ShellExec> {}
+pub trait SystemDeps: With<dyn ShellExec> + WithDB {}
 
 pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
-        SystemCommands::Info => info(With::<dyn ShellExec>::get(&deps)).await?,
+        SystemCommands::Info => info(deps.get_db(), deps.get()).await?,
     }
     Ok(())
 }
@@ -130,7 +130,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
 
-async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
+async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::everything());
 
     let pod_list_result = match execer.exec(
@@ -160,12 +160,25 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
         .map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
     let store = FileStore::new(format!("{}/store", VAR_PATH));
-    let ingresses = store.list_objects("ingress")?;
-    let cronjobs = store.list_objects("cronjob")?;
-    let services = store.list_objects("service")?;
-    let cluster_issuers = store.list_objects("clusterissuer")?;
-    let deployments = store.list_objects("deployment")?;
-    let daemonsets = store.list_objects("daemonset")?;
+
+    let ingresses = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::Ingress).await?,
+    );
+    let cronjobs = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::CronJob).await?,
+    );
+    let services = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::Service).await?,
+    );
+    let cluster_issuers = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::ClusterIssuer).await?,
+    );
+    let deployments = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::Deployment).await?,
+    );
+    let daemonsets = ObjectListItem::from_resource_vec(
+        list_resources_by_type(&db, &ResourceType::DaemonSet).await?,
+    );
 
     let secrets = execer
         .exec("podman", &["secret", "ls", "--noheading"])

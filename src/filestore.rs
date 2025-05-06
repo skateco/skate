@@ -1,5 +1,6 @@
 use crate::errors::SkateError;
-use crate::skatelet::database::resource::ResourceType;
+use crate::skatelet::database::resource::{Resource, ResourceType};
+use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::{metadata_name, NamespacedName};
 use anyhow::anyhow;
@@ -42,6 +43,15 @@ pub struct ObjectListItem {
     pub updated_at: DateTime<Local>,
     pub created_at: DateTime<Local>,
     pub path: String,
+}
+
+impl ObjectListItem {
+    pub(crate) fn from_resource_vec(p0: Vec<Resource>) -> Result<Vec<ObjectListItem>> {
+        let mut out = vec![];
+        for res in p0 {
+            res.try_into()
+        }
+    }
 }
 
 impl ObjectListItem {
@@ -171,6 +181,35 @@ impl From<&Secret> for ObjectListItem {
 impl From<&ClusterIssuer> for ObjectListItem {
     fn from(res: &ClusterIssuer) -> Self {
         Self::from_k8s_resource(res, None)
+    }
+}
+
+impl TryFrom<Resource> for ObjectListItem {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: Resource) -> Result<Self, Self::Error> {
+        let path = format!(
+            "{VAR_PATH}/{}/{}/{}",
+            &value.resource_type.to_string().to_lowercase(),
+            &value.namespace,
+            &value.name,
+        );
+
+        let manifest =
+            serde_json::from_str::<serde_yaml::Value>(&serde_json::to_string(&value.manifest)?)?;
+
+        Ok(ObjectListItem {
+            resource_type: value.resource_type,
+            name: NamespacedName {
+                name: value.name,
+                namespace: value.namespace,
+            },
+            manifest_hash: value.hash,
+            manifest: Some(manifest),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            path,
+        })
     }
 }
 
