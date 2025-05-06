@@ -1,15 +1,17 @@
 [target.x86_64-unknown-linux-gnu]
 pre-build = [                                  # additional commands to run prior to building the package
+    "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update && apt-get install -y wget unzip libssl-dev",
-    "wget https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-x86_64.zip -O /tmp/protoc.zip",
+    "wget https://github.com/protocolbuffers/protobuf/releases/download/v30.2/protoc-30.2-linux-x86_64.zip -O /tmp/protoc.zip",
     "cd /tmp && unzip protoc.zip -d protoc",
     "mv protoc/bin/protoc /usr/local/bin/protoc",
     "mv protoc/include/* /usr/local/include/",
 ]
 [target.aarch64-unknown-linux-gnu]
 pre-build = [                                  # additional commands to run prior to building the package
+    "dpkg --add-architecture $CROSS_DEB_ARCH",
     "apt-get update && apt-get install -y wget unzip libssl-dev",
-    "wget https://github.com/protocolbuffers/protobuf/releases/download/v27.3/protoc-27.3-linux-aarch_64.zip -O /tmp/protoc.zip",
+    "wget https://github.com/protocolbuffers/protobuf/releases/download/v30.2/protoc-30.2-linux-aarch_64.zip -O /tmp/protoc.zip",
     "cd /tmp && unzip protoc.zip -d protoc",
     "mv protoc/bin/protoc /usr/local/bin/protoc",
     "mv protoc/include/* /usr/local/include/",

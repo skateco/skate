@@ -7,18 +7,18 @@ default: aarch64
 
 .PHONY: aarch64
 aarch64:
-	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu
+	CFLAGS="" TARGET_CC=aarch64-linux-musl-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-musl-gcc cargo build --target aarch64-unknown-linux-musl
 aarch64-release:
-	CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu --release --locked
+	CFLAGS="" TARGET_CC=aarch64-unknown-linux-gnu-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-unknown-linux-gnu-gcc cargo build --target aarch64-unknown-linux-gnu --release --locked
 .PHONY: aarch64-cross
 aarch64-cross:
-	cross build  --target aarch64-unknown-linux-gnu --release --locked
+	cross -v build  --target aarch64-unknown-linux-gnu --release --locked
 .PHONY: amd64
 amd64:
 	TARGET_CC=x86_64-unknown-linux-gnu-gcc cargo build --target=x86_64-unknown-linux-gnu
 .PHONY: amd64-cross
 amd64-cross:
-	cross build --target=x86_64-unknown-linux-gnu  --release --locked
+	cross -v build --target=x86_64-unknown-linux-gnu  --release --locked
 
 .PHONY: lint
 lint:
@@ -51,8 +51,9 @@ run-e2e-tests-docker:
 	set -xeuo pipefail
 	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
+	[[ -n "${SKATELET_PATH}" ]] || export SKATELET_PATH=$(shell pwd)/target/release/skatelet
 	# start vms
-	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path $(shell pwd)/target/release/skatelet
+	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH}
 	cargo run --bin skate -- config use-context sind
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 

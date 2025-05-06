@@ -64,6 +64,7 @@
     enable = true;
     # https://devenv.sh/reference/options/#languagesrustchannel
     channel = "stable";
+    targets = [] ++ lib.optionals pkgs.stdenv.isDarwin [ "aarch64-unknown-linux-musl" ];
   };
 
 }
