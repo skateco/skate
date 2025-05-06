@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: OffsetDateTime\", updated_at as \"updated_at!: OffsetDateTime\"\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "query": " SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: OffsetDateTime\", updated_at as \"updated_at!: OffsetDateTime\"\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
   "describe": {
     "columns": [
       {
@@ -58,5 +58,5 @@
       true
     ]
   },
-  "hash": "9298094c084d65ae2f63d160664128cd697279daf6bc62a1ea8bcf5dd0e2ba95"
+  "hash": "54edc1587469f9517dc18efb604ee123a24938812c8d655a754cefa0504accb9"
 }
