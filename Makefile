@@ -51,7 +51,7 @@ run-e2e-tests-docker:
 	set -xeuo pipefail
 	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
-	SKATELET_PATH=${SKATELET_PATH:-$(shell pwd)/target/release/skatelet}
+	SKATELET_PATH=${SKATELET_PATH:-${PWD}/target/release/skatelet}
 	# start vms
 	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH}
 	cargo run --bin skate -- config use-context sind
