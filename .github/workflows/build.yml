@@ -210,7 +210,6 @@ jobs:
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Archive artifacts
-        if: github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.TARGET}}
