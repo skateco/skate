@@ -14,6 +14,7 @@ use crate::util;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Connection, SqlitePool};
 use std::panic::PanicHookInfo;
 use std::{env, process, thread};
@@ -94,7 +95,12 @@ pub async fn skatelet() -> Result<(), SkateError> {
     let db_path =
         env::var("SKATELET_DB_PATH").unwrap_or_else(|_| "/var/lib/skate/db.sqlite".to_string());
 
-    let db = SqlitePool::connect(&format!("sqlite:://{db_path}")).await?;
+    let opts = SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true);
+
+    let db = SqlitePool::connect_lazy_with(opts);
+    sqlx::migrate!("./migrations").run(&db).await?;
 
     let cmd_name: &'static str = (&args.command).into();
     let formatter = Formatter3164 {

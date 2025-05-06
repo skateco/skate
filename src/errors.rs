@@ -33,6 +33,8 @@ pub enum SkateError {
     Sqlx(#[from] sqlx::Error),
     #[error("Database Error: {0}")]
     Database(#[from] database::Error),
+    #[error("Migration Error: {0}")]
+    Migration(#[from] sqlx::migrate::MigrateError),
     #[error("unknown error")]
     Unknown,
 }

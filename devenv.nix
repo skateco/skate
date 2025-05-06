@@ -5,7 +5,7 @@
   env.GREET = "devenv";
   env.SSH_PRIVATE_KEY = "/tmp/skate-e2e-key";
   env.SKATELET_DB_PATH = "${config.devenv.root}/skatelet.db";
-  env.DATABASE_URL = "sqlite://${config.devenv.root}/skatelet.db";
+  env.DATABASE_URL = "sqlite:${config.devenv.root}/skatelet.db";
 
   # https://devenv.sh/packages/
     packages = [
