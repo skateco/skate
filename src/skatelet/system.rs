@@ -16,7 +16,7 @@ use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::database::resource::{list_resources_by_type, Resource, ResourceType};
 use crate::skatelet::skatelet::VAR_PATH;
 use crate::skatelet::system::podman::PodmanSecret;
-use crate::util::NamespacedName;
+use crate::util::{NamespacedName, TryVecInto, VecInto};
 use k8s_openapi::api::core::v1::Secret;
 use log::error;
 use podman::PodmanPodInfo;
@@ -161,24 +161,24 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
 
     let store = FileStore::new(format!("{}/store", VAR_PATH));
 
-    let ingresses = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::Ingress).await?,
-    );
-    let cronjobs = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::CronJob).await?,
-    );
-    let services = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::Service).await?,
-    );
-    let cluster_issuers = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::ClusterIssuer).await?,
-    );
-    let deployments = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::Deployment).await?,
-    );
-    let daemonsets = ObjectListItem::from_resource_vec(
-        list_resources_by_type(&db, &ResourceType::DaemonSet).await?,
-    );
+    let ingresses = list_resources_by_type(&db, &ResourceType::Ingress)
+        .await?
+        .try_vec_into()?;
+    let cronjobs = list_resources_by_type(&db, &ResourceType::CronJob)
+        .await?
+        .try_vec_into()?;
+    let services = list_resources_by_type(&db, &ResourceType::Service)
+        .await?
+        .try_vec_into()?;
+    let cluster_issuers = list_resources_by_type(&db, &ResourceType::ClusterIssuer)
+        .await?
+        .try_vec_into()?;
+    let deployments = list_resources_by_type(&db, &ResourceType::Deployment)
+        .await?
+        .try_vec_into()?;
+    let daemonsets = list_resources_by_type(&db, &ResourceType::DaemonSet)
+        .await?
+        .try_vec_into()?;
 
     let secrets = execer
         .exec("podman", &["secret", "ls", "--noheading"])

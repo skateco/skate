@@ -333,6 +333,34 @@ pub fn split_container_image(image: &str) -> (String, ImageTagFormat) {
     }
 }
 
+pub trait VecInto<D> {
+    fn vec_into(self) -> Vec<D>;
+}
+
+impl<E, D> VecInto<D> for Vec<E>
+where
+    D: From<E>,
+{
+    fn vec_into(self) -> Vec<D> {
+        self.into_iter().map(std::convert::Into::into).collect()
+    }
+}
+
+pub trait TryVecInto<D> {
+    type Error;
+    fn try_vec_into(self) -> Result<Vec<D>, Self::Error>;
+}
+
+impl<E, D, E2> TryVecInto<D> for Vec<E>
+where
+    D: TryFrom<E, Error = E2>,
+{
+    type Error = E2;
+    fn try_vec_into(self) -> Result<Vec<D>, Self::Error> {
+        self.into_iter().map(TryFrom::try_from).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::util::age;

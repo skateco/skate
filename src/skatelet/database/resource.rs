@@ -93,7 +93,7 @@ pub async fn get_resource(
 ) -> super::Result<Option<Resource>> {
     let resource = sqlx::query_as!(
         Resource,
-        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime"
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
             FROM resources
             WHERE resource_type = $1
             AND name = $2
@@ -114,7 +114,7 @@ pub async fn list_resources_by_type(
 ) -> super::Result<Vec<Resource>> {
     let resources = sqlx::query_as!(
         Resource,
-        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: OffsetDateTime", updated_at as "updated_at!: OffsetDateTime"
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
             FROM resources
             WHERE resource_type = $1
         "#,

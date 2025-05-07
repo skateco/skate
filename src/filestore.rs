@@ -46,15 +46,6 @@ pub struct ObjectListItem {
 }
 
 impl ObjectListItem {
-    pub(crate) fn from_resource_vec(p0: Vec<Resource>) -> Result<Vec<ObjectListItem>> {
-        let mut out = vec![];
-        for res in p0 {
-            res.try_into()
-        }
-    }
-}
-
-impl ObjectListItem {
     fn from_k8s_resource(
         res: &(impl Metadata<Ty = ObjectMeta> + Serialize),
         path: Option<&str>,
