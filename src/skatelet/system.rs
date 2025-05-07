@@ -250,7 +250,6 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
                 manifest: Some(yaml),
                 created_at: s.created_at,
                 updated_at: s.updated_at,
-                path: "".to_string(),
             })
         })
         .collect();

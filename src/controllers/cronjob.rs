@@ -3,6 +3,7 @@ use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::skatelet::database::resource;
+use crate::skatelet::VAR_PATH;
 use crate::template;
 use crate::util::metadata_name;
 use anyhow::anyhow;
@@ -74,7 +75,6 @@ impl CronjobController {
         let pod_string = serde_yaml::to_string(&pod)
             .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
-        // TODO - don't use file store for this
         let pod_yaml_path = self.store.write_file(
             "cronjob",
             &ns_name.to_string(),
@@ -196,10 +196,12 @@ impl CronjobController {
             .store
             .get_object("cronjob", &format!("{}.{}", name, ns))?;
 
+        // pod spec should be in VAR_PATH/cronjob/foo.bar/pod.yaml
+
         let args = &[
             "kube",
             "play",
-            &format!("{}/pod.yaml", obj.path),
+            &format!("{VAR_PATH}/cronjob/{}/pod.yaml", obj.name),
             "--replace",
             "--network",
             "skate",
