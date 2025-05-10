@@ -150,8 +150,8 @@ jobs:
           docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
           docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate.log || true
           docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./evidence/sind-node-2-addnhosts || true
-      - name: upload failure evidence
-        if: failure()
+      - name: upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evidence
