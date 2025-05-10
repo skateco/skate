@@ -34,7 +34,7 @@ impl ShellExec for RealExec {
 
         cmd = cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
-        if let Some(_) = stdin {
+        if stdin.is_some() {
             cmd = cmd.stdin(Stdio::piped());
         }
 
@@ -72,7 +72,7 @@ impl ShellExec for RealExec {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
 
-        if let Some(_) = stdin {
+        if stdin.is_some() {
             cmd = cmd.stdin(Stdio::piped());
         }
 
@@ -115,7 +115,6 @@ impl RealExec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
 
     #[test]
     fn test_capture_output() {

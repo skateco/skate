@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Row, SqliteExecutor};
+use sqlx::{Row, SqliteExecutor};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 

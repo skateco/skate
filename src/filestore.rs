@@ -1,6 +1,5 @@
 use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
-use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::{metadata_name, NamespacedName};
 use anyhow::anyhow;

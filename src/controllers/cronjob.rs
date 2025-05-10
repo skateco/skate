@@ -4,7 +4,6 @@ use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::get_resource;
-use crate::skatelet::VAR_PATH;
 use crate::template;
 use crate::util::metadata_name;
 use anyhow::anyhow;
