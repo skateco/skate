@@ -82,7 +82,7 @@ pub struct SystemInfo {
 
 // returns (external, internal)
 fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Error>> {
-    let iface_cmd = match execer.exec("which", &["ifconfig"]) {
+    let iface_cmd = match execer.exec("which", &["ifconfig"], None) {
         Ok(_) => Some(
             r#"ifconfig -a | awk '
 /^[a-zA-Z0-9_\-]+:/ {
@@ -105,7 +105,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
 
     let iface_ips: Vec<_> = match iface_cmd {
         Some(cmd) => execer
-            .exec("bash", &["-c", cmd])
+            .exec("bash", &["-c", cmd], None)
             .map(|s| {
                 s.split("\n")
                     .map(|l| l.split("  ").collect::<Vec<&str>>())
@@ -144,6 +144,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
             "--format",
             "json",
         ],
+        None,
     ) {
         Ok(result) => match result.as_str() {
             "" => "[]".to_string(),
@@ -181,7 +182,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
         .try_vec_into()?;
 
     let secrets = execer
-        .exec("podman", &["secret", "ls", "--noheading"])
+        .exec("podman", &["secret", "ls", "--noheading"], None)
         .unwrap_or_else(|e| {
             eprintln!("failed to list secrets: {}", e);
             "".to_string()
@@ -207,6 +208,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
                 secret_names.clone(),
             ]
             .concat(),
+            None,
         )
         .unwrap_or_else(|e| {
             error!("failed to get secret info for {:?}: {}", secret_names, e);

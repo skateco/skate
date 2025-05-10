@@ -66,6 +66,7 @@ impl DaemonSetController {
                 &format!("label=skate.io/daemonset={}", name),
                 "-q",
             ],
+            None,
         )?;
         let ids = ids
             .split("\n")

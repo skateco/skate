@@ -33,13 +33,13 @@ pub enum CreateCommand {
 
 pub trait CreateDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
 
-pub fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
+pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
     match main_args.command.clone() {
-        CreateCommand::Job(args) => create_job(deps, main_args, args),
+        CreateCommand::Job(args) => create_job(deps, main_args, args).await,
     }
 }
 
-pub fn create_job<D: CreateDeps>(
+pub async fn create_job<D: CreateDeps>(
     deps: D,
     create_args: CreateArgs,
     args: JobArgs,
@@ -47,13 +47,13 @@ pub fn create_job<D: CreateDeps>(
     let from = args.from.clone();
     let (from_type, from_name) = from.split_once("/").ok_or("invalid --from".to_string())?;
     if from_type == "cronjob" {
-        create_job_cronjob(deps, create_args, args, from_name)
+        create_job_cronjob(deps, create_args, args, from_name).await
     } else {
         Err("only cronjob is supported".to_string().into())
     }
 }
 
-pub fn create_job_cronjob<D: CreateDeps>(
+pub async fn create_job_cronjob<D: CreateDeps>(
     deps: D,
     create_args: CreateArgs,
     args: JobArgs,
@@ -66,6 +66,7 @@ pub fn create_job_cronjob<D: CreateDeps>(
 
     let ctrl = CronjobController::new(store, deps.get_db(), execer);
 
-    ctrl.run(from_name, &create_args.namespace, args.wait)?;
+    ctrl.run(from_name, &create_args.namespace, args.wait)
+        .await?;
     Ok(())
 }

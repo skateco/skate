@@ -182,8 +182,11 @@ impl<D: IPVSDeps> IPVS<D> {
         }
 
         // reload keepalived
-        let _ =
-            With::<dyn ShellExec>::get(&self.deps).exec("systemctl", &["reload", "keepalived"])?;
+        let _ = With::<dyn ShellExec>::get(&self.deps).exec(
+            "systemctl",
+            &["reload", "keepalived"],
+            None,
+        )?;
         Ok(())
     }
 
