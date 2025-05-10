@@ -3,7 +3,9 @@ mod skatelet;
 
 mod cordon;
 mod create;
+pub(crate) mod database;
 mod delete;
+mod deps;
 pub(crate) mod dns;
 mod ipvs;
 mod oci;

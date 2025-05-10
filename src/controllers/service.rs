@@ -1,5 +1,7 @@
 use crate::exec::ShellExec;
-use crate::filestore::Store;
+use crate::skatelet::database::resource::{
+    delete_resource, insert_resource, Resource, ResourceType,
+};
 use crate::skatelet::services::dns::DnsService;
 use crate::template;
 use crate::util::{lock_file, metadata_name};
@@ -7,13 +9,14 @@ use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Service;
 use log::{error, info};
 use serde_json::{json, Value};
+use sqlx::SqlitePool;
 use std::error::Error;
 use std::fs;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 pub struct ServiceController {
-    store: Box<dyn Store>,
+    db: SqlitePool,
     execer: Box<dyn ShellExec>,
     skate_var_path: String,    // /var/lib/skate
     systemd_unit_path: String, // always /etc/systemd/system
@@ -21,28 +24,29 @@ pub struct ServiceController {
 
 impl ServiceController {
     pub fn new(
-        store: Box<dyn Store>,
+        db: SqlitePool,
         execer: Box<dyn ShellExec>,
         var_path: &str,
         systemd_etc_path: &str,
     ) -> Self {
         ServiceController {
-            store,
+            db,
             execer,
             skate_var_path: var_path.to_string(),
             systemd_unit_path: systemd_etc_path.to_string(),
         }
     }
 
-    pub fn apply(&self, service: &Service) -> Result<(), Box<dyn Error>> {
-        let manifest_string = serde_yaml::to_string(service)
-            .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(service).to_string();
+    pub async fn apply(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+        let manifest = serde_json::to_value(service)
+            .map_err(|e| anyhow!(e).context("failed to serialize manifest to json"))?;
+
+        let name = metadata_name(service);
+        if name.name == "" || name.namespace == "" {
+            return Err(anyhow!("invalid name or namespace: {}", name).into());
+        }
 
         // manifest goes into store
-        let yaml_path =
-            self.store
-                .write_file("service", name, "manifest.yaml", manifest_string.as_bytes())?;
 
         let hash = service
             .metadata
@@ -52,10 +56,16 @@ impl ServiceController {
             .unwrap_or(&"".to_string())
             .to_string();
 
-        if !hash.is_empty() {
-            self.store
-                .write_file("service", name, "hash", hash.as_bytes())?;
-        }
+        let object = Resource {
+            name: name.name.clone(),
+            namespace: name.namespace.clone(),
+            resource_type: ResourceType::Service,
+            manifest,
+            hash,
+            ..Default::default()
+        };
+
+        insert_resource(&self.db, &object).await?;
 
         // install systemd service and timer
         let mut handlebars = template::new();
@@ -112,9 +122,8 @@ impl ServiceController {
         )?;
 
         let json = json!({
-            "svc_name":name,
+            "svc_name":name.to_string(),
             "ip": ip,
-            "yaml_path": yaml_path,
         });
 
         let file = fs::OpenOptions::new()
@@ -125,13 +134,14 @@ impl ServiceController {
                 "{}/skate-ipvsmon-{}.service",
                 self.systemd_unit_path, &name
             ))?;
+
         handlebars.render_to_write("unit", &json, file)?;
 
         handlebars
             .register_template_string("timer", include_str!("../resources/skate-ipvsmon.timer"))
             .map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
         let json: Value = json!({
-            "svc_name":name,
+            "svc_name":name.to_string(),
         });
         let file = fs::OpenOptions::new()
             .write(true)
@@ -144,11 +154,11 @@ impl ServiceController {
         handlebars.render_to_write("timer", &json, file)?;
         let unit_name = format!("skate-ipvsmon-{}", &name);
 
-        self.execer.exec("systemctl", &["daemon-reload"])?;
+        self.execer.exec("systemctl", &["daemon-reload"], None)?;
         self.execer
-            .exec("systemctl", &["enable", "--now", &unit_name])?;
+            .exec("systemctl", &["enable", "--now", &unit_name], None)?;
         self.execer
-            .exec("systemctl", &["reset-failed", &unit_name])?;
+            .exec("systemctl", &["reset-failed", &unit_name], None)?;
 
         let domain = format!("{}.svc.cluster.skate", name);
         let dns = DnsService::new(&format!("{}/dns", self.skate_var_path), &self.execer);
@@ -157,7 +167,7 @@ impl ServiceController {
         Ok(())
     }
 
-    pub fn delete(&self, service: &Service) -> Result<(), Box<dyn Error>> {
+    pub async fn delete(&self, service: &Service) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(service);
         let dns = DnsService::new(&format!("{}/dns", self.skate_var_path), &self.execer);
         dns.remove(Some(format!("{}.svc.cluster.skate", ns_name)), None)?;
@@ -165,6 +175,7 @@ impl ServiceController {
         let res = self.execer.exec(
             "systemctl",
             &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())],
+            None,
         );
         if res.is_err() {
             error!("failed to stop {} ipvsmon: {}", ns_name, res.unwrap_err());
@@ -176,6 +187,7 @@ impl ServiceController {
                 "disable",
                 &format!("skate-ipvsmon-{}", &ns_name.to_string()),
             ],
+            None,
         );
         if res.is_err() {
             error!(
@@ -192,6 +204,7 @@ impl ServiceController {
                 self.systemd_unit_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -207,6 +220,7 @@ impl ServiceController {
                 self.systemd_unit_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -223,6 +237,7 @@ impl ServiceController {
                 self.skate_var_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -232,10 +247,16 @@ impl ServiceController {
             );
         }
 
-        self.execer.exec("systemctl", &["daemon-reload"])?;
-        self.execer.exec("systemctl", &["reset-failed"])?;
+        self.execer.exec("systemctl", &["daemon-reload"], None)?;
+        self.execer.exec("systemctl", &["reset-failed"], None)?;
 
-        self.store.remove_object("service", &ns_name.to_string())?;
+        delete_resource(
+            &self.db,
+            &ResourceType::Service,
+            &ns_name.name,
+            &ns_name.namespace,
+        )
+        .await?;
 
         Ok(())
     }

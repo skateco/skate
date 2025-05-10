@@ -1,4 +1,4 @@
-use crate::deps::Deps;
+use crate::deps::SkateDeps;
 use crate::errors::SkateError;
 use crate::sind::create::{CreateArgs, CreateDeps};
 use crate::sind::ports::{PortsArgs, PortsDeps};
@@ -42,12 +42,12 @@ enum Commands {
     #[command(long_about = "Print node ips")]
     Ports(PortsArgs),
 }
-impl CreateDeps for Deps {}
-impl PortsDeps for Deps {}
-impl RemoveDeps for Deps {}
-impl StartDeps for Deps {}
-impl StopDeps for Deps {}
-pub async fn sind(deps: Deps) -> Result<(), SkateError> {
+impl CreateDeps for SkateDeps {}
+impl PortsDeps for SkateDeps {}
+impl RemoveDeps for SkateDeps {}
+impl StartDeps for SkateDeps {}
+impl StopDeps for SkateDeps {}
+pub async fn sind(deps: SkateDeps) -> Result<(), SkateError> {
     let args = Cli::parse();
     match args.command {
         Commands::Create(args) => create::create(deps, args).await,

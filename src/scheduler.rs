@@ -12,11 +12,11 @@ use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 
-use crate::resource::SupportedResources;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::{ClusterState, NodeState};
+use crate::supported_resources::SupportedResources;
 use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, CROSS_EMOJI};
 
 #[derive(Debug)]

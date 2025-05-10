@@ -1,5 +1,5 @@
 use crate::errors::SkateError;
-use crate::resource::ResourceType;
+use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::util::{metadata_name, NamespacedName};
 use anyhow::anyhow;
@@ -41,14 +41,10 @@ pub struct ObjectListItem {
     pub manifest: Option<Value>,
     pub updated_at: DateTime<Local>,
     pub created_at: DateTime<Local>,
-    pub path: String,
 }
 
 impl ObjectListItem {
-    fn from_k8s_resource(
-        res: &(impl Metadata<Ty = ObjectMeta> + Serialize),
-        path: Option<&str>,
-    ) -> Self {
+    fn from_k8s_resource(res: &(impl Metadata<Ty = ObjectMeta> + Serialize)) -> Self {
         let kind = kind(res);
 
         let obj = ObjectListItem {
@@ -66,7 +62,6 @@ impl ObjectListItem {
             ),
             created_at: Local::now(),
             updated_at: Local::now(),
-            path: path.unwrap_or_default().to_string(),
         };
         obj
     }
@@ -126,7 +121,6 @@ impl TryFrom<&str> for ObjectListItem {
             manifest,
             created_at: DateTime::from(created_at),
             updated_at: DateTime::from(updated_at),
-            path: dir.to_string(),
         })
     }
 }
@@ -146,31 +140,52 @@ impl TryFrom<DirEntry> for ObjectListItem {
 
 impl From<&Ingress> for ObjectListItem {
     fn from(res: &Ingress) -> Self {
-        Self::from_k8s_resource(res, None)
+        Self::from_k8s_resource(res)
     }
 }
 
 impl From<&CronJob> for ObjectListItem {
     fn from(res: &CronJob) -> Self {
-        Self::from_k8s_resource(res, None)
+        Self::from_k8s_resource(res)
     }
 }
 
 impl From<&Service> for ObjectListItem {
     fn from(res: &Service) -> Self {
-        Self::from_k8s_resource(res, None)
+        Self::from_k8s_resource(res)
     }
 }
 
 impl From<&Secret> for ObjectListItem {
     fn from(res: &Secret) -> Self {
-        Self::from_k8s_resource(res, None)
+        Self::from_k8s_resource(res)
     }
 }
 
 impl From<&ClusterIssuer> for ObjectListItem {
     fn from(res: &ClusterIssuer) -> Self {
-        Self::from_k8s_resource(res, None)
+        Self::from_k8s_resource(res)
+    }
+}
+
+impl TryFrom<Resource> for ObjectListItem {
+    type Error = Box<dyn Error>;
+
+    fn try_from(value: Resource) -> Result<Self, Self::Error> {
+        let manifest =
+            serde_json::from_str::<serde_yaml::Value>(&serde_json::to_string(&value.manifest)?)?;
+
+        Ok(ObjectListItem {
+            resource_type: value.resource_type,
+            name: NamespacedName {
+                name: value.name,
+                namespace: value.namespace,
+            },
+            manifest_hash: value.hash,
+            manifest: Some(manifest),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        })
     }
 }
 

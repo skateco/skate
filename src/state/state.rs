@@ -18,12 +18,13 @@ use std::path::Path;
 use strum_macros::Display;
 use tabled::Tabled;
 
-use crate::resource::{ResourceType, SupportedResources};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
+use crate::supported_resources::SupportedResources;
 use crate::util::{metadata_name, slugify, tabled_display_option};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]

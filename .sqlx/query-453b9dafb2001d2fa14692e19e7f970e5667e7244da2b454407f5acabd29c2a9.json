@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": " SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\"\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "namespace!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "resource_type",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "manifest!: serde_json::Value",
+        "ordinal": 4,
+        "type_info": "Null"
+      },
+      {
+        "name": "hash!: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Local>",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at!: DateTime<Local>",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "453b9dafb2001d2fa14692e19e7f970e5667e7244da2b454407f5acabd29c2a9"
+}

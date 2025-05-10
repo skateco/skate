@@ -2,38 +2,36 @@ use crate::cron::cron_to_systemd;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::filestore::Store;
+use crate::skatelet::database::resource;
+use crate::skatelet::database::resource::get_resource;
 use crate::template;
 use crate::util::metadata_name;
 use anyhow::anyhow;
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::Pod;
 use serde_json::{json, Value};
+use sqlx::SqlitePool;
 use std::error::Error;
 use std::fs;
 use std::io::Write;
 
 pub struct CronjobController {
+    // TODO - get the pod spec from the db
     store: Box<dyn Store>,
+    db: SqlitePool,
     execer: Box<dyn ShellExec>,
 }
 
 impl CronjobController {
-    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
-        CronjobController { store, execer }
+    pub fn new(store: Box<dyn Store>, db: SqlitePool, execer: Box<dyn ShellExec>) -> Self {
+        CronjobController { store, db, execer }
     }
 
-    pub fn apply(&self, cron_job: &CronJob) -> Result<(), Box<dyn Error>> {
-        let cron_job_string = serde_yaml::to_string(cron_job)
-            .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
+    pub async fn apply(&self, cron_job: &CronJob) -> Result<(), Box<dyn Error>> {
+        // let cron_job_string = serde_yaml::to_string(cron_job)
+        //     .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
         let ns_name = metadata_name(cron_job);
-
-        self.store.write_file(
-            "cronjob",
-            &ns_name.to_string(),
-            "manifest.yaml",
-            cron_job_string.as_bytes(),
-        )?;
 
         let hash = cron_job
             .metadata
@@ -43,48 +41,22 @@ impl CronjobController {
             .unwrap_or(&"".to_string())
             .to_string();
 
-        if !hash.is_empty() {
-            self.store
-                .write_file("cronjob", &ns_name.to_string(), "hash", hash.as_bytes())?;
-        }
+        let object = resource::Resource {
+            name: ns_name.name.clone(),
+            namespace: ns_name.namespace.clone(),
+            resource_type: resource::ResourceType::CronJob,
+            manifest: serde_json::to_value(cron_job)?,
+            hash: hash.clone(),
+            ..Default::default()
+        };
+        resource::insert_resource(&self.db, &object).await?;
 
         let spec = cron_job.spec.clone().unwrap_or_default();
         let timezone = spec.time_zone.unwrap_or_default();
 
         let systemd_timer_schedule = cron_to_systemd(&spec.schedule, &timezone)?;
 
-        ////////////////////////////////////////////////////
-        // extract pod spec and add file /pod.yaml
-        ////////////////////////////////////////////////////
-
-        let pod_template_spec = spec.job_template.spec.unwrap_or_default().template;
-
-        let mut pod = Pod {
-            spec: pod_template_spec.spec,
-            metadata: cron_job.metadata.clone(),
-            ..Default::default()
-        };
-
-        pod.metadata.name = Some(format!("crn-{}", ns_name));
-        let mut_spec = pod.spec.as_mut().unwrap();
-        mut_spec.restart_policy = Some("Never".to_string());
-
-        let pod_string = serde_yaml::to_string(&pod)
-            .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let pod_yaml_path = self.store.write_file(
-            "cronjob",
-            &ns_name.to_string(),
-            "pod.yaml",
-            pod_string.as_bytes(),
-        )?;
-
-        // create the pod to test that it's valid
-        self.execer
-            .exec(
-                "podman",
-                &["kube", "play", "--start=false", "--replace", &pod_yaml_path],
-            )
-            .map_err(|e| anyhow!(e.to_string()).context("failed to create pod"))?;
+        self.run(&ns_name.name, &ns_name.namespace, true).await?;
 
         let mut handlebars = template::new();
         ////////////////////////////////////////////////////
@@ -134,25 +106,35 @@ impl CronjobController {
             .open(format!("/etc/systemd/system/{}.timer", &unit_name))?;
         file.write_all(output.as_bytes())?;
 
-        self.execer.exec("systemctl", &["daemon-reload"])?;
-        self.execer
-            .exec("systemctl", &["enable", &format!("{}.timer", &unit_name)])?;
-        self.execer
-            .exec("systemctl", &["start", &format!("{}.timer", &unit_name)])?;
-        let _ = self.execer.exec("systemctl", &["reset-failed", &unit_name]);
+        self.execer.exec("systemctl", &["daemon-reload"], None)?;
+        self.execer.exec(
+            "systemctl",
+            &["enable", &format!("{}.timer", &unit_name)],
+            None,
+        )?;
+        self.execer.exec(
+            "systemctl",
+            &["start", &format!("{}.timer", &unit_name)],
+            None,
+        )?;
+        let _ = self
+            .execer
+            .exec("systemctl", &["reset-failed", &unit_name], None);
 
         Ok(())
     }
 
     // TODO - warn about failures
-    pub fn delete(&self, cron: &CronJob) -> Result<(), Box<dyn Error>> {
+    pub async fn delete(&self, cron: &CronJob) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(cron);
         let unit_name = format!("skate-cronjob-{}", &ns_name.to_string());
         // systemctl stop skate-cronjob-{}
-        let _ = self.execer.exec("systemctl", &["stop", &unit_name]);
+        let _ = self.execer.exec("systemctl", &["stop", &unit_name], None);
 
         // systemctl disable skate-cronjob-{}
-        let _ = self.execer.exec("systemctl", &["disable", &unit_name]);
+        let _ = self
+            .execer
+            .exec("systemctl", &["disable", &unit_name], None);
         // rm /etc/systemd/system/skate-cronjob-{}.service
         let _ = self.execer.exec(
             "rm",
@@ -160,6 +142,7 @@ impl CronjobController {
                 "/etc/systemd/system/skate-cronjob-{}.service",
                 &ns_name.to_string()
             )],
+            None,
         );
         let _ = self.execer.exec(
             "rm",
@@ -167,35 +150,62 @@ impl CronjobController {
                 "/etc/systemd/system/skate-cronjob-{}.timer",
                 &ns_name.to_string()
             )],
+            None,
         );
         // systemctl daemon-reload
-        let _ = self.execer.exec("systemctl", &["daemon-reload"])?;
+        let _ = self.execer.exec("systemctl", &["daemon-reload"], None)?;
         // systemctl reset-failed
-        let _ = self.execer.exec("systemctl", &["reset-failed"])?;
+        let _ = self.execer.exec("systemctl", &["reset-failed"], None)?;
+
+        // TODO - don't use file store for this
         let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
+
+        resource::delete_resource(
+            &self.db,
+            &resource::ResourceType::CronJob,
+            &ns_name.name,
+            &ns_name.namespace,
+        )
+        .await?;
+
         Ok(())
     }
 
-    pub fn run(&self, name: &str, ns: &str, wait: bool) -> Result<(), SkateError> {
-        let obj = self
-            .store
-            .get_object("cronjob", &format!("{}.{}", name, ns))?;
+    pub async fn run(&self, name: &str, ns: &str, wait: bool) -> Result<(), SkateError> {
+        let resource = get_resource(&self.db, &resource::ResourceType::CronJob, name, ns).await?;
+        if resource.is_none() {
+            return Err(anyhow!("failed to find cronjob").into());
+        }
+        let spec = resource.unwrap().manifest;
+        let cronjob: CronJob = serde_json::from_value(spec)
+            .map_err(|e| anyhow!(e).context("failed to deserialize manifest"))?;
+        let spec = cronjob.spec.clone().unwrap_or_default();
 
-        let args = &[
-            "kube",
-            "play",
-            &format!("{}/pod.yaml", obj.path),
-            "--replace",
-            "--network",
-            "skate",
-        ];
+        let pod_template_spec = spec.job_template.spec.unwrap_or_default().template;
+
+        let mut pod = Pod {
+            spec: pod_template_spec.spec,
+            metadata: cronjob.metadata.clone(),
+            ..Default::default()
+        };
+
+        pod.metadata.name = Some(format!("crn-{}.{}", name, ns));
+        let mut_spec = pod.spec.as_mut().unwrap();
+        mut_spec.restart_policy = Some("Never".to_string());
+
+        let pod_string = serde_yaml::to_string(&pod)
+            .map_err(|e| anyhow!(e).context("failed to serialize manifest to string"))?;
+
+        // pod spec should be in VAR_PATH/cronjob/foo.bar/pod.yaml
+
+        let args = &["kube", "play", "--replace", "--network", "skate", "-"];
         let args = if wait {
             [args.to_vec(), vec!["-w"]].concat()
         } else {
             args.to_vec()
         };
 
-        self.execer.exec_stdout("podman", &args)?;
+        self.execer.exec_stdout("podman", &args, Some(pod_string))?;
         Ok(())
     }
 }

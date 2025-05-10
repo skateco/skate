@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
-use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
+use crate::skatelet::database::resource::ResourceType;
 use crate::util::CHECKBOX_EMOJI;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};

@@ -1,11 +1,11 @@
 #![warn(unused_extern_crates)]
 
-use skate::deps::Deps;
+use skate::deps::SkateDeps;
 use skate::sind::sind;
 
 #[tokio::main]
 async fn main() {
-    let deps = Deps {};
+    let deps = SkateDeps {};
     match sind(deps).await {
         Ok(_) => (),
         Err(e) => {

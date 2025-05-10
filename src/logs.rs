@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
-use crate::resource::ResourceType;
 use crate::skate::ConfigFileArgs;
+use crate::skatelet::database::resource::ResourceType;
 use crate::ssh;
 use crate::ssh::SshClients;
 use anyhow::anyhow;

@@ -7,21 +7,21 @@ use sysinfo::{DiskKind, Disks, RefreshKind, System};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 
-use k8s_openapi::api::core::v1::Secret;
-use log::error;
-use serde::{Deserialize, Serialize};
-
-use crate::deps::With;
+use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::{FileStore, ObjectListItem, Store};
-use crate::resource::ResourceType;
+use crate::filestore::{FileStore, ObjectListItem};
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
+use crate::skatelet::database::resource::{list_resources_by_type, ResourceType};
 use crate::skatelet::skatelet::VAR_PATH;
 use crate::skatelet::system::podman::PodmanSecret;
-use crate::util::NamespacedName;
+use crate::util::{NamespacedName, TryVecInto};
+use k8s_openapi::api::core::v1::Secret;
+use log::error;
 use podman::PodmanPodInfo;
+use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 
 #[derive(Debug, Args)]
 pub struct SystemArgs {
@@ -35,11 +35,11 @@ pub enum SystemCommands {
     Info,
 }
 
-pub trait SystemDeps: With<dyn ShellExec> {}
+pub trait SystemDeps: With<dyn ShellExec> + WithDB {}
 
 pub async fn system<D: SystemDeps>(deps: D, args: SystemArgs) -> Result<(), SkateError> {
     match args.command {
-        SystemCommands::Info => info(With::<dyn ShellExec>::get(&deps)).await?,
+        SystemCommands::Info => info(deps.get_db(), deps.get()).await?,
     }
     Ok(())
 }
@@ -82,7 +82,7 @@ pub struct SystemInfo {
 
 // returns (external, internal)
 fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Error>> {
-    let iface_cmd = match execer.exec("which", &["ifconfig"]) {
+    let iface_cmd = match execer.exec("which", &["ifconfig"], None) {
         Ok(_) => Some(
             r#"ifconfig -a | awk '
 /^[a-zA-Z0-9_\-]+:/ {
@@ -105,7 +105,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
 
     let iface_ips: Vec<_> = match iface_cmd {
         Some(cmd) => execer
-            .exec("bash", &["-c", cmd])
+            .exec("bash", &["-c", cmd], None)
             .map(|s| {
                 s.split("\n")
                     .map(|l| l.split("  ").collect::<Vec<&str>>())
@@ -130,7 +130,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
 
 const BYTES_IN_MIB: u64 = (2u64).pow(20);
 
-async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
+async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::everything());
 
     let pod_list_result = match execer.exec(
@@ -144,6 +144,7 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
             "--format",
             "json",
         ],
+        None,
     ) {
         Ok(result) => match result.as_str() {
             "" => "[]".to_string(),
@@ -160,15 +161,28 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
         .map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
     let store = FileStore::new(format!("{}/store", VAR_PATH));
-    let ingresses = store.list_objects("ingress")?;
-    let cronjobs = store.list_objects("cronjob")?;
-    let services = store.list_objects("service")?;
-    let cluster_issuers = store.list_objects("clusterissuer")?;
-    let deployments = store.list_objects("deployment")?;
-    let daemonsets = store.list_objects("daemonset")?;
+
+    let ingresses = list_resources_by_type(&db, &ResourceType::Ingress)
+        .await?
+        .try_vec_into()?;
+    let cronjobs = list_resources_by_type(&db, &ResourceType::CronJob)
+        .await?
+        .try_vec_into()?;
+    let services = list_resources_by_type(&db, &ResourceType::Service)
+        .await?
+        .try_vec_into()?;
+    let cluster_issuers = list_resources_by_type(&db, &ResourceType::ClusterIssuer)
+        .await?
+        .try_vec_into()?;
+    let deployments = list_resources_by_type(&db, &ResourceType::Deployment)
+        .await?
+        .try_vec_into()?;
+    let daemonsets = list_resources_by_type(&db, &ResourceType::DaemonSet)
+        .await?
+        .try_vec_into()?;
 
     let secrets = execer
-        .exec("podman", &["secret", "ls", "--noheading"])
+        .exec("podman", &["secret", "ls", "--noheading"], None)
         .unwrap_or_else(|e| {
             eprintln!("failed to list secrets: {}", e);
             "".to_string()
@@ -194,6 +208,7 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
                 secret_names.clone(),
             ]
             .concat(),
+            None,
         )
         .unwrap_or_else(|e| {
             error!("failed to get secret info for {:?}: {}", secret_names, e);
@@ -237,7 +252,6 @@ async fn info(execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
                 manifest: Some(yaml),
                 created_at: s.created_at,
                 updated_at: s.updated_at,
-                path: "".to_string(),
             })
         })
         .collect();

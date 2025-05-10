@@ -121,6 +121,8 @@ jobs:
 
   e2e-test:
     runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: 1
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache
@@ -139,7 +141,7 @@ jobs:
       - name: E2E Tests in Sind
         run: RUST_BACKTRACE=1 make run-e2e-tests-docker
       - name: Get syslogs on failure
-        if: failure()
+        if: always()
         run: |
           mkdir -p evidence
           docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
@@ -148,8 +150,8 @@ jobs:
           docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
           docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate.log || true
           docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./evidence/sind-node-2-addnhosts || true
-      - name: upload failure evidence
-        if: failure()
+      - name: upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evidence
@@ -171,6 +173,7 @@ jobs:
       TARGET: ${{ matrix.TARGET }}
       OS: ${{ matrix.OS }}
       GH_TOKEN: ${{ github.token }}
+      SQLX_OFFLINE: 1
     steps:
       - uses: actions/checkout@v4
       - name: Cargo cache
@@ -202,11 +205,11 @@ jobs:
       - name: Install rust target
         run: rustup target add $TARGET
       - name: Normal Tests
-        run: cargo test
+        run:
+          cargo test
       - name: Build Binaries
         run: cargo build --locked --release --target ${{ matrix.target }}
       - name: Archive artifacts
-        if: github.ref_type == 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.TARGET}}

@@ -1,5 +1,5 @@
 use crate::exec::ShellExec;
-use crate::resource::SupportedResources;
+use crate::supported_resources::SupportedResources;
 use crate::util::{apply_play, metadata_name};
 use k8s_openapi::api::core::v1::Secret;
 use std::error::Error;
@@ -21,7 +21,7 @@ impl SecretController {
         let name = metadata_name(secret);
         let output = self
             .execer
-            .exec("podman", &["secret", "rm", &name.to_string()])?;
+            .exec("podman", &["secret", "rm", &name.to_string()], None)?;
 
         if !output.is_empty() {
             println!("{}", output);

@@ -102,10 +102,18 @@ make aarch64
 
 Or just use [https://github.com/cross-rs/cross](https://github.com/cross-rs/cross)
 
+
+
+
 ```shell
 make amd64-cross
 ## or
 make aarch64-cross
+```
+
+Note: you may need to run this to get cross to work, ([issue](https://github.com/cross-rs/cross/issues/1628)):
+```shell
+docker run --privileged --rm tonistiigi/binfmt --install amd64
 ```
 
 ### Ubuntu
