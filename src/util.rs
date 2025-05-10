@@ -251,7 +251,7 @@ pub fn apply_play(
         args.push("--network=skate")
     }
 
-    let result = execer.exec("podman", &args)?;
+    let result = execer.exec("podman", &args, None)?;
 
     if !result.is_empty() {
         println!("{}", result);

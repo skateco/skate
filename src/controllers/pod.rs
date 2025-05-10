@@ -66,15 +66,16 @@ impl PodController {
                 id,
                 "--format={{range.Containers}}{{.Id}} {{end}}",
             ],
+            None,
         )?;
         let containers = containers.split_ascii_whitespace().collect();
 
         let _ = self
             .execer
-            .exec("podman", &["pod", "kill", "--signal", "SIGTERM", id]);
+            .exec("podman", &["pod", "kill", "--signal", "SIGTERM", id], None);
 
         let args = [vec![&grace_str, "podman", "wait"], containers].concat();
-        let result = self.execer.exec("timeout", &args);
+        let result = self.execer.exec("timeout", &args, None);
 
         if result.is_err() {
             eprintln!("failed to stop {}: {}", id, result.unwrap_err());
@@ -84,7 +85,7 @@ impl PodController {
 
         let rm_cmd = [vec!["pod", "rm", "--force"], vec![&id]].concat();
 
-        let output = self.execer.exec("podman", &rm_cmd)?;
+        let output = self.execer.exec("podman", &rm_cmd, None)?;
 
         if !output.is_empty() {
             println!("{}", output);

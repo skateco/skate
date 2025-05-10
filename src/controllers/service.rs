@@ -150,11 +150,11 @@ impl ServiceController {
         handlebars.render_to_write("timer", &json, file)?;
         let unit_name = format!("skate-ipvsmon-{}", &name);
 
-        self.execer.exec("systemctl", &["daemon-reload"])?;
+        self.execer.exec("systemctl", &["daemon-reload"], None)?;
         self.execer
-            .exec("systemctl", &["enable", "--now", &unit_name])?;
+            .exec("systemctl", &["enable", "--now", &unit_name], None)?;
         self.execer
-            .exec("systemctl", &["reset-failed", &unit_name])?;
+            .exec("systemctl", &["reset-failed", &unit_name], None)?;
 
         let domain = format!("{}.svc.cluster.skate", name);
         let dns = DnsService::new(&format!("{}/dns", self.skate_var_path), &self.execer);
@@ -171,6 +171,7 @@ impl ServiceController {
         let res = self.execer.exec(
             "systemctl",
             &["stop", &format!("skate-ipvsmon-{}", &ns_name.to_string())],
+            None,
         );
         if res.is_err() {
             error!("failed to stop {} ipvsmon: {}", ns_name, res.unwrap_err());
@@ -182,6 +183,7 @@ impl ServiceController {
                 "disable",
                 &format!("skate-ipvsmon-{}", &ns_name.to_string()),
             ],
+            None,
         );
         if res.is_err() {
             error!(
@@ -198,6 +200,7 @@ impl ServiceController {
                 self.systemd_unit_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -213,6 +216,7 @@ impl ServiceController {
                 self.systemd_unit_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -229,6 +233,7 @@ impl ServiceController {
                 self.skate_var_path,
                 &ns_name.to_string()
             )],
+            None,
         );
         if res.is_err() {
             error!(
@@ -238,8 +243,8 @@ impl ServiceController {
             );
         }
 
-        self.execer.exec("systemctl", &["daemon-reload"])?;
-        self.execer.exec("systemctl", &["reset-failed"])?;
+        self.execer.exec("systemctl", &["daemon-reload"], None)?;
+        self.execer.exec("systemctl", &["reset-failed"], None)?;
 
         delete_resource(
             &self.db,

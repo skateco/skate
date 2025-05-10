@@ -139,7 +139,7 @@ pub async fn skatelet() -> Result<(), SkateError> {
             let ipvs = IPVS { deps };
             ipvs.ipvs(args).await
         }
-        Commands::Create(args) => create(deps, args),
+        Commands::Create(args) => create(deps, args).await,
         Commands::Cordon(args) => cordon(args),
         Commands::Uncordon(args) => uncordon(args),
         // _ => Ok(())

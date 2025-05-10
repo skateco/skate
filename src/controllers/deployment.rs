@@ -70,6 +70,7 @@ impl DeploymentController {
                 &format!("label=skate.io/deployment={}", name),
                 "-q",
             ],
+            None,
         )?;
 
         let ids = ids

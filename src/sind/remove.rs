@@ -24,6 +24,7 @@ pub async fn remove<D: RemoveDeps>(deps: D, args: RemoveArgs) -> Result<(), Skat
             "--filter",
             &format!("label={}", CONTAINER_LABEL),
         ],
+        None,
     )?;
     let container_ids = container_ids
         .lines()
@@ -33,12 +34,13 @@ pub async fn remove<D: RemoveDeps>(deps: D, args: RemoveArgs) -> Result<(), Skat
         return Ok(());
     }
     println!("Removing {} nodes", container_ids.len());
-    shell_exec.exec("docker", &[vec!["rm", "-fv"], container_ids].concat())?;
+    shell_exec.exec("docker", &[vec!["rm", "-fv"], container_ids].concat(), None)?;
 
     // remove skate cluster
     let _ = shell_exec.exec(
         "skate",
         &["config", "delete-context", "--yes", &args.global.cluster],
+        None,
     );
     Ok(())
 }

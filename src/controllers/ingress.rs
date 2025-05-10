@@ -40,6 +40,7 @@ impl IngressController {
         self.execer.exec(
             "mkdir",
             &["-p", &format!("{}/services/{}", self.ingress_path, name)],
+            None,
         )?;
 
         let hash = ingress
@@ -152,15 +153,18 @@ impl IngressController {
                 "label=skate.io/daemonset=nginx-ingress",
                 "-q",
             ],
+            None,
         )?;
 
         if id.is_empty() {
             return Err(anyhow!("no ingress container found").into());
         }
 
-        let _ = self
-            .execer
-            .exec("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
+        let _ = self.execer.exec(
+            "podman",
+            &["kill", "--signal", "HUP", &id.to_string()],
+            None,
+        )?;
         Ok(())
     }
 

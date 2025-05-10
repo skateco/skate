@@ -21,7 +21,7 @@ impl SecretController {
         let name = metadata_name(secret);
         let output = self
             .execer
-            .exec("podman", &["secret", "rm", &name.to_string()])?;
+            .exec("podman", &["secret", "rm", &name.to_string()], None)?;
 
         if !output.is_empty() {
             println!("{}", output);
