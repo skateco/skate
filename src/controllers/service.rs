@@ -40,7 +40,11 @@ impl ServiceController {
     pub async fn apply(&self, service: &Service) -> Result<(), Box<dyn Error>> {
         let manifest = serde_json::to_value(service)
             .map_err(|e| anyhow!(e).context("failed to serialize manifest to json"))?;
+
         let name = metadata_name(service);
+        if name.name == "" || name.namespace == "" {
+            return Err(anyhow!("invalid name or namespace: {}", name).into());
+        }
 
         // manifest goes into store
 
@@ -137,7 +141,7 @@ impl ServiceController {
             .register_template_string("timer", include_str!("../resources/skate-ipvsmon.timer"))
             .map_err(|e| anyhow!(e).context("failed to load timer template file"))?;
         let json: Value = json!({
-            "svc_name":name,
+            "svc_name":name.to_string(),
         });
         let file = fs::OpenOptions::new()
             .write(true)
