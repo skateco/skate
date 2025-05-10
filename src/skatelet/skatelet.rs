@@ -15,7 +15,7 @@ use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
 use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{Connection, SqlitePool};
+use sqlx::SqlitePool;
 use std::panic::PanicHookInfo;
 use std::{env, process, thread};
 use strum_macros::IntoStaticStr;
