@@ -31,7 +31,8 @@ impl ShellExec for RealExec {
         stdin: Option<String>,
     ) -> Result<String, Box<dyn Error>> {
         let mut cmd = &mut process::Command::new(command);
-        cmd = cmd.args(args);
+
+        cmd = cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
 
         if let Some(_) = stdin {
             cmd = cmd.stdin(Stdio::piped());
@@ -102,12 +103,40 @@ impl RealExec {
                 .ok_or_else(|| anyhow!("Failed to open stdin"))?;
 
             let input = input.into_bytes();
-            tokio::spawn(async move {
-                child_stdin
-                    .write_all(&input)
-                    .expect("Failed to write to stdin");
-            });
+
+            child_stdin
+                .write_all(&input)
+                .expect("Failed to write to stdin");
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn test_capture_output() {
+        let execer = RealExec {};
+        let result = execer.exec("echo", &["Hello, World!"], None);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_capture_stdin() {
+        let execer = RealExec {};
+        let result = execer.exec("cat", &[], Some("Hello, World!".to_string()));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, World!");
+    }
+
+    #[test]
+    fn test_exec_stdout() {
+        let execer = RealExec {};
+        let result = execer.exec_stdout("echo", &["Hello, World!"], None);
+        assert!(result.is_ok());
     }
 }
