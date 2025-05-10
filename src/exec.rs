@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use std::error::Error;
 use std::io::Write;
 use std::process;
-use std::process::Stdio;
+use std::process::{Child, Stdio};
 use tokio::io::AsyncWriteExt;
 
 pub trait ShellExec {
@@ -39,19 +39,7 @@ impl ShellExec for RealExec {
 
         let mut child = cmd.spawn()?;
 
-        let mut child_stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| anyhow!("Failed to open stdin"))?;
-
-        if let Some(input) = stdin {
-            let input = input.into_bytes();
-            tokio::spawn(async move {
-                child_stdin
-                    .write_all(&input)
-                    .expect("Failed to write to stdin");
-            });
-        }
+        Self::write_to_stdin(stdin, &mut child)?;
 
         let output = child
             .wait_with_output()
@@ -89,19 +77,7 @@ impl ShellExec for RealExec {
 
         let mut child = cmd.spawn()?;
 
-        let mut child_stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| anyhow!("Failed to open stdin"))?;
-
-        if let Some(input) = stdin {
-            let input = input.into_bytes();
-            tokio::spawn(async move {
-                child_stdin
-                    .write_all(&input)
-                    .expect("Failed to write to stdin");
-            });
-        }
+        Self::write_to_stdin(stdin, &mut child)?;
 
         let output = child
             .wait_with_output()
@@ -113,6 +89,25 @@ impl ShellExec for RealExec {
                 .into());
         }
 
+        Ok(())
+    }
+}
+
+impl RealExec {
+    fn write_to_stdin(stdin: Option<String>, child: &mut Child) -> Result<(), Box<dyn Error>> {
+        if let Some(input) = stdin {
+            let mut child_stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| anyhow!("Failed to open stdin"))?;
+
+            let input = input.into_bytes();
+            tokio::spawn(async move {
+                child_stdin
+                    .write_all(&input)
+                    .expect("Failed to write to stdin");
+            });
+        }
         Ok(())
     }
 }
