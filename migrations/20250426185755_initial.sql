@@ -7,4 +7,6 @@ CREATE TABLE resources (
     hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
+);
+
+CREATE UNIQUE INDEX triple_idx ON resources(resource_type, name, namespace);
