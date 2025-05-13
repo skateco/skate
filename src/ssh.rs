@@ -1,7 +1,7 @@
 use crate::config::{Cluster, Node};
 use crate::github;
-use crate::resource::ResourceType;
 use crate::skate::{Distribution, Platform};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::state::state::{NodeState, NodeStatus};
 use anyhow::anyhow;

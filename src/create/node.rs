@@ -3,12 +3,13 @@ use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
 use crate::errors::SkateError;
 use crate::refresh::Refresh;
-use crate::resource::{ResourceType, SupportedResources};
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
 use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
+use crate::supported_resources::SupportedResources;
 use crate::util::{
     split_container_image, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP,
 };

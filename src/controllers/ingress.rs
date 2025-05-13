@@ -1,5 +1,8 @@
 use crate::exec::ShellExec;
-use crate::filestore::Store;
+use crate::skatelet::database::resource;
+use crate::skatelet::database::resource::{
+    delete_resource, insert_resource, list_resources_by_type, ResourceType,
+};
 use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
@@ -7,39 +10,38 @@ use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
+use sqlx::SqlitePool;
 use std::error::Error;
 use std::io::Write;
 use std::process::Stdio;
 use std::{fs, process};
 
 pub struct IngressController {
-    store: Box<dyn Store>,
+    db: SqlitePool,
     execer: Box<dyn ShellExec>,
     ingress_path: String,
 }
 
 impl IngressController {
-    pub fn new(store: Box<dyn Store>, execer: Box<dyn ShellExec>) -> Self {
+    pub fn new(db: SqlitePool, execer: Box<dyn ShellExec>) -> Self {
         IngressController {
-            store,
+            db,
             execer,
             ingress_path: format!("{}/ingress", VAR_PATH),
         }
     }
 
-    pub fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+    pub async fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
         let ingress_string = serde_yaml::to_string(ingress)
             .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
-        let name = &metadata_name(ingress).to_string();
+        let fq_name = metadata_name(ingress);
+        let name = fq_name.to_string();
 
         self.execer.exec(
             "mkdir",
             &["-p", &format!("{}/services/{}", self.ingress_path, name)],
+            None,
         )?;
-
-        // manifest goes into store
-        self.store
-            .write_file("ingress", name, "manifest.yaml", ingress_string.as_bytes())?;
 
         let hash = ingress
             .metadata
@@ -49,12 +51,18 @@ impl IngressController {
             .unwrap_or(&"".to_string())
             .to_string();
 
-        if !hash.is_empty() {
-            self.store
-                .write_file("ingress", name, "hash", hash.as_bytes())?;
-        }
+        let object = resource::Resource {
+            name: fq_name.name,
+            namespace: fq_name.namespace,
+            resource_type: resource::ResourceType::Ingress,
+            manifest: serde_json::to_value(ingress)?,
+            hash: hash.clone(),
+            ..Default::default()
+        };
 
-        self.render_nginx_conf()?;
+        insert_resource(&self.db, &object).await?;
+
+        self.render_nginx_conf().await?;
 
         let _ns_name = metadata_name(ingress);
 
@@ -109,7 +117,7 @@ impl IngressController {
         Ok(())
     }
 
-    pub fn delete(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
+    pub async fn delete(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(ingress);
         let dir = format!("{}/services/{}", self.ingress_path, ns_name);
         let result = fs::remove_dir_all(&dir);
@@ -119,7 +127,13 @@ impl IngressController {
                 .into());
         }
 
-        self.store.remove_object("ingress", &ns_name.to_string())?;
+        delete_resource(
+            &self.db,
+            &ResourceType::Ingress,
+            &ns_name.name,
+            &ns_name.namespace,
+        )
+        .await?;
 
         self.reload()?;
 
@@ -139,34 +153,40 @@ impl IngressController {
                 "label=skate.io/daemonset=nginx-ingress",
                 "-q",
             ],
+            None,
         )?;
 
         if id.is_empty() {
             return Err(anyhow!("no ingress container found").into());
         }
 
-        let _ = self
-            .execer
-            .exec("podman", &["kill", "--signal", "HUP", &id.to_string()])?;
+        let _ = self.execer.exec(
+            "podman",
+            &["kill", "--signal", "HUP", &id.to_string()],
+            None,
+        )?;
         Ok(())
     }
 
-    pub fn render_nginx_conf(&self) -> Result<(), Box<dyn Error>> {
-        let le_allow_domains: Vec<_> = self
-            .store
-            .list_objects("ingress")?
+    pub async fn render_nginx_conf(&self) -> Result<(), Box<dyn Error>> {
+        let ingresses = list_resources_by_type(&self.db, &ResourceType::Ingress).await?;
+
+        let le_allow_domains: Vec<_> = ingresses
             .into_iter()
-            .filter_map(|i| match i.manifest {
-                Some(m) => {
-                    let rules = serde_yaml::from_value::<Ingress>(m).ok()?.spec?.rules?;
-                    Some(
-                        rules
-                            .into_iter()
-                            .filter_map(|r| r.host)
-                            .collect::<Vec<String>>(),
-                    )
+            .filter_map(|i| {
+                let ingress = serde_json::from_value::<Ingress>(i.manifest).ok();
+                match ingress {
+                    Some(ingress) => {
+                        let rules = ingress.spec?.rules?;
+                        Some(
+                            rules
+                                .into_iter()
+                                .filter_map(|r| r.host)
+                                .collect::<Vec<String>>(),
+                        )
+                    }
+                    None => None,
                 }
-                None => None,
             })
             .flatten()
             .unique()
@@ -176,16 +196,15 @@ impl IngressController {
         // Template main nginx conf
         ////////////////////////////////////////////////////
 
-        let issuer = self
-            .store
-            .list_objects("clusterissuer")
-            .ok()
-            .and_then(|list| list.first().cloned());
+        let cluster_issuers = list_resources_by_type(&self.db, &ResourceType::ClusterIssuer)
+            .await
+            .ok();
+
+        let issuer = cluster_issuers.and_then(|list| list.first().cloned());
 
         let (endpoint, email) = match issuer {
             Some(issuer) => {
-                match serde_yaml::from_value::<ClusterIssuer>(issuer.manifest.clone().unwrap()).ok()
-                {
+                match serde_json::from_value::<ClusterIssuer>(issuer.manifest.clone()).ok() {
                     Some(issuer) => Some((
                         issuer.spec.clone().unwrap_or_default().acme.server.clone(),
                         issuer.spec.unwrap_or_default().acme.email,

@@ -1,39 +1,30 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
+use crate::skatelet::database::resource;
+use crate::skatelet::database::resource::{delete_resource, insert_resource, ResourceType};
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::Deployment;
+use sqlx::SqlitePool;
 use std::error::Error;
 
 pub struct DeploymentController {
-    store: Box<dyn Store>,
+    db: SqlitePool,
     execer: Box<dyn ShellExec>,
     pod_controller: PodController,
 }
 
 impl DeploymentController {
-    pub fn new(
-        store: Box<dyn Store>,
-        execer: Box<dyn ShellExec>,
-        pod_controller: PodController,
-    ) -> Self {
-        DeploymentController {
-            store,
+    pub fn new(db: SqlitePool, execer: Box<dyn ShellExec>, pod_controller: PodController) -> Self {
+        Self {
+            db,
             execer,
             pod_controller,
         }
     }
 
-    pub fn apply(&self, deployment: &Deployment) -> Result<(), Box<dyn Error>> {
-        // store the deployment manifest on the node basically
-        self.store.write_file(
-            "deployment",
-            &metadata_name(deployment).to_string(),
-            "manifest.yaml",
-            serde_yaml::to_string(&deployment)?.as_bytes(),
-        )?;
-
+    pub async fn apply(&self, deployment: &Deployment) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(deployment);
+
         let hash = deployment
             .metadata
             .labels
@@ -41,14 +32,21 @@ impl DeploymentController {
             .and_then(|m| m.get("skate.io/hash"))
             .unwrap_or(&"".to_string())
             .to_string();
-        if !hash.is_empty() {
-            self.store
-                .write_file("deployment", &ns_name.to_string(), "hash", hash.as_bytes())?;
-        }
+
+        let object = resource::Resource {
+            name: ns_name.name.clone(),
+            namespace: ns_name.namespace.clone(),
+            resource_type: resource::ResourceType::Deployment,
+            manifest: serde_json::to_value(deployment)?,
+            hash: hash.clone(),
+            ..Default::default()
+        };
+        insert_resource(&self.db, &object).await?;
+
         Ok(())
     }
 
-    pub fn delete(
+    pub async fn delete(
         &self,
         deployment: &Deployment,
         grace_period: Option<usize>,
@@ -72,6 +70,7 @@ impl DeploymentController {
                 &format!("label=skate.io/deployment={}", name),
                 "-q",
             ],
+            None,
         )?;
 
         let ids = ids
@@ -82,9 +81,7 @@ impl DeploymentController {
 
         self.pod_controller.delete_podman_pods(ids, grace_period)?;
 
-        let _ = self
-            .store
-            .remove_object("deployment", &metadata_name(deployment).to_string())?;
+        delete_resource(&self.db, &ResourceType::Deployment, &name, &ns).await?;
         Ok(())
     }
 }

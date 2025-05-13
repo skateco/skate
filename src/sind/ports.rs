@@ -23,6 +23,7 @@ pub async fn ports<D: PortsDeps>(deps: D, _: PortsArgs) -> Result<(), SkateError
             "--filter",
             &format!("label={}", CONTAINER_LABEL),
         ],
+        None,
     )?;
     let container_ids = container_ids
         .lines()
@@ -33,9 +34,9 @@ pub async fn ports<D: PortsDeps>(deps: D, _: PortsArgs) -> Result<(), SkateError
     }
 
     for id in container_ids {
-        let name = shell_exec.exec("docker", &["inspect", "-f", "{{.Name}}", id])?;
+        let name = shell_exec.exec("docker", &["inspect", "-f", "{{.Name}}", id], None)?;
         let name = name.strip_prefix("/").unwrap_or_default();
-        let ports = shell_exec.exec("docker", &["port", id])?;
+        let ports = shell_exec.exec("docker", &["port", id], None)?;
 
         println!("{name} {}", ports.lines().next().unwrap_or(""));
     }

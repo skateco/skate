@@ -23,6 +23,7 @@ pub async fn stop<D: StopDeps>(deps: D, _: StopArgs) -> Result<(), SkateError> {
             "--filter",
             &format!("label={}", CONTAINER_LABEL),
         ],
+        None,
     )?;
     let container_ids = container_ids
         .lines()
@@ -32,6 +33,6 @@ pub async fn stop<D: StopDeps>(deps: D, _: StopArgs) -> Result<(), SkateError> {
         return Ok(());
     }
     println!("Stopping {} nodes", container_ids.len());
-    shell_exec.exec("docker", &[vec!["stop"], container_ids].concat())?;
+    shell_exec.exec("docker", &[vec!["stop"], container_ids].concat(), None)?;
     Ok(())
 }

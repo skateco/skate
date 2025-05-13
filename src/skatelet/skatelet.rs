@@ -1,10 +1,10 @@
-use crate::deps::Deps;
 use crate::errors::SkateError;
 use crate::skatelet::apply;
 use crate::skatelet::apply::{ApplyArgs, ApplyDeps};
 use crate::skatelet::cordon::{cordon, uncordon, CordonArgs, UncordonArgs};
 use crate::skatelet::create::{create, CreateArgs, CreateDeps};
 use crate::skatelet::delete::{DeleteArgs, DeleteDeps, Deleter};
+use crate::skatelet::deps::SkateletDeps;
 use crate::skatelet::dns::{Dns, DnsArgs, DnsDeps};
 use crate::skatelet::ipvs::{IPVSDeps, IpvsArgs, IPVS};
 use crate::skatelet::oci::{oci, OciArgs};
@@ -14,8 +14,10 @@ use crate::util;
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use log::{error, LevelFilter};
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::SqlitePool;
 use std::panic::PanicHookInfo;
-use std::{process, thread};
+use std::{env, process, thread};
 use strum_macros::IntoStaticStr;
 use syslog::{BasicLogger, Facility, Formatter3164};
 
@@ -80,15 +82,25 @@ pub fn log_panic(info: &PanicHookInfo) {
     }
 }
 
-impl ApplyDeps for Deps {}
-impl SystemDeps for Deps {}
-impl CreateDeps for Deps {}
-impl DeleteDeps for Deps {}
-impl DnsDeps for Deps {}
-impl IPVSDeps for Deps {}
+impl ApplyDeps for SkateletDeps {}
+impl SystemDeps for SkateletDeps {}
+impl CreateDeps for SkateletDeps {}
+impl DeleteDeps for SkateletDeps {}
+impl DnsDeps for SkateletDeps {}
+impl IPVSDeps for SkateletDeps {}
 
 pub async fn skatelet() -> Result<(), SkateError> {
     let args = Cli::parse();
+
+    let db_path =
+        env::var("SKATELET_DB_PATH").unwrap_or_else(|_| "/var/lib/skate/db.sqlite".to_string());
+
+    let opts = SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true);
+
+    let db = SqlitePool::connect_lazy_with(opts);
+    sqlx::migrate!("./migrations").run(&db).await?;
 
     let cmd_name: &'static str = (&args.command).into();
     let formatter = Formatter3164 {
@@ -106,14 +118,14 @@ pub async fn skatelet() -> Result<(), SkateError> {
         .map(|()| log::set_max_level(LevelFilter::Debug))
         .map_err(|e| anyhow!(e))?;
 
-    let deps = Deps {};
+    let deps = SkateletDeps { db };
 
     let result = match args.command {
-        Commands::Apply(args) => apply::apply(deps, args),
+        Commands::Apply(args) => apply::apply(deps, args).await,
         Commands::System(args) => system(deps, args).await,
         Commands::Delete(args) => {
             let deleter = Deleter { deps };
-            deleter.delete(args)
+            deleter.delete(args).await
         }
         // TODO - deps
         Commands::Template(args) => template(args),
@@ -125,9 +137,9 @@ pub async fn skatelet() -> Result<(), SkateError> {
         Commands::Oci(args) => oci(args),
         Commands::Ipvs(args) => {
             let ipvs = IPVS { deps };
-            ipvs.ipvs(args)
+            ipvs.ipvs(args).await
         }
-        Commands::Create(args) => create(deps, args),
+        Commands::Create(args) => create(deps, args).await,
         Commands::Cordon(args) => cordon(args),
         Commands::Uncordon(args) => uncordon(args),
         // _ => Ok(())

@@ -53,6 +53,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                     .collect::<Vec<_>>(),
             ]
             .concat(),
+            None,
         )?;
     }
 
@@ -84,6 +85,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 name,
                 "ghcr.io/skateco/sind",
             ],
+            None,
         )?;
 
         // inject public key in authorized_keys
@@ -99,13 +101,14 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                     public_key_contents
                 ),
             ],
+            None,
         )?;
 
         println!("Node {} created", name);
     }
 
     // create skate cluster if not exists
-    let clusters = shell_exec.exec("skate", &["config", "get-clusters"])?;
+    let clusters = shell_exec.exec("skate", &["config", "get-clusters"], None)?;
     let cluster_exists = clusters
         .lines()
         .skip(1)
@@ -115,16 +118,21 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     if !cluster_exists {
         // create cluster
         println!("creating cluster {}", main_args.global.cluster);
-        shell_exec.exec_stdout("skate", &["create", "cluster", &main_args.global.cluster])?;
+        shell_exec.exec_stdout(
+            "skate",
+            &["create", "cluster", &main_args.global.cluster],
+            None,
+        )?;
     }
 
     // use cluster as context
     shell_exec.exec_stdout(
         "skate",
         &["config", "use-context", &main_args.global.cluster],
+        None,
     )?;
 
-    let nodes = shell_exec.exec("skate", &["config", "get-nodes"])?;
+    let nodes = shell_exec.exec("skate", &["config", "get-nodes"], None)?;
     let has_nodes = nodes.lines().count() > 0;
 
     if has_nodes {
@@ -147,9 +155,17 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
                 &name,
             ],
+            None,
         )?;
 
         if let Some(skatelet_path) = &main_args.skatelet_binary_path {
+            shell_exec.exec_stdout(
+                "docker",
+                &["exec", &name, "mkdir", "-p", "/var/lib/skate"],
+                None,
+            )?;
+
+            println!("Copying skatelet binary to node {}", name);
             shell_exec.exec_stdout(
                 "docker",
                 &[
@@ -157,6 +173,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                     skatelet_path,
                     &format!("{name}:/usr/local/bin/skatelet"),
                 ],
+                None,
             )?;
         }
 
@@ -208,6 +225,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "--user",
                 "skate",
             ],
+            None,
         )?;
     }
 

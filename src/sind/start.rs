@@ -24,6 +24,7 @@ pub async fn start<D: StartDeps>(deps: D, _: StartArgs) -> Result<(), SkateError
             "--filter",
             &format!("label={}", CONTAINER_LABEL),
         ],
+        None,
     )?;
     let container_ids = container_ids
         .lines()
@@ -33,6 +34,6 @@ pub async fn start<D: StartDeps>(deps: D, _: StartArgs) -> Result<(), SkateError
         return Ok(());
     }
     println!("Starting {} nodes", container_ids.len());
-    shell_exec.exec("docker", &[vec!["start"], container_ids].concat())?;
+    shell_exec.exec("docker", &[vec!["start"], container_ids].concat(), None)?;
     Ok(())
 }

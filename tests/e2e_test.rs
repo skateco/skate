@@ -162,6 +162,7 @@ async fn e2e_test() {
         .expect("failed to create cluster");
     test_deployment().await.expect("failed to test deployment");
     test_service().await.expect("failed to test service");
+    test_cronjob().await.expect("failed to test cronjob");
 }
 
 async fn test_cluster_creation() -> Result<(), anyhow::Error> {
@@ -393,6 +394,50 @@ async fn ensure_lvs_realservers(
             realservers,
         ));
     }
+
+    Ok(())
+}
+
+async fn test_cronjob() -> Result<(), anyhow::Error> {
+    let root = env::var("CARGO_MANIFEST_DIR")?;
+
+    skate_stdout(
+        "apply",
+        &["-f", &format!("{root}/tests/manifests/test-cronjob.yaml")],
+    )
+    .await?;
+
+    let output = skate("get", &["cronjobs", "-n", "test-cronjob"]).await?;
+
+    println!("{}", output.0);
+
+    let stdout = output.0;
+
+    let lines = stdout.lines().skip(1);
+
+    assert_eq!(lines.clone().count(), 1);
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 6 {
+            assert_eq!(parts[0], "test-cronjob");
+            assert!(parts[1].starts_with("echo"));
+        }
+    }
+
+    // trigger manually by creating a job
+    let output = skate_stdout(
+        "create",
+        &[
+            "job",
+            "--from",
+            "cronjob/echo",
+            "-n",
+            "test-cronjob",
+            "test-cronjob-manual",
+        ],
+    )
+    .await?;
 
     Ok(())
 }

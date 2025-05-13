@@ -1,37 +1,27 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
+use crate::skatelet::database::resource;
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::DaemonSet;
+use sqlx::SqlitePool;
 use std::error::Error;
 
 pub struct DaemonSetController {
-    store: Box<dyn Store>,
+    db: SqlitePool,
     execer: Box<dyn ShellExec>,
     pod_controller: PodController,
 }
 
 impl DaemonSetController {
-    pub fn new(
-        store: Box<dyn Store>,
-        execer: Box<dyn ShellExec>,
-        pod_controller: PodController,
-    ) -> Self {
+    pub fn new(db: SqlitePool, execer: Box<dyn ShellExec>, pod_controller: PodController) -> Self {
         DaemonSetController {
-            store,
+            db,
             execer,
             pod_controller,
         }
     }
 
-    pub fn apply(&self, ds: &DaemonSet) -> Result<(), Box<dyn Error>> {
-        self.store.write_file(
-            "daemonset",
-            &metadata_name(ds).to_string(),
-            "manifest.yaml",
-            serde_yaml::to_string(&ds)?.as_bytes(),
-        )?;
-
+    pub async fn apply(&self, ds: &DaemonSet) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(ds);
         let hash = ds
             .metadata
@@ -40,14 +30,20 @@ impl DaemonSetController {
             .and_then(|m| m.get("skate.io/hash"))
             .unwrap_or(&"".to_string())
             .to_string();
-        if !hash.is_empty() {
-            self.store
-                .write_file("daemonset", &ns_name.to_string(), "hash", hash.as_bytes())?;
-        }
+
+        let object = resource::Resource {
+            name: ns_name.name.clone(),
+            namespace: ns_name.namespace.clone(),
+            resource_type: resource::ResourceType::DaemonSet,
+            manifest: serde_json::to_value(ds)?,
+            hash: hash.clone(),
+            ..Default::default()
+        };
+        resource::insert_resource(&self.db, &object).await?;
         Ok(())
     }
 
-    pub fn delete(
+    pub async fn delete(
         &self,
         ds: &DaemonSet,
         grace_period: Option<usize>,
@@ -70,6 +66,7 @@ impl DaemonSetController {
                 &format!("label=skate.io/daemonset={}", name),
                 "-q",
             ],
+            None,
         )?;
         let ids = ids
             .split("\n")
@@ -78,9 +75,8 @@ impl DaemonSetController {
             .collect::<Vec<&str>>();
 
         self.pod_controller.delete_podman_pods(ids, grace_period)?;
-        let _ = self
-            .store
-            .remove_object("daemonset", &metadata_name(ds).to_string())?;
+
+        resource::delete_resource(&self.db, &resource::ResourceType::DaemonSet, &name, &ns).await?;
         Ok(())
     }
 }

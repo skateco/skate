@@ -1,28 +1,25 @@
 use crate::config::{Cluster, Node};
 use crate::exec::{RealExec, ShellExec};
-use crate::filestore::{FileStore, Store};
-use crate::skatelet::VAR_PATH;
 use crate::ssh::{RealSsh, SshClient, SshClients, SshError, SshErrors};
 use async_trait::async_trait;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::{Either, Itertools};
+use sqlx::SqlitePool;
 
 pub trait With<T: ?Sized> {
     fn get(&self) -> Box<T>;
+}
+
+pub trait WithDB {
+    fn get_db(&self) -> SqlitePool;
 }
 
 pub trait WithRef<'a, T: ?Sized> {
     fn get_ref(&'a self) -> &'a Box<T>;
 }
 
-pub struct Deps {}
-
-impl With<dyn Store> for Deps {
-    fn get(&self) -> Box<dyn Store> {
-        Box::new(FileStore::new(format!("{}/store", VAR_PATH)))
-    }
-}
+pub struct SkateDeps {}
 
 // impl<'a> WithRef<'a, dyn Store> for Deps {
 //     fn get_ref(&'a self) -> &'a Box<dyn Store> {
@@ -30,7 +27,7 @@ impl With<dyn Store> for Deps {
 //     }
 // }
 
-impl With<dyn ShellExec> for Deps {
+impl With<dyn ShellExec> for SkateDeps {
     fn get(&self) -> Box<dyn ShellExec> {
         Box::new(RealExec {})
     }
@@ -98,7 +95,7 @@ impl SshManager for RealSshManager {
     }
 }
 
-impl With<dyn SshManager> for Deps {
+impl With<dyn SshManager> for SkateDeps {
     fn get(&self) -> Box<dyn SshManager> {
         let m = RealSshManager {};
         Box::new(m)

@@ -101,6 +101,7 @@ impl<'a> DnsService<'a> {
                 .exec(
                     "timeout",
                     &["0.2", "podman", "inspect", container_id.as_str()],
+                    None,
                 )
                 .map_err(|e| (true, e))?;
             let container_json: serde_json::Value = serde_json::from_str(&output)
@@ -126,6 +127,7 @@ impl<'a> DnsService<'a> {
                 .exec(
                     "timeout",
                     &["0.2", "podman", "pod", "inspect", pod.unwrap()],
+                    None,
                 )
                 .map_err(|e| (true, e))?;
             let pod_json: serde_json::Value = serde_json::from_str(&output)
@@ -233,6 +235,7 @@ impl<'a> DnsService<'a> {
         let output = self.execer.exec(
             "timeout",
             &["0.2", "podman", "inspect", container_id.as_str()],
+            None,
         )?;
         let json: serde_json::Value = serde_json::from_str(&output)
             .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
@@ -246,6 +249,7 @@ impl<'a> DnsService<'a> {
         let output = self.execer.exec(
             "timeout",
             &["0.2", "podman", "pod", "inspect", pod.unwrap()],
+            None,
         )?;
         let pod_json: serde_json::Value = serde_json::from_str(&output)
             .map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
@@ -262,7 +266,7 @@ impl<'a> DnsService<'a> {
         let mut healthy = false;
         for _ in 0..60 {
             debug!("{} inspecting all pod containers", log_tag);
-            let output = self.execer.exec("timeout", &args)?;
+            let output = self.execer.exec("timeout", &args, None)?;
             let json: serde_json::Value = serde_json::from_str(&output)
                 .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
 
@@ -350,9 +354,9 @@ impl<'a> DnsService<'a> {
                 id
             } else if pod_id.is_some() {
                 // get infra container
-                let output = self
-                    .execer
-                    .exec("podman", &["pod", "inspect", &pod_id.unwrap()])?;
+                let output =
+                    self.execer
+                        .exec("podman", &["pod", "inspect", &pod_id.unwrap()], None)?;
                 let json: serde_json::Value = serde_json::from_str(&output)
                     .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
                 let infra_container_id = json["InfraContainerID"]
@@ -420,6 +424,7 @@ impl<'a> DnsService<'a> {
                 "label=skate.io/daemonset=coredns",
                 "-q",
             ],
+            None,
         )?;
 
         if id.is_empty() {
@@ -429,7 +434,7 @@ impl<'a> DnsService<'a> {
         // doesn't seem to work
         let _ = self
             .execer
-            .exec("podman", &["kill", "--signal", "HUP", &id])?;
+            .exec("podman", &["kill", "--signal", "HUP", &id], None)?;
         Ok(())
     }
 }

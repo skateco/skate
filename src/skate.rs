@@ -7,7 +7,7 @@ use crate::config_cmd::ConfigArgs;
 use crate::cordon::{Cordon, CordonArgs, CordonDeps, UncordonArgs};
 use crate::create::{Create, CreateArgs, CreateDeps};
 use crate::delete::{Delete, DeleteArgs, DeleteDeps};
-use crate::deps::Deps;
+use crate::deps::SkateDeps;
 use crate::describe::{Describe, DescribeArgs, DescribeDeps};
 use crate::errors::SkateError;
 use crate::get::{Get, GetArgs, GetDeps};
@@ -20,6 +20,7 @@ use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
+use sqlx::{Connection, SqliteConnection};
 use std::fmt::{Display, Formatter};
 use strum_macros::Display;
 
@@ -76,20 +77,20 @@ pub struct ConfigFileArgs {
     pub context: Option<String>,
 }
 
-impl ApplyDeps for Deps {}
-impl ClusterDeps for Deps {}
-impl CreateDeps for Deps {}
-impl DeleteDeps for Deps {}
-impl CordonDeps for Deps {}
-impl RefreshDeps for Deps {}
-impl GetDeps for Deps {}
-impl DescribeDeps for Deps {}
-impl LogsDeps for Deps {}
-impl RolloutDeps for Deps {}
+impl ApplyDeps for SkateDeps {}
+impl ClusterDeps for SkateDeps {}
+impl CreateDeps for SkateDeps {}
+impl DeleteDeps for SkateDeps {}
+impl CordonDeps for SkateDeps {}
+impl RefreshDeps for SkateDeps {}
+impl GetDeps for SkateDeps {}
+impl DescribeDeps for SkateDeps {}
+impl LogsDeps for SkateDeps {}
+impl RolloutDeps for SkateDeps {}
 
-impl UpgradeDeps for Deps {}
+impl UpgradeDeps for SkateDeps {}
 
-impl NodeShellDeps for Deps {}
+impl NodeShellDeps for SkateDeps {}
 
 pub trait AllDeps:
     ApplyDeps
@@ -107,10 +108,11 @@ pub trait AllDeps:
 {
 }
 
-impl AllDeps for Deps {}
+impl AllDeps for SkateDeps {}
 
 async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateError> {
     config::ensure_config();
+
     match args.command {
         Commands::Create(args) => {
             let create = Create { deps };
@@ -190,7 +192,6 @@ impl Platform {
             "arm64" => ("aarch64", "unknown-linux", "gnu"),
             _ => (self.arch.as_str(), "unknown-linux", "gnu"),
         }
-        .into()
     }
 }
 
