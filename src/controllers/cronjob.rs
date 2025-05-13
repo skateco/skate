@@ -49,7 +49,7 @@ impl CronjobController {
             hash: hash.clone(),
             ..Default::default()
         };
-        resource::insert_resource(&self.db, &object).await?;
+        resource::upsert_resource(&self.db, &object).await?;
 
         let spec = cron_job.spec.clone().unwrap_or_default();
         let timezone = spec.time_zone.unwrap_or_default();

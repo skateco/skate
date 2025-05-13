@@ -31,10 +31,10 @@ impl Default for Resource {
     }
 }
 
-pub async fn insert_resource(
+pub async fn upsert_resource(
     db: impl SqliteExecutor<'_>,
     resource: &Resource,
-) -> super::Result<String> {
+) -> super::Result<()> {
     let resource_id = uuid::Uuid::new_v4().to_string();
     let str_id = resource_id.to_string();
 
@@ -48,6 +48,11 @@ pub async fn insert_resource(
                 manifest,
                 hash
             ) VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (resource_type, name, namespace)
+            DO UPDATE SET 
+                manifest = $5,
+                hash = $6,
+                updated_at = CURRENT_TIMESTAMP
         "#,
         str_id,
         resource.name,
@@ -58,8 +63,7 @@ pub async fn insert_resource(
     )
     .execute(db)
     .await?;
-
-    Ok(resource_id)
+    Ok(())
 }
 
 pub async fn delete_resource(
