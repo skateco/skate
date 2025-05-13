@@ -425,5 +425,20 @@ async fn test_cronjob() -> Result<(), anyhow::Error> {
         }
     }
 
+    // trigger manually by creating a job
+    let output = skate_stdout(
+        "create",
+        &[
+            "job",
+            "--name",
+            "test-cronjob-manual",
+            "--from",
+            "cronjob/echo",
+            "-n",
+            "test-cronjob",
+        ],
+    )
+    .await?;
+
     Ok(())
 }
