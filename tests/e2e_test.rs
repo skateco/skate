@@ -430,12 +430,11 @@ async fn test_cronjob() -> Result<(), anyhow::Error> {
         "create",
         &[
             "job",
-            "--name",
-            "test-cronjob-manual",
             "--from",
             "cronjob/echo",
             "-n",
             "test-cronjob",
+            "test-cronjob-manual",
         ],
     )
     .await?;

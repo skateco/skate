@@ -50,6 +50,7 @@ run-e2e-tests-docker: export PATH := $(shell pwd)/target/release:${PATH}
 run-e2e-tests-docker: export SKATELET_PATH ?= $(shell pwd)/target/release/skatelet
 run-e2e-tests-docker:
 	set -xeuo pipefail
+	cargo build --release --locked --bin skate
 	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
 	# start vms
