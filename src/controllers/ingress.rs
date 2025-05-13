@@ -1,7 +1,7 @@
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::{
-    delete_resource, insert_resource, list_resources_by_type, ResourceType,
+    delete_resource, list_resources_by_type, upsert_resource, ResourceType,
 };
 use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
@@ -60,7 +60,7 @@ impl IngressController {
             ..Default::default()
         };
 
-        insert_resource(&self.db, &object).await?;
+        upsert_resource(&self.db, &object).await?;
 
         self.render_nginx_conf().await?;
 

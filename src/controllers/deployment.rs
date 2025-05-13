@@ -1,7 +1,7 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
-use crate::skatelet::database::resource::{delete_resource, insert_resource, ResourceType};
+use crate::skatelet::database::resource::{delete_resource, upsert_resource, ResourceType};
 use crate::util::metadata_name;
 use k8s_openapi::api::apps::v1::Deployment;
 use sqlx::SqlitePool;
@@ -41,8 +41,7 @@ impl DeploymentController {
             hash: hash.clone(),
             ..Default::default()
         };
-        insert_resource(&self.db, &object).await?;
-
+        upsert_resource(&self.db, &object).await?;
         Ok(())
     }
 

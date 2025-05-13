@@ -1,6 +1,7 @@
 use crate::controllers::ingress::IngressController;
+use crate::filestore::Store;
 use crate::skatelet::database::resource::{
-    delete_resource, insert_resource, Resource, ResourceType,
+    delete_resource, upsert_resource, Resource, ResourceType,
 };
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
@@ -46,7 +47,7 @@ impl ClusterIssuerController {
             ..Default::default()
         };
 
-        insert_resource(&self.db, &object).await?;
+        upsert_resource(&self.db, &object).await?;
 
         // need to retemplate nginx.conf
         self.ingress_controller.render_nginx_conf().await?;

@@ -39,7 +39,7 @@ impl DaemonSetController {
             hash: hash.clone(),
             ..Default::default()
         };
-        resource::insert_resource(&self.db, &object).await?;
+        resource::upsert_resource(&self.db, &object).await?;
         Ok(())
     }
 

@@ -1,6 +1,7 @@
 use crate::exec::ShellExec;
+use crate::filestore::Store;
 use crate::skatelet::database::resource::{
-    delete_resource, insert_resource, Resource, ResourceType,
+    delete_resource, upsert_resource, Resource, ResourceType,
 };
 use crate::skatelet::services::dns::DnsService;
 use crate::template;
@@ -64,8 +65,7 @@ impl ServiceController {
             hash,
             ..Default::default()
         };
-
-        insert_resource(&self.db, &object).await?;
+        upsert_resource(&self.db, &object).await?;
 
         // install systemd service and timer
         let mut handlebars = template::new();
