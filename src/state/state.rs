@@ -46,8 +46,8 @@ pub struct NodeState {
     pub host_info: Option<HostInfo>,
 }
 
-impl From<NodeState> for K8sNode {
-    fn from(val: NodeState) -> Self {
+impl From<&NodeState> for K8sNode {
+    fn from(val: &NodeState) -> Self {
         let mut metadata = ObjectMeta::default();
         let mut spec = NodeSpec::default();
         let mut status = K8sNodeStatus::default();

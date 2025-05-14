@@ -132,8 +132,8 @@ impl From<Pod> for PodmanPodInfo {
     }
 }
 
-impl From<PodmanPodInfo> for Pod {
-    fn from(val: PodmanPodInfo) -> Self {
+impl From<&PodmanPodInfo> for Pod {
+    fn from(val: &PodmanPodInfo) -> Self {
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
@@ -166,7 +166,7 @@ impl From<PodmanPodInfo> for Pod {
                 owner_references: None,
                 resource_version: None,
                 self_link: None,
-                uid: Some(val.id),
+                uid: Some(val.id.clone()),
             },
             spec: Some(PodSpec {
                 active_deadline_seconds: None,

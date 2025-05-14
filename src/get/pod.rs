@@ -5,6 +5,7 @@ use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use crate::util::age;
+use k8s_openapi::api::core::v1::Pod;
 use serde::Serialize;
 use tabled::Tabled;
 
@@ -32,12 +33,21 @@ impl NameFilters for &PodmanPodInfo {
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct PodListItem {
+    #[serde(skip)]
     pub namespace: String,
+    #[serde(skip)]
     pub name: String,
+    #[serde(skip)]
     pub ready: String,
+    #[serde(skip)]
     pub status: String,
+    #[serde(skip)]
     pub restarts: String,
+    #[serde(skip)]
     pub age: String,
+    #[tabled(skip)]
+    #[serde(flatten)]
+    pub manifest: serde_yaml::Value,
 }
 
 impl From<&PodmanPodInfo> for PodListItem {
@@ -60,6 +70,8 @@ impl From<&PodmanPodInfo> for PodListItem {
             .reduce(|a, c| a + c)
             .unwrap_or_default();
 
+        let k8s_pod: Pod = pod.into();
+
         PodListItem {
             namespace: pod.namespace(),
             name: pod.name(),
@@ -67,6 +79,7 @@ impl From<&PodmanPodInfo> for PodListItem {
             status: pod.status.to_string(),
             restarts: restarts.to_string(),
             age: age(pod.created),
+            manifest: serde_yaml::to_value(&k8s_pod).unwrap_or(serde_yaml::Value::Null),
         }
     }
 }

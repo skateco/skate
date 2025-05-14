@@ -126,7 +126,7 @@ impl DefaultScheduler {
         let filtered_nodes = nodes
             .iter()
             .filter(|n| {
-                let k8s_node: K8sNode = (**n).clone().into();
+                let k8s_node: K8sNode = (*n).into();
                 let node_labels = k8s_node.metadata.labels.unwrap_or_default();
                 // only schedulable nodes
                 let is_schedulable = k8s_node
@@ -219,7 +219,7 @@ impl DefaultScheduler {
                     && p.labels.get("skate.io/namespace").unwrap() == &ns
             });
             for pod_info in existing_pods {
-                let pod: Pod = pod_info.into();
+                let pod: Pod = (&pod_info).into();
                 let name =
                     NamespacedName::from(pod.metadata.name.clone().unwrap_or_default().as_str());
                 let op = ScheduledOperation::new(OpType::Delete, SupportedResources::Pod(pod))
@@ -417,7 +417,7 @@ impl DefaultScheduler {
             // cull the extra pods
             for (pod_info, node, replica) in existing_pods {
                 if replica >= replicas as u32 {
-                    let pod: Pod = pod_info.into();
+                    let pod: Pod = (&pod_info).into();
                     let name = NamespacedName::from(
                         pod.metadata.name.clone().unwrap_or_default().as_str(),
                     );
@@ -517,7 +517,7 @@ impl DefaultScheduler {
                 .map(|(pod_info, node)| {
                     ScheduledOperation::new(
                         OpType::Delete,
-                        SupportedResources::Pod(pod_info.clone().into()),
+                        SupportedResources::Pod(pod_info.into()),
                     )
                     .node((**node).clone())
                 })

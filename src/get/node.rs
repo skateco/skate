@@ -3,6 +3,7 @@ use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
+use k8s_openapi::api::core::v1::Node;
 use serde::Serialize;
 use tabled::Tabled;
 
@@ -11,10 +12,17 @@ pub(crate) struct NodeLister {}
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct NodeListItem {
+    #[serde(skip)]
     pub name: String,
+    #[serde(skip)]
     pub pods: String,
+    #[serde(skip)]
     pub status: String,
+    #[serde(skip)]
     pub message: String,
+    #[tabled(skip)]
+    #[serde(flatten)]
+    pub manifest: serde_yaml::Value,
 }
 
 impl NameFilters for NodeListItem {
@@ -49,11 +57,14 @@ impl Lister<NodeListItem> for NodeLister {
                     },
                     _ => 0,
                 };
+
+                let k8s_node: Node = n.into();
                 NodeListItem {
                     name: n.node_name.clone(),
                     pods: num_pods.to_string(),
                     status: n.status.to_string(),
                     message: n.message.clone().unwrap_or_default(),
+                    manifest: serde_yaml::to_value(k8s_node).unwrap_or(serde_yaml::Value::Null),
                 }
             })
             .collect()

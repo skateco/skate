@@ -13,13 +13,23 @@ pub(crate) struct IngressLister {}
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct IngressListItem {
+    #[serde(skip)]
     pub namespace: String,
+    #[serde(skip)]
     pub name: String,
+    #[serde(skip)]
     pub class: String,
+    #[serde(skip)]
     pub hosts: String,
+    #[serde(skip)]
     pub address: String,
+    #[serde(skip)]
     pub ports: String,
+    #[serde(skip)]
     pub age: String,
+    #[tabled(skip)]
+    #[serde(flatten)]
+    pub manifest: serde_yaml::Value,
 }
 
 impl From<ObjectListItem> for IngressListItem {
@@ -47,6 +57,7 @@ impl From<ObjectListItem> for IngressListItem {
             address,
             ports,
             age,
+            manifest: item.manifest.unwrap_or(serde_yaml::Value::Null),
         }
     }
 }

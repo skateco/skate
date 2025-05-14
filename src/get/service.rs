@@ -14,12 +14,21 @@ pub(crate) struct ServiceLister {}
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ServiceListItem {
+    #[serde(skip)]
     pub namespace: String,
+    #[serde(skip)]
     pub name: String,
+    #[serde(skip)]
     pub cluster_ip: String,
+    #[serde(skip)]
     pub external_ip: String,
+    #[serde(skip)]
     pub ports: String,
+    #[serde(skip)]
     pub age: String,
+    #[tabled(skip)]
+    #[serde(flatten)]
+    pub manifest: serde_yaml::Value,
 }
 
 impl From<ObjectListItem> for ServiceListItem {
@@ -44,6 +53,7 @@ impl From<ObjectListItem> for ServiceListItem {
             external_ip: "-".to_string(),
             ports: ports.join(","),
             age,
+            manifest: item.manifest.unwrap_or(serde_yaml::Value::Null),
         }
     }
 }

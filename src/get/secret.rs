@@ -13,10 +13,17 @@ pub(crate) struct SecretLister {}
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct SecretListItem {
+    #[serde(skip)]
     pub namespace: String,
+    #[serde(skip)]
     pub name: String,
+    #[serde(skip)]
     pub data: usize,
+    #[serde(skip)]
     pub age: String,
+    #[tabled(skip)]
+    #[serde(flatten)]
+    pub manifest: serde_yaml::Value,
 }
 
 impl From<ObjectListItem> for SecretListItem {
@@ -40,6 +47,7 @@ impl From<ObjectListItem> for SecretListItem {
             name: item.name.name.clone(),
             data,
             age: age(item.created_at),
+            manifest: item.manifest.unwrap_or(serde_yaml::Value::Null),
         }
     }
 }
