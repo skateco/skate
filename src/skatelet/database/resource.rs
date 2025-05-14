@@ -177,6 +177,8 @@ pub enum ResourceType {
         to_string = "clusterissuer"
     )]
     ClusterIssuer,
+    #[strum(serialize = "nodes", serialize = "node", to_string = "node")]
+    Node,
 }
 
 impl From<String> for ResourceType {

@@ -1,5 +1,6 @@
+use crate::filestore::ObjectListItem;
 use crate::get::lister::NameFilters;
-use crate::get::Lister;
+use crate::get::ResourceLister;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
@@ -22,6 +23,27 @@ pub struct CronListItem {
     pub age: String,
 }
 
+impl From<ObjectListItem> for CronListItem {
+    fn from(item: ObjectListItem) -> Self {
+        let cronjob: CronJob =
+            serde_yaml::from_value(item.manifest.as_ref().unwrap().clone()).unwrap_or_default();
+        let spec = cronjob.spec.unwrap_or_default();
+        let schedule = spec.schedule;
+        let timezone = spec.time_zone;
+        let created = item.created_at;
+        let age = age(created);
+        CronListItem {
+            namespace: item.name.namespace.clone(),
+            name: item.name.name.clone(),
+            schedule,
+            timezone: timezone.unwrap_or("<none>".to_string()),
+            suspend: "False".to_string(),
+            active: "-".to_string(),
+            last_schedule: "-".to_string(),
+            age,
+        }
+    }
+}
 impl NameFilters for CronListItem {
     fn name(&self) -> String {
         self.name.clone()
@@ -32,36 +54,4 @@ impl NameFilters for CronListItem {
     }
 }
 
-impl Lister<CronListItem> for CronjobsLister {
-    fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<CronListItem> {
-        let cronjobs = si
-            .resources
-            .iter()
-            .filter(|r| r.resource_type == ResourceType::CronJob);
-
-        cronjobs
-            .filter(|j| j.filter_names(id, ns))
-            .map(|item| {
-                let item = item.clone();
-                let cronjob: CronJob =
-                    serde_yaml::from_value(item.manifest.as_ref().unwrap().clone())
-                        .unwrap_or_default();
-                let spec = cronjob.spec.unwrap_or_default();
-                let schedule = spec.schedule;
-                let timezone = spec.time_zone;
-                let created = item.created_at;
-                let age = age(created);
-                CronListItem {
-                    namespace: item.name.namespace.clone(),
-                    name: item.name.name.clone(),
-                    schedule,
-                    timezone: timezone.unwrap_or("<none>".to_string()),
-                    suspend: "False".to_string(),
-                    active: "-".to_string(),
-                    last_schedule: "-".to_string(),
-                    age,
-                }
-            })
-            .collect()
-    }
-}
+impl ResourceLister<CronListItem> for CronjobsLister {}

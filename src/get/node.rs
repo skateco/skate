@@ -1,5 +1,6 @@
-use crate::get::lister::NameFilters;
-use crate::get::{GetObjectArgs, Lister};
+use crate::get::lister::{Lister, NameFilters};
+use crate::get::{GetObjectArgs, ResourceLister};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use serde::Serialize;
@@ -27,11 +28,12 @@ impl NameFilters for NodeListItem {
 }
 
 impl Lister<NodeListItem> for NodeLister {
-    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<NodeListItem> {
-        unimplemented!("not used")
-    }
-
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<NodeListItem> {
+    fn list(
+        &self,
+        _: ResourceType,
+        filters: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<NodeListItem> {
         state
             .nodes
             .iter()

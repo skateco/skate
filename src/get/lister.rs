@@ -1,5 +1,6 @@
 use crate::filestore::ObjectListItem;
 use crate::get::GetObjectArgs;
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use itertools::Itertools;
@@ -46,16 +47,23 @@ impl NameFilters for &ObjectListItem {
 }
 
 pub(crate) trait Lister<T> {
-    // selects data from each node
-    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<T>
+    fn list(
+        &self,
+        resource_type: ResourceType,
+        filters: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<T>
     where
-        T: Tabled + NameFilters,
-    {
-        unimplemented!("needs to be implemented if `list` is not")
-    }
+        T: Tabled + NameFilters;
+}
 
-    // the outer list function
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T>
+pub(crate) trait ResourceLister<T: From<ObjectListItem>> {
+    fn list(
+        &self,
+        resource_type: ResourceType,
+        filters: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<T>
     where
         T: Tabled + NameFilters,
     {
@@ -63,16 +71,11 @@ pub(crate) trait Lister<T> {
         let id = filters.id.clone().unwrap_or("".to_string());
 
         let resources = state
-            .nodes
-            .iter()
-            .flat_map(|node| match &node.host_info {
-                Some(hi) => match &hi.system_info {
-                    Some(si) => self.selector(si, &ns, &id),
-                    _ => vec![],
-                },
-                None => vec![],
-            })
-            .unique_by(|i| format!("{}.{}", i.name(), i.namespace()))
+            .catalogue(None, &[resource_type.clone()])
+            .into_iter()
+            .filter(|r| r.object.resource_type == resource_type)
+            .filter(|r| r.object.filter_names(&id, &ns))
+            .map(|r| r.object.clone().into())
             .collect();
 
         resources

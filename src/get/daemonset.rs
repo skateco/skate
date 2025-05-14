@@ -1,5 +1,6 @@
-use crate::get::lister::NameFilters;
-use crate::get::{GetObjectArgs, Lister};
+use crate::get::lister::{Lister, NameFilters};
+use crate::get::{GetObjectArgs, ResourceLister};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
 use crate::util::age;
@@ -36,7 +37,12 @@ impl NameFilters for DaemonsetListItem {
 }
 
 impl Lister<DaemonsetListItem> for DaemonsetLister {
-    fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<DaemonsetListItem> {
+    fn list(
+        &self,
+        _: ResourceType,
+        args: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<DaemonsetListItem> {
         let pods = state
             .nodes
             .iter()

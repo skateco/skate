@@ -1,6 +1,7 @@
 use crate::filestore::ObjectListItem;
-use crate::get::lister::NameFilters;
-use crate::get::{GetObjectArgs, Lister};
+use crate::get::lister::{Lister, NameFilters};
+use crate::get::{GetObjectArgs, ResourceLister};
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::{ClusterState, NodeState};
 use crate::util::{age, NamespacedName};
@@ -34,7 +35,12 @@ impl NameFilters for DeploymentListItem {
 }
 
 impl Lister<DeploymentListItem> for DeploymentLister {
-    fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<DeploymentListItem> {
+    fn list(
+        &self,
+        resource_type: ResourceType,
+        args: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<DeploymentListItem> {
         for node in state.nodes.iter() {
             if node.host_info.is_none() {
                 continue;
