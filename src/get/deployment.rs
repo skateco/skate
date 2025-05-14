@@ -1,16 +1,18 @@
+use crate::filestore::ObjectListItem;
 use crate::get::lister::NameFilters;
 use crate::get::{GetObjectArgs, Lister};
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
-use crate::state::state::ClusterState;
+use crate::state::state::{ClusterState, NodeState};
 use crate::util::{age, NamespacedName};
 use chrono::Local;
 use itertools::Itertools;
+use serde::Serialize;
 use std::collections::HashMap;
 use tabled::Tabled;
 
 pub(crate) struct DeploymentLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct DeploymentListItem {
     pub namespace: String,
@@ -33,6 +35,14 @@ impl NameFilters for DeploymentListItem {
 
 impl Lister<DeploymentListItem> for DeploymentLister {
     fn list(&self, args: &GetObjectArgs, state: &ClusterState) -> Vec<DeploymentListItem> {
+        for node in state.nodes.iter() {
+            if node.host_info.is_none() {
+                continue;
+            }
+            if node.host_info.as_ref().unwrap().system_info.is_none() {
+                continue;
+            }
+        }
         let pods = state
             .nodes
             .iter()

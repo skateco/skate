@@ -1,13 +1,15 @@
 use crate::get::lister::NameFilters;
 use crate::get::Lister;
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
 use k8s_openapi::api::batch::v1::CronJob;
+use serde::Serialize;
 use tabled::Tabled;
 
 pub(crate) struct CronjobsLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct CronListItem {
     pub namespace: String,
@@ -32,10 +34,12 @@ impl NameFilters for CronListItem {
 
 impl Lister<CronListItem> for CronjobsLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<CronListItem> {
-        si.cronjobs
-            .as_ref()
-            .unwrap_or(&vec![])
+        let cronjobs = si
+            .resources
             .iter()
+            .filter(|r| r.resource_type == ResourceType::CronJob);
+
+        cronjobs
             .filter(|j| j.filter_names(id, ns))
             .map(|item| {
                 let item = item.clone();

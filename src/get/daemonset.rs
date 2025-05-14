@@ -5,12 +5,13 @@ use crate::state::state::ClusterState;
 use crate::util::age;
 use chrono::Local;
 use itertools::Itertools;
+use serde::Serialize;
 use std::collections::HashMap;
 use tabled::Tabled;
 
 pub(crate) struct DaemonsetLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct DaemonsetListItem {
     pub namespace: String,

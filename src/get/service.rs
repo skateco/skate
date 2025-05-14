@@ -1,13 +1,15 @@
 use crate::get::lister::NameFilters;
 use crate::get::Lister;
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
 use k8s_openapi::api::core::v1::Service;
+use serde::Serialize;
 use tabled::Tabled;
 
 pub(crate) struct ServiceLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ServiceListItem {
     pub namespace: String,
@@ -30,10 +32,12 @@ impl NameFilters for ServiceListItem {
 
 impl Lister<ServiceListItem> for ServiceLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<ServiceListItem> {
-        si.services
-            .as_ref()
-            .unwrap_or(&vec![])
+        let services = si
+            .resources
             .iter()
+            .filter(|r| r.resource_type == ResourceType::Service);
+
+        services
             .filter(|j| j.filter_names(id, ns))
             .map(|item| {
                 let ingress: Service =

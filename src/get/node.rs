@@ -2,11 +2,12 @@ use crate::get::lister::NameFilters;
 use crate::get::{GetObjectArgs, Lister};
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
+use serde::Serialize;
 use tabled::Tabled;
 
 pub(crate) struct NodeLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct NodeListItem {
     pub name: String,

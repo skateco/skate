@@ -13,7 +13,7 @@ use crate::exec::ShellExec;
 use crate::filestore::{FileStore, ObjectListItem};
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
-use crate::skatelet::database::resource::{list_resources_by_type, ResourceType};
+use crate::skatelet::database::resource::{list_resources, list_resources_by_type, ResourceType};
 use crate::skatelet::skatelet::VAR_PATH;
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::{NamespacedName, TryVecInto};
@@ -61,13 +61,7 @@ pub struct SystemInfo {
     pub num_cpus: usize,
     pub root_disk: Option<DiskInfo>,
     pub pods: Option<Vec<PodmanPodInfo>>,
-    pub ingresses: Option<Vec<ObjectListItem>>,
-    pub cronjobs: Option<Vec<ObjectListItem>>,
-    pub secrets: Option<Vec<ObjectListItem>>,
-    pub services: Option<Vec<ObjectListItem>>,
-    pub cluster_issuers: Option<Vec<ObjectListItem>>,
-    pub deployments: Option<Vec<ObjectListItem>>,
-    pub daemonsets: Option<Vec<ObjectListItem>>,
+    pub resources: Vec<ObjectListItem>,
     pub cpu_freq_mhz: u64,
     pub cpu_usage: f32,
     pub cpu_brand: String,
@@ -160,26 +154,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
     let podman_pod_info: Vec<PodmanPodInfo> = serde_json::from_str(&pod_list_result)
         .map_err(|e| anyhow!(e).context("failed to deserialize pod info"))?;
 
-    let store = FileStore::new(format!("{}/store", VAR_PATH));
-
-    let ingresses = list_resources_by_type(&db, &ResourceType::Ingress)
-        .await?
-        .try_vec_into()?;
-    let cronjobs = list_resources_by_type(&db, &ResourceType::CronJob)
-        .await?
-        .try_vec_into()?;
-    let services = list_resources_by_type(&db, &ResourceType::Service)
-        .await?
-        .try_vec_into()?;
-    let cluster_issuers = list_resources_by_type(&db, &ResourceType::ClusterIssuer)
-        .await?
-        .try_vec_into()?;
-    let deployments = list_resources_by_type(&db, &ResourceType::Deployment)
-        .await?
-        .try_vec_into()?;
-    let daemonsets = list_resources_by_type(&db, &ResourceType::DaemonSet)
-        .await?
-        .try_vec_into()?;
+    let resources = list_resources(&db).await?.try_vec_into()?;
 
     let secrets = execer
         .exec("podman", &["secret", "ls", "--noheading"], None)
@@ -291,13 +266,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
         cpu_vendor_id: sys.cpus().first().unwrap().vendor_id().to_string(),
         root_disk,
         pods: Some(podman_pod_info),
-        ingresses: (!ingresses.is_empty()).then_some(ingresses),
-        cronjobs: (!cronjobs.is_empty()).then_some(cronjobs),
-        secrets: (!secret_info.is_empty()).then_some(secret_info),
-        services: (!services.is_empty()).then_some(services),
-        cluster_issuers: (!cluster_issuers.is_empty()).then_some(cluster_issuers),
-        deployments: (!deployments.is_empty()).then_some(deployments),
-        daemonsets: (!daemonsets.is_empty()).then_some(daemonsets),
+        resources,
         hostname: System::host_name().unwrap_or("".to_string()),
         internal_ip_address: internal_ip_addr,
         cordoned: is_cordoned(),

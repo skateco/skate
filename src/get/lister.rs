@@ -20,9 +20,11 @@ pub(crate) trait NameFilters {
         if !ns.is_empty() && self.namespace() != ns {
             return false;
         }
-        if !name.is_empty() && (self.id() != name || self.name() != name) {
+
+        if !name.is_empty() && (self.id() != name && self.name() != name) {
             return false;
         }
+
         if ns.is_empty() && name.is_empty() && self.namespace() == "skate" {
             return false;
         }

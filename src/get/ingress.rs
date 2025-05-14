@@ -1,13 +1,15 @@
 use crate::get::lister::NameFilters;
 use crate::get::Lister;
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
 use k8s_openapi::api::networking::v1::Ingress;
+use serde::Serialize;
 use tabled::Tabled;
 
 pub(crate) struct IngressLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct IngressListItem {
     pub namespace: String,
@@ -31,10 +33,11 @@ impl NameFilters for IngressListItem {
 
 impl Lister<IngressListItem> for IngressLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<IngressListItem> {
-        si.ingresses
-            .as_ref()
-            .unwrap_or(&vec![])
+        let ingresses = si
+            .resources
             .iter()
+            .filter(|r| r.resource_type == ResourceType::Ingress);
+        ingresses
             .filter(|j| j.filter_names(id, ns))
             .map(|item| {
                 let ingress: Ingress =

@@ -1,14 +1,15 @@
 use crate::get::lister::NameFilters;
 use crate::get::Lister;
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
-use k8s_openapi::api::core::v1::Secret;
-use tabled::Tabled;
-
 use crate::util::age;
+use k8s_openapi::api::core::v1::Secret;
+use serde::Serialize;
+use tabled::Tabled;
 
 pub(crate) struct SecretLister {}
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct SecretListItem {
     pub namespace: String,
@@ -29,10 +30,11 @@ impl NameFilters for SecretListItem {
 
 impl Lister<SecretListItem> for SecretLister {
     fn selector(&self, si: &SystemInfo, ns: &str, id: &str) -> Vec<SecretListItem> {
-        si.secrets
-            .as_ref()
-            .unwrap_or(&vec![])
+        let secrets = si
+            .resources
             .iter()
+            .filter(|r| r.resource_type == ResourceType::Secret);
+        secrets
             .filter(|j| j.filter_names(id, ns))
             .map(|item| {
                 let data: usize = match item.manifest {

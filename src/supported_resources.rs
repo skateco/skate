@@ -1,4 +1,5 @@
 use crate::filestore::ObjectListItem;
+use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::NodeState;
@@ -9,7 +10,7 @@ use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::Resource;
+use k8s_openapi::{ClusterResourceScope, Resource};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -34,6 +35,21 @@ pub enum SupportedResources {
     Service(Service),
     #[strum(serialize = "ClusterIssuer")]
     ClusterIssuer(ClusterIssuer),
+}
+
+impl Into<ResourceType> for &SupportedResources {
+    fn into(self) -> ResourceType {
+        match self {
+            SupportedResources::Pod(_) => ResourceType::Pod,
+            SupportedResources::Deployment(_) => ResourceType::Deployment,
+            SupportedResources::DaemonSet(_) => ResourceType::DaemonSet,
+            SupportedResources::Ingress(_) => ResourceType::Ingress,
+            SupportedResources::CronJob(_) => ResourceType::CronJob,
+            SupportedResources::Secret(_) => ResourceType::Secret,
+            SupportedResources::Service(_) => ResourceType::Service,
+            SupportedResources::ClusterIssuer(_) => ResourceType::ClusterIssuer,
+        }
+    }
 }
 
 impl TryFrom<&ObjectListItem> for SupportedResources {

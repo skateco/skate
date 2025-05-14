@@ -11,6 +11,7 @@ mod service;
 use crate::config::Config;
 use crate::refresh::Refresh;
 use clap::{Args, Subcommand};
+use strum_macros::EnumString;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
@@ -35,6 +36,14 @@ pub struct GetArgs {
     commands: GetCommands,
 }
 
+#[derive(Clone, Debug, EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum OutputFormat {
+    Json,
+    Yaml,
+    Name,
+}
+
 #[derive(Clone, Debug, Args)]
 pub struct GetObjectArgs {
     #[command(flatten)]
@@ -43,6 +52,8 @@ pub struct GetObjectArgs {
     namespace: Option<String>,
     #[arg()]
     id: Option<String>,
+    #[arg(long, short, long_help = "Output format. One of: (json, yaml, name)")]
+    output: Option<OutputFormat>,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -86,7 +97,7 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         }
     }
 
-    async fn get_objects<T: Tabled + NameFilters>(
+    async fn get_objects<T: Tabled + NameFilters + serde::Serialize>(
         &self,
         _global_args: GetArgs,
         args: GetObjectArgs,
@@ -128,9 +139,22 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
             return Ok(());
         }
 
-        let mut table = Table::new(objects);
-        table.with(Style::empty());
-        println!("{}", table);
+        let output_format = args.output.unwrap_or(OutputFormat::Name);
+        match output_format {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(&objects)?;
+                println!("{}", json);
+            }
+            OutputFormat::Yaml => {
+                let yaml = serde_yaml::to_string(&objects)?;
+                println!("{}", yaml);
+            }
+            OutputFormat::Name => {
+                let mut table = Table::new(objects);
+                table.with(Style::empty());
+                println!("{}", table);
+            }
+        }
         Ok(())
     }
 

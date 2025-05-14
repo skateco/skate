@@ -3,6 +3,7 @@ use crate::get::Lister;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
+use serde::Serialize;
 use tabled::Tabled;
 
 pub(crate) struct PodLister {}
@@ -26,7 +27,7 @@ impl NameFilters for &PodmanPodInfo {
     }
 }
 
-#[derive(Tabled)]
+#[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct PodListItem {
     pub namespace: String,

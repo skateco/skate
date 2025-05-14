@@ -1,5 +1,5 @@
 use crate::exec::ShellExec;
-use crate::filestore::Store;
+
 use crate::skatelet::database::resource::{
     delete_resource, upsert_resource, Resource, ResourceType,
 };
@@ -65,6 +65,7 @@ impl ServiceController {
             hash,
             ..Default::default()
         };
+
         upsert_resource(&self.db, &object).await?;
 
         // install systemd service and timer
