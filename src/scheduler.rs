@@ -6,18 +6,18 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
-use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
-use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::Metadata;
-
+use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::{ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
 use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, CROSS_EMOJI};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
+use k8s_openapi::api::batch::v1::CronJob;
+use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
+use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::Metadata;
 
 #[derive(Debug)]
 pub struct ScheduleResult {
@@ -575,7 +575,15 @@ impl DefaultScheduler {
         let existing_cron = state
             .locate_objects(
                 None,
-                |si| si.clone().cronjobs,
+                |si| {
+                    Some(
+                        (&si.resources)
+                            .iter()
+                            .filter(|r| r.resource_type == ResourceType::CronJob)
+                            .map(|o| o.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                },
                 Some(&name.name),
                 Some(&name.namespace),
             )
@@ -625,7 +633,15 @@ impl DefaultScheduler {
         for node in state.nodes.iter() {
             let existing_secrets = state.locate_objects(
                 Some(&node.node_name),
-                |si| si.clone().secrets,
+                |si| {
+                    Some(
+                        (&si.resources)
+                            .iter()
+                            .filter(|r| r.resource_type == ResourceType::Secret)
+                            .map(|o| o.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                },
                 Some(&ns_name.name),
                 Some(&ns_name.namespace),
             );
@@ -683,7 +699,15 @@ impl DefaultScheduler {
             let existing_service = state
                 .locate_objects(
                     Some(&node.node_name),
-                    |si| si.clone().services,
+                    |si| {
+                        Some(
+                            (&si.resources)
+                                .iter()
+                                .filter(|r| r.resource_type == ResourceType::Service)
+                                .map(|o| o.clone())
+                                .collect::<Vec<_>>(),
+                        )
+                    },
                     Some(&name.name),
                     Some(&name.namespace),
                 )
@@ -738,7 +762,15 @@ impl DefaultScheduler {
             let existing_ingress = state
                 .locate_objects(
                     Some(&node.node_name),
-                    |si| si.clone().ingresses,
+                    |si| {
+                        Some(
+                            (&si.resources)
+                                .iter()
+                                .filter(|r| r.resource_type == ResourceType::Ingress)
+                                .map(|o| o.clone())
+                                .collect::<Vec<_>>(),
+                        )
+                    },
                     Some(&name.name),
                     Some(&name.namespace),
                 )
@@ -795,7 +827,15 @@ impl DefaultScheduler {
             let existing = state
                 .locate_objects(
                     Some(&node.node_name),
-                    |si| si.clone().cluster_issuers,
+                    |si| {
+                        Some(
+                            (&si.resources)
+                                .iter()
+                                .filter(|r| r.resource_type == ResourceType::ClusterIssuer)
+                                .map(|o| o.clone())
+                                .collect::<Vec<_>>(),
+                        )
+                    },
                     Some(&ns_name.name),
                     Some("skate"),
                 )

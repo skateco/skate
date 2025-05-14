@@ -136,7 +136,6 @@ pub async fn list_resources(db: impl SqliteExecutor<'_>) -> super::Result<Vec<Re
         r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
             FROM resources
         "#,
-        resource_type
     )
         .fetch_all(db)
         .await?;

@@ -589,23 +589,6 @@ impl ClusterState {
     }
 }
 
-macro_rules! extract_mappings {
-    ($si: ident, $suffixFunc: ident) => {
-        vec![
-            (ResourceType::DaemonSet, $si.daemonsets.$suffixFunc()),
-            (ResourceType::Deployment, $si.deployments.$suffixFunc()),
-            (ResourceType::CronJob, $si.cronjobs.$suffixFunc()),
-            (ResourceType::Ingress, $si.ingresses.$suffixFunc()),
-            (ResourceType::Service, $si.services.$suffixFunc()),
-            (ResourceType::Secret, $si.secrets.$suffixFunc()),
-            (
-                ResourceType::ClusterIssuer,
-                $si.cluster_issuers.$suffixFunc(),
-            ),
-        ]
-    };
-}
-
 fn extract_mut_catalog<'a>(
     n: &str,
     si: &'a mut SystemInfo,
@@ -613,22 +596,12 @@ fn extract_mut_catalog<'a>(
 ) -> Vec<MutCatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = extract_mappings!(si, as_mut);
-
-    mapping
-        .into_iter()
-        .filter_map(|c| match all_types || filter_types.contains(&c.0) {
-            true => Some(c.1),
-            false => None,
-        })
-        .flatten()
-        .flat_map(|list| {
-            list.iter_mut()
-                .map(|o| MutCatalogueItem {
-                    object: o,
-                    node: n.to_string(),
-                })
-                .collect_vec()
+    si.resources
+        .iter_mut()
+        .filter(|c| all_types || filter_types.contains(&c.resource_type))
+        .map(|o| MutCatalogueItem {
+            object: o,
+            node: n.to_string(),
         })
         .collect()
 }
@@ -640,22 +613,12 @@ fn extract_catalog<'a>(
 ) -> Vec<CatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = extract_mappings!(si, as_ref);
-
-    mapping
+    (&si.resources)
         .into_iter()
-        .filter_map(|c| match all_types || filter_types.contains(&c.0) {
-            true => Some(c.1),
-            false => None,
-        })
-        .flatten()
-        .flat_map(|list| {
-            list.iter()
-                .map(|o| CatalogueItem {
-                    object: o,
-                    node: n.to_string(),
-                })
-                .collect_vec()
+        .filter(|c| all_types || filter_types.contains(&c.resource_type))
+        .map(|o| CatalogueItem {
+            object: o,
+            node: n.to_string(),
         })
         .collect()
 }
