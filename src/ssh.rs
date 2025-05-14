@@ -274,16 +274,9 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     }
                     "sys" => {
                         if !v.is_empty() {
-                            match general_purpose::STANDARD.decode(v) {
-                                Ok(v) => {
-                                    if let Ok(sys_info) = serde_json::from_slice(&v) {
-                                        host_info.system_info = sys_info
-                                    }
-                                }
-                                Err(_) => {
-                                    // TODO
-                                }
-                            };
+                            let v = general_purpose::STANDARD.decode(v)?;
+                            let sys_info = serde_json::from_slice(&v)?;
+                            host_info.system_info = sys_info
                         }
                     }
                     "ovs" => {
