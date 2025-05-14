@@ -4,6 +4,7 @@ use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use itertools::Itertools;
+use std::marker::PhantomData;
 use tabled::Tabled;
 
 pub(crate) trait NameFilters {
@@ -57,16 +58,22 @@ pub(crate) trait Lister<T> {
         T: Tabled + NameFilters;
 }
 
-pub(crate) trait ResourceLister<T: From<ObjectListItem>> {
+pub struct ResourceLister<T: Tabled + NameFilters + From<ObjectListItem>> {
+    inner: PhantomData<T>,
+}
+
+impl<T: Tabled + NameFilters + From<ObjectListItem>> ResourceLister<T> {
+    pub fn new() -> Self {
+        ResourceLister { inner: PhantomData }
+    }
+}
+impl<T: Tabled + NameFilters + From<ObjectListItem>> Lister<T> for ResourceLister<T> {
     fn list(
         &self,
         resource_type: ResourceType,
         filters: &GetObjectArgs,
         state: &ClusterState,
-    ) -> Vec<T>
-    where
-        T: Tabled + NameFilters,
-    {
+    ) -> Vec<T> {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 

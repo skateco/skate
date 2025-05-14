@@ -1,6 +1,6 @@
 use crate::filestore::ObjectListItem;
 use crate::get::lister::NameFilters;
-use crate::get::ResourceLister;
+use crate::get::Lister;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
 use crate::util::age;
@@ -53,5 +53,3 @@ impl NameFilters for CronListItem {
         self.namespace.clone()
     }
 }
-
-impl ResourceLister<CronListItem> for CronjobsLister {}

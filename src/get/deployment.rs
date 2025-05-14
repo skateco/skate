@@ -1,6 +1,6 @@
 use crate::filestore::ObjectListItem;
 use crate::get::lister::{Lister, NameFilters};
-use crate::get::{GetObjectArgs, ResourceLister};
+use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::{ClusterState, NodeState};

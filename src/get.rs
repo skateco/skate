@@ -12,7 +12,6 @@ use crate::config::Config;
 use crate::refresh::Refresh;
 use clap::{Args, Subcommand};
 use serde::Serialize;
-use std::array::IntoIter;
 use strum_macros::EnumString;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
@@ -22,15 +21,15 @@ use crate::skate::ConfigFileArgs;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
 use crate::filestore::ObjectListItem;
-use crate::get::cronjob::CronjobsLister;
+use crate::get::cronjob::CronListItem;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
-use crate::get::ingress::IngressLister;
+use crate::get::ingress::{IngressListItem, IngressLister};
 use crate::get::lister::{Lister, NameFilters, ResourceLister};
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
-use crate::get::secret::SecretLister;
-use crate::get::service::ServiceLister;
+use crate::get::secret::{SecretListItem, SecretLister};
+use crate::get::service::{ServiceListItem, ServiceLister};
 use crate::refresh;
 use crate::skatelet::database::resource::ResourceType;
 
@@ -128,7 +127,7 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         resource_type: ResourceType,
         _global_args: GetArgs,
         args: GetObjectArgs,
-        lister: &dyn ResourceLister<T>,
+        lister: impl Lister<T>,
     ) -> Result<(), SkateError> {
         let config = Config::load(Some(args.config.skateconfig.clone()))?;
         let mgr = self.deps.get();
@@ -251,8 +250,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = IngressLister {};
-        self.get_resource_objects(ResourceType::Ingress, global_args, args, &lister)
+        let lister = ResourceLister::<IngressListItem>::new();
+        self.get_resource_objects(ResourceType::Ingress, global_args, args, lister)
             .await
     }
 
@@ -261,8 +260,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = CronjobsLister {};
-        self.get_resource_objects(ResourceType::CronJob, global_args, args, &lister)
+        let lister = ResourceLister::<CronListItem>::new();
+        self.get_resource_objects(ResourceType::CronJob, global_args, args, lister)
             .await
     }
 
@@ -277,8 +276,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = SecretLister {};
-        self.get_resource_objects(ResourceType::Secret, global_args, args, &lister)
+        let lister = ResourceLister::<SecretListItem>::new();
+        self.get_resource_objects(ResourceType::Secret, global_args, args, lister)
             .await
     }
 
@@ -287,8 +286,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = ServiceLister {};
-        self.get_resource_objects(ResourceType::Service, global_args, args, &lister)
+        let lister = ResourceLister::<ServiceListItem>::new();
+        self.get_resource_objects(ResourceType::Service, global_args, args, lister)
             .await
     }
 }
