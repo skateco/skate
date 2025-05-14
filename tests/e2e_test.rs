@@ -426,7 +426,7 @@ async fn test_cronjob() -> Result<(), anyhow::Error> {
     }
 
     // trigger manually by creating a job
-    let output = skate_stdout(
+    skate_stdout(
         "create",
         &[
             "job",
