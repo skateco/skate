@@ -4,7 +4,6 @@ use crate::skatelet::database::resource::{
 };
 use crate::spec::cert::ClusterIssuer;
 use crate::util::metadata_name;
-use anyhow::anyhow;
 use sqlx::SqlitePool;
 use std::error::Error;
 
