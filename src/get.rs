@@ -155,6 +155,28 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         }
     }
 
+    fn print_objects<T: Tabled + serde::Serialize>(objects: Vec<T>, args: &GetObjectArgs) {
+        if objects.is_empty() {
+            if args.namespace.as_ref().is_some() {
+                println!(
+                    "No resources found for namespace {}",
+                    args.namespace.as_ref().unwrap()
+                );
+            } else {
+                println!("No resources found");
+            }
+            return;
+        }
+
+        let output_format = args.output.clone().unwrap_or(OutputFormat::Name);
+
+        if args.id.is_some() && objects.len() == 1 {
+            output_format.print_one(&objects[0]);
+        } else {
+            output_format.print_many(&objects);
+        }
+    }
+
     async fn get_resource_objects<
         T: Tabled + NameFilters + serde::Serialize + From<ObjectListItem>,
     >(
@@ -188,25 +210,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
 
         let objects = lister.list(resource_type, &args, &state);
 
-        if objects.is_empty() {
-            if args.namespace.is_some() {
-                println!(
-                    "No resources found for namespace {}",
-                    args.namespace.unwrap()
-                );
-            } else {
-                println!("No resources found");
-            }
-            return Ok(());
-        }
+        Self::print_objects(objects, &args);
 
-        let output_format = args.output.unwrap_or(OutputFormat::Name);
-
-        if args.id.is_some() && objects.len() == 1 {
-            output_format.print_one(&objects[0]);
-        } else {
-            output_format.print_many(&objects);
-        }
         Ok(())
     }
 
@@ -242,25 +247,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
 
         let objects = lister.list(resource_type, &args, &state);
 
-        if objects.is_empty() {
-            if args.namespace.is_some() {
-                println!(
-                    "No resources found for namespace {}",
-                    args.namespace.unwrap()
-                );
-            } else {
-                println!("No resources found");
-            }
-            return Ok(());
-        }
+        Self::print_objects(objects, &args);
 
-        let output_format = args.output.unwrap_or(OutputFormat::Name);
-
-        if args.id.is_some() && objects.len() == 1 {
-            output_format.print_one(&objects[0]);
-        } else {
-            output_format.print_many(&objects);
-        }
         Ok(())
     }
 
