@@ -395,8 +395,6 @@ impl SupportedResources {
                 let extra_labels = HashMap::from([]);
 
                 i.metadata = Self::fixup_metadata(i.metadata.clone(), Some(extra_labels))?;
-                // set name to be name.namespace
-                i.metadata.name = Some(format!("{}", metadata_name(i)));
                 resource
             }
             SupportedResources::Pod(ref mut p) => {
@@ -407,9 +405,6 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
                 p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
-                // set name to be name.namespace
-                p.metadata.name = Some(format!("{}", metadata_name(p)));
-                // go through
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {
