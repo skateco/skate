@@ -405,6 +405,9 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
                 p.metadata = Self::fixup_metadata(p.metadata.clone(), None)?;
+                // set name to be name.namespace
+                p.metadata.name = Some(format!("{}", metadata_name(p)));
+                // go through
                 resource
             }
             SupportedResources::Deployment(ref mut d) => {
@@ -487,13 +490,10 @@ impl SupportedResources {
                 }
 
                 s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
-                // set name to be name.namespace
-                s.metadata.name = Some(format!("{}", metadata_name(s)));
                 resource
             }
             SupportedResources::ClusterIssuer(ref mut issuer) => {
                 issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
-                issuer.metadata.name = Some(format!("{}", metadata_name(issuer)));
                 resource
             }
         };
