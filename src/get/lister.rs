@@ -13,7 +13,8 @@ pub(crate) trait NameFilters {
     }
     fn name(&self) -> String;
     fn namespace(&self) -> String;
-    fn filter_names(&self, name: &str, ns: &str) -> bool {
+
+    fn matches_ns_name(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
             true => "",
             false => ns,
@@ -81,7 +82,7 @@ impl<T: Tabled + NameFilters + From<ObjectListItem>> Lister<T> for ResourceListe
             .catalogue(None, &[resource_type.clone()])
             .into_iter()
             .filter(|r| r.object.resource_type == resource_type)
-            .filter(|r| r.object.filter_names(&id, &ns))
+            .filter(|r| r.object.matches_ns_name(&id, &ns))
             .map(|r| r.object.clone().into())
             .collect();
 

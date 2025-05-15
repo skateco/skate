@@ -117,7 +117,7 @@ impl Lister<PodListItem> for PodLister {
                     .as_ref()
                     .unwrap_or(&vec![])
                     .iter()
-                    .filter(|p| p.filter_names(&name, &namespace))
+                    .filter(|p| p.matches_ns_name(&name, &namespace))
                     .map(|pod| PodListItem::from(pod))
                     .collect();
                 Some(pods)

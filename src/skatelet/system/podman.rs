@@ -1,3 +1,4 @@
+use crate::skatelet::database::resource::ResourceType;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -82,6 +83,11 @@ pub struct PodmanPodInfo {
     pub containers: Option<Vec<PodmanContainerInfo>>,
 }
 
+pub enum PodParent {
+    DaemonSet,
+    Deployment,
+}
+
 impl PodmanPodInfo {
     pub fn name(&self) -> String {
         self.labels
@@ -106,6 +112,43 @@ impl PodmanPodInfo {
             .get("skate.io/daemonset")
             .cloned()
             .unwrap_or("".to_string())
+    }
+
+    pub fn matches_parent_ns_name(
+        &self,
+        parent: PodParent,
+        parent_name: &str,
+        parent_ns: &str,
+    ) -> bool {
+        let ns = match parent_ns.is_empty() {
+            true => "",
+            false => parent_ns,
+        };
+
+        if !ns.is_empty() && self.namespace() != ns {
+            return false;
+        }
+
+        if !parent_name.is_empty() {
+            match parent {
+                PodParent::DaemonSet => {
+                    if self.daemonset() != parent_name {
+                        return false;
+                    }
+                }
+                PodParent::Deployment => {
+                    if self.deployment() != parent_name {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if ns.is_empty() && parent_name.is_empty() && self.namespace() == "skate" {
+            return false;
+        }
+
+        true
     }
 }
 

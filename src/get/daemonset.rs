@@ -1,7 +1,7 @@
 use crate::get::lister::{Lister, NameFilters};
 use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
+use crate::skatelet::system::podman::{PodParent, PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
 use crate::util::age;
 use chrono::Local;
@@ -55,15 +55,12 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
         args: &GetObjectArgs,
         state: &ClusterState,
     ) -> Vec<DaemonsetListItem> {
+        let id = args.id.clone().unwrap_or_default();
+        let ns = args.namespace.clone().unwrap_or_default();
         let daemonsets = state.catalogue(None, &[ResourceType::DaemonSet]);
         let daemonsets = daemonsets
             .into_iter()
-            .filter(|d| {
-                d.object.filter_names(
-                    &args.id.clone().unwrap_or_default(),
-                    &args.namespace.clone().unwrap_or_default(),
-                )
-            })
+            .filter(|d| d.object.matches_ns_name(&id, &ns))
             .collect::<Vec<_>>();
 
         let pods = state
@@ -78,24 +75,13 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
                     .unwrap_or_default()
                     .into_iter()
                     .filter_map(|p| {
-                        let daemonset = p
-                            .labels
-                            .get("skate.io/daemonset")
-                            .unwrap_or(&"".to_string())
-                            .clone();
-                        if daemonset.is_empty() {
+                        let pod_daemonset = p.daemonset();
+                        if pod_daemonset.is_empty() {
                             return None;
                         }
 
-                        let res = {
-                            let pref = &p;
-                            pref.filter_names(
-                                &args.id.clone().unwrap_or_default(),
-                                &args.namespace.clone().unwrap_or_default(),
-                            )
-                        };
-                        if res {
-                            return Some((state.nodes.len(), daemonset, p));
+                        if p.matches_parent_ns_name(PodParent::Deployment, &id, &ns) {
+                            return Some((state.nodes.len(), pod_daemonset, p));
                         }
                         None
                     })

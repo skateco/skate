@@ -1,7 +1,7 @@
 use crate::get::lister::{Lister, NameFilters};
 use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
+use crate::skatelet::system::podman::{PodParent, PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
 use crate::util::{age, NamespacedName};
 use chrono::Local;
@@ -48,15 +48,12 @@ impl Lister<DeploymentListItem> for DeploymentLister {
         args: &GetObjectArgs,
         state: &ClusterState,
     ) -> Vec<DeploymentListItem> {
+        let id = args.id.clone().unwrap_or_default();
+        let ns = args.namespace.clone().unwrap_or_default();
         let deployments = state.catalogue(None, &[ResourceType::Deployment]);
         let deployments = deployments
             .into_iter()
-            .filter(|d| {
-                d.object.filter_names(
-                    &args.id.clone().unwrap_or_default(),
-                    &args.namespace.clone().unwrap_or_default(),
-                )
-            })
+            .filter(|d| d.object.matches_ns_name(&id, &ns))
             .collect::<Vec<_>>();
 
         let pods = state
@@ -71,30 +68,21 @@ impl Lister<DeploymentListItem> for DeploymentLister {
                     .unwrap_or_default()
                     .into_iter()
                     .filter_map(|p| {
-                        let deployment = p
-                            .labels
-                            .get("skate.io/deployment")
-                            .unwrap_or(&"".to_string())
-                            .clone();
-                        if deployment.is_empty() {
+                        let pod_deployment = p.deployment();
+                        if pod_deployment.is_empty() {
                             return None;
                         }
 
-                        let res = {
-                            let pref = &p;
-                            pref.filter_names(
-                                &args.id.clone().unwrap_or_default(),
-                                &args.namespace.clone().unwrap_or_default(),
-                            )
-                        };
-                        if res {
+                        if p.matches_parent_ns_name(PodParent::Deployment, &id, &ns) {
                             let pod_ns = p
                                 .labels
                                 .get("skate.io/namespace")
                                 .unwrap_or(&"default".to_string())
                                 .clone();
                             return Some((
-                                NamespacedName::from(format!("{}.{}", deployment, pod_ns).as_str()),
+                                NamespacedName::from(
+                                    format!("{}.{}", pod_deployment, pod_ns).as_str(),
+                                ),
                                 p,
                             ));
                         }
