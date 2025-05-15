@@ -11,7 +11,8 @@ mod service;
 use crate::config::Config;
 use crate::refresh::Refresh;
 use clap::{Args, Subcommand};
-use serde::Serialize;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 use strum_macros::EnumString;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
@@ -47,15 +48,49 @@ pub enum OutputFormat {
     Name,
 }
 
+struct GetListV1<'a, T: Serialize> {
+    pub items: &'a Vec<T>,
+}
+
+impl<'a, T: Serialize> Serialize for GetListV1<'a, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("GetListV1", 3)?;
+        state.serialize_field("apiVersion", "v1")?;
+        state.serialize_field("kind", "List")?;
+        state.serialize_field("items", &self.items)?;
+        state.end()
+    }
+}
+
 impl OutputFormat {
-    pub fn print<T: Tabled + Serialize>(self, objects: &Vec<T>) {
+    pub fn print_one<T: Tabled + Serialize>(self, object: &T) {
         match self {
             OutputFormat::Json => {
-                let json = serde_json::to_string_pretty(objects).unwrap();
+                let json = serde_json::to_string_pretty(object).unwrap();
                 println!("{}", json);
             }
             OutputFormat::Yaml => {
-                let yaml = serde_yaml::to_string(objects).unwrap();
+                let yaml = serde_yaml::to_string(object).unwrap();
+                println!("{}", yaml);
+            }
+            OutputFormat::Name => {
+                let mut table = Table::new(vec![object]);
+                table.with(Style::empty());
+                println!("{}", table);
+            }
+        }
+    }
+    pub fn print_many<T: Tabled + Serialize>(self, objects: &Vec<T>) {
+        match self {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(&GetListV1 { items: objects }).unwrap();
+                println!("{}", json);
+            }
+            OutputFormat::Yaml => {
+                let yaml = serde_yaml::to_string(&GetListV1 { items: objects }).unwrap();
                 println!("{}", yaml);
             }
             OutputFormat::Name => {
@@ -166,7 +201,12 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         }
 
         let output_format = args.output.unwrap_or(OutputFormat::Name);
-        output_format.print(&objects);
+
+        if args.id.is_some() && objects.len() == 1 {
+            output_format.print_one(&objects[0]);
+        } else {
+            output_format.print_many(&objects);
+        }
         Ok(())
     }
 
@@ -215,7 +255,12 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         }
 
         let output_format = args.output.unwrap_or(OutputFormat::Name);
-        output_format.print(&objects);
+
+        if args.id.is_some() && objects.len() == 1 {
+            output_format.print_one(&objects[0]);
+        } else {
+            output_format.print_many(&objects);
+        }
         Ok(())
     }
 
