@@ -81,7 +81,11 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
                         }
 
                         if p.matches_parent_ns_name(PodParent::Deployment, &id, &ns) {
-                            return Some((state.nodes.len(), pod_daemonset, p));
+                            return Some((
+                                state.nodes.len(),
+                                format!("{}.{}", pod_daemonset, p.namespace()),
+                                p,
+                            ));
                         }
                         None
                     })

@@ -40,7 +40,7 @@ impl NameFilters for &ObjectListItem {
         self.name.to_string()
     }
     fn name(&self) -> String {
-        self.name.to_string()
+        self.name.name.clone()
     }
 
     fn namespace(&self) -> String {
