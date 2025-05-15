@@ -163,6 +163,8 @@ async fn e2e_test() {
     test_deployment().await.expect("failed to test deployment");
     test_service().await.expect("failed to test service");
     test_cronjob().await.expect("failed to test cronjob");
+    test_secret().await.expect("failed to test secret");
+    test_ingress().await.expect("failed to test ingresses");
 }
 
 async fn test_cluster_creation() -> Result<(), anyhow::Error> {
@@ -438,6 +440,70 @@ async fn test_cronjob() -> Result<(), anyhow::Error> {
         ],
     )
     .await?;
+
+    Ok(())
+}
+
+async fn test_secret() -> Result<(), anyhow::Error> {
+    let root = env::var("CARGO_MANIFEST_DIR")?;
+
+    skate_stdout(
+        "apply",
+        &["-f", &format!("{root}/tests/manifests/test-secret.yaml")],
+    )
+    .await?;
+
+    let output = skate("get", &["secrets", "-n", "test-secret"]).await?;
+
+    println!("{}", output.0);
+
+    let stdout = output.0;
+
+    let lines = stdout.lines().skip(1);
+
+    assert_eq!(lines.clone().count(), 1);
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 4 {
+            assert_eq!(parts[0], "test-secret");
+            assert!(parts[1].starts_with("sssh"));
+            assert!(parts[2].starts_with("2"));
+        }
+    }
+
+    Ok(())
+}
+
+async fn test_ingress() -> Result<(), anyhow::Error> {
+    let root = env::var("CARGO_MANIFEST_DIR")?;
+
+    skate_stdout(
+        "apply",
+        &["-f", &format!("{root}/tests/manifests/test-ingress.yaml")],
+    )
+    .await?;
+
+    let output = skate("get", &["ingress", "-n", "test-ingress"]).await?;
+
+    println!("{}", output.0);
+
+    let stdout = output.0;
+
+    let lines = stdout.lines().skip(1);
+
+    assert_eq!(lines.clone().count(), 1);
+
+    for line in lines {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 7 {
+            assert_eq!(parts[0], "test-ingress");
+            assert!(parts[1].starts_with("external"));
+            assert!(parts[2].starts_with("external"));
+            assert!(parts[3].starts_with("nginx.example.com"));
+            assert!(parts[5].starts_with("80,443"));
+        }
+    }
 
     Ok(())
 }

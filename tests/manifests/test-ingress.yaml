@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: external
+  namespace: test-namespace
+spec:
+  rules:
+  - host: nginx.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx.test-deployment
+            port:
+              number: 80
