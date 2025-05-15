@@ -231,6 +231,12 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
         })
         .collect();
 
+    let resources: Vec<_> = resources
+        .into_iter()
+        .filter(|item: &ObjectListItem| item.resource_type != ResourceType::Secret)
+        .chain(secret_info.into_iter())
+        .collect();
+
     let internal_ip_addr = internal_ip(execer).unwrap_or_else(|e| {
         eprintln!("failed to get interface ipv4 addresses: {}", e);
         None
