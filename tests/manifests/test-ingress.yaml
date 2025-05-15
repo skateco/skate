@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: external
-  namespace: test-namespace
+  namespace: test-ingress
 spec:
   rules:
   - host: nginx.example.com
