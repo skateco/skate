@@ -280,6 +280,8 @@ async fn propagate_static_resources(
             ResourceType::Service,
             ResourceType::Secret,
         ],
+        None,
+        None,
     );
 
     let all_manifests: Result<Vec<_>, _> = catalogue

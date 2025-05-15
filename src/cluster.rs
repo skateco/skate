@@ -77,7 +77,7 @@ impl<D: ClusterDeps> Cluster<D> {
         state: &ClusterState,
         dry_run: bool,
     ) -> Result<(), Box<dyn Error>> {
-        let catalogue = state.catalogue(None, &[]);
+        let catalogue = state.catalogue(None, &[], None, None);
 
         let all_manifests: Result<Vec<SupportedResources>, _> = catalogue
             .iter()

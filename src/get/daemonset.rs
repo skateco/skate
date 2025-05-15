@@ -57,11 +57,7 @@ impl Lister<DaemonsetListItem> for DaemonsetLister {
     ) -> Vec<DaemonsetListItem> {
         let id = args.id.clone().unwrap_or_default();
         let ns = args.namespace.clone().unwrap_or_default();
-        let daemonsets = state.catalogue(None, &[ResourceType::DaemonSet]);
-        let daemonsets = daemonsets
-            .into_iter()
-            .filter(|d| d.object.matches_ns_name(&id, &ns))
-            .collect::<Vec<_>>();
+        let daemonsets = state.catalogue(None, &[ResourceType::DaemonSet], Some(&ns), Some(&id));
 
         let pods = state
             .nodes

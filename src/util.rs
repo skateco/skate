@@ -151,22 +151,45 @@ impl NamespacedName {
     }
 }
 
+pub trait SkateLabels {
+    fn namespaced_name(&self) -> NamespacedName;
+    fn hash(&self) -> String;
+}
+
+impl SkateLabels for ObjectMeta {
+    fn namespaced_name(&self) -> NamespacedName {
+        let name = self.labels.as_ref().and_then(|l| l.get("skate.io/name"));
+        let ns = self
+            .labels
+            .as_ref()
+            .and_then(|l| l.get("skate.io/namespace"));
+
+        if name.is_none() {
+            panic!("metadata missing skate.io/name label")
+        }
+
+        if ns.is_none() {
+            panic!("metadata missing skate.io/namespace label")
+        }
+
+        NamespacedName::new(name.unwrap(), ns.unwrap())
+    }
+
+    fn hash(&self) -> String {
+        let hash = self
+            .labels
+            .as_ref()
+            .and_then(|l| l.get("skate.io/hash"))
+            .unwrap_or(&"".to_string())
+            .to_string();
+        hash
+    }
+}
+
 // returns name, namespace
 pub fn metadata_name(obj: &impl Metadata<Ty = ObjectMeta>) -> NamespacedName {
     let m = obj.metadata();
-
-    let name = m.labels.as_ref().and_then(|l| l.get("skate.io/name"));
-    let ns = m.labels.as_ref().and_then(|l| l.get("skate.io/namespace"));
-
-    if name.is_none() {
-        panic!("metadata missing skate.io/name label")
-    }
-
-    if ns.is_none() {
-        panic!("metadata missing skate.io/namespace label")
-    }
-
-    NamespacedName::new(name.unwrap(), ns.unwrap())
+    m.namespaced_name()
 }
 
 // hash_k8s_resource hashes a k8s resource and adds the hash to the labels, also returning it

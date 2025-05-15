@@ -50,11 +50,7 @@ impl Lister<DeploymentListItem> for DeploymentLister {
     ) -> Vec<DeploymentListItem> {
         let id = args.id.clone().unwrap_or_default();
         let ns = args.namespace.clone().unwrap_or_default();
-        let deployments = state.catalogue(None, &[ResourceType::Deployment]);
-        let deployments = deployments
-            .into_iter()
-            .filter(|d| d.object.matches_ns_name(&id, &ns))
-            .collect::<Vec<_>>();
+        let deployments = state.catalogue(None, &[ResourceType::Deployment], Some(&ns), Some(&id));
 
         let pods = state
             .nodes

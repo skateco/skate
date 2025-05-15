@@ -1,5 +1,6 @@
 use crate::config::{cache_dir, Config};
 use crate::filestore::ObjectListItem;
+use crate::get::lister::NameFilters;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
@@ -497,35 +498,6 @@ impl ClusterState {
         })
     }
 
-    pub fn locate_objects(
-        &self,
-        node: Option<&str>,
-        selector: impl Fn(&SystemInfo) -> Option<Vec<ObjectListItem>>,
-        name: Option<&str>,
-        namespace: Option<&str>,
-    ) -> Vec<(ObjectListItem, &NodeState)> {
-        self.nodes
-            .iter()
-            .filter(|n| node.is_none() || n.node_name == node.unwrap())
-            .filter_map(|n| {
-                n.host_info.as_ref().and_then(|h| {
-                    h.system_info.clone().and_then(|i| {
-                        selector(&i).and_then(|p| {
-                            p.clone()
-                                .into_iter()
-                                .find(|p| {
-                                    (name.is_none() || p.name.name == name.unwrap())
-                                        && (namespace.is_none()
-                                            || p.name.namespace == namespace.unwrap())
-                                })
-                                .map(|o| (o, n))
-                        })
-                    })
-                })
-            })
-            .collect()
-    }
-
     pub fn locate_deployment_pods(
         &self,
         name: &str,
@@ -566,6 +538,8 @@ impl ClusterState {
         &self,
         filter_node: Option<&str>,
         filter_types: &[ResourceType],
+        namespace: Option<&str>,
+        name: Option<&str>,
     ) -> Vec<CatalogueItem> {
         self.nodes
             .iter()
@@ -574,12 +548,14 @@ impl ClusterState {
                 n.host_info.as_ref().and_then(|hi| {
                     hi.system_info
                         .as_ref()
-                        .map(|si| extract_catalog(&n.node_name, si, filter_types))
+                        .map(|si| extract_catalog(&n, si, filter_types, namespace, name))
                 })
             })
             .flatten()
             // sort by time descending
             .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
+            // sort by generation descending
+            .sorted_by(|a, b| a.object.generation.cmp(&b.object.generation))
             // will ignore duplicates,
             .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name))
             .collect()
@@ -603,19 +579,22 @@ fn extract_mut_catalog<'a>(
         .collect()
 }
 
-fn extract_catalog<'a>(
-    n: &str,
+fn extract_catalog<'a, 'b>(
+    n: &'b NodeState,
     si: &'a SystemInfo,
     filter_types: &[ResourceType],
-) -> Vec<CatalogueItem<'a>> {
+    namespace: Option<&str>,
+    name: Option<&str>,
+) -> Vec<CatalogueItem<'a, 'b>> {
     let all_types = filter_types.is_empty();
 
     (&si.resources)
         .into_iter()
         .filter(|c| all_types || filter_types.contains(&c.resource_type))
+        .filter(|c| c.matches_ns_name(name.unwrap_or_default(), namespace.unwrap_or_default()))
         .map(|o| CatalogueItem {
             object: o,
-            node: n.to_string(),
+            node: &n,
         })
         .collect()
 }
@@ -627,7 +606,7 @@ pub struct MutCatalogueItem<'a> {
     pub node: String,
 }
 
-pub struct CatalogueItem<'a> {
+pub struct CatalogueItem<'a, 'b> {
     pub object: &'a ObjectListItem,
-    pub node: String,
+    pub node: &'b NodeState,
 }

@@ -12,6 +12,7 @@ pub struct Resource {
     pub resource_type: ResourceType,
     pub manifest: serde_json::Value,
     pub hash: String,
+    pub generation: i64,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
 }
@@ -25,6 +26,7 @@ impl Default for Resource {
             resource_type: ResourceType::default(),
             manifest: serde_json::json!({}),
             hash: "".to_string(),
+            generation: 1,
             created_at: Local::now(),
             updated_at: Local::now(),
         }
@@ -46,12 +48,14 @@ pub async fn upsert_resource(
                 namespace,
                 resource_type,
                 manifest,
-                hash
-            ) VALUES ($1, $2, $3, $4, $5, $6)
+                hash,
+                generation
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (resource_type, name, namespace)
             DO UPDATE SET 
                 manifest = $5,
                 hash = $6,
+                generation = $7,
                 updated_at = CURRENT_TIMESTAMP
         "#,
         str_id,
@@ -60,6 +64,7 @@ pub async fn upsert_resource(
         resource.resource_type,
         resource.manifest,
         resource.hash,
+        resource.generation,
     )
     .execute(db)
     .await?;
@@ -97,7 +102,7 @@ pub async fn get_resource(
 ) -> super::Result<Option<Resource>> {
     let resource = sqlx::query_as!(
         Resource,
-        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>", generation
             FROM resources
             WHERE resource_type = $1
             AND name = $2
@@ -118,7 +123,7 @@ pub async fn list_resources_by_type(
 ) -> super::Result<Vec<Resource>> {
     let resources = sqlx::query_as!(
         Resource,
-        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>", generation
             FROM resources
             WHERE resource_type = $1
         "#,
@@ -133,7 +138,7 @@ pub async fn list_resources_by_type(
 pub async fn list_resources(db: impl SqliteExecutor<'_>) -> super::Result<Vec<Resource>> {
     let resources = sqlx::query_as!(
         Resource,
-        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>"
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>", generation
             FROM resources
         "#,
     )

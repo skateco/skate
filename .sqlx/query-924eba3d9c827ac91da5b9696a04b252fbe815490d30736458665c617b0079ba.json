@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": " SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\"\n            FROM resources\n            WHERE resource_type = $1\n            AND name = $2\n            AND namespace = $3\n        ",
+  "query": " SELECT id as \"id!: String\", name as \"name!: String\", namespace as \"namespace!: String\", resource_type, manifest as \"manifest!: serde_json::Value\",  hash as \"hash!: String\", created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\", generation\n            FROM resources\n            WHERE resource_type = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -42,10 +42,15 @@
         "name": "updated_at!: DateTime<Local>",
         "ordinal": 7,
         "type_info": "Datetime"
+      },
+      {
+        "name": "generation",
+        "ordinal": 8,
+        "type_info": "Integer"
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 1
     },
     "nullable": [
       true,
@@ -55,8 +60,9 @@
       false,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
-  "hash": "453b9dafb2001d2fa14692e19e7f970e5667e7244da2b454407f5acabd29c2a9"
+  "hash": "924eba3d9c827ac91da5b9696a04b252fbe815490d30736458665c617b0079ba"
 }

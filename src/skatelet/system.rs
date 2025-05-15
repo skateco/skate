@@ -224,6 +224,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
                 name: NamespacedName::from(s.spec.name.as_str()),
                 manifest_hash: hash.unwrap_or("".to_string()),
                 manifest: Some(yaml),
+                generation: manifest.metadata.generation.unwrap_or_default(),
                 created_at: s.created_at,
                 updated_at: s.updated_at,
             })

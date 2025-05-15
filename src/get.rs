@@ -2,7 +2,7 @@ mod cronjob;
 mod daemonset;
 mod deployment;
 mod ingress;
-mod lister;
+pub(crate) mod lister;
 mod node;
 mod pod;
 mod secret;
