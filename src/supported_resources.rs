@@ -1,4 +1,5 @@
 use crate::filestore::ObjectListItem;
+use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::NodeState;
@@ -34,6 +35,21 @@ pub enum SupportedResources {
     Service(Service),
     #[strum(serialize = "ClusterIssuer")]
     ClusterIssuer(ClusterIssuer),
+}
+
+impl Into<ResourceType> for &SupportedResources {
+    fn into(self) -> ResourceType {
+        match self {
+            SupportedResources::Pod(_) => ResourceType::Pod,
+            SupportedResources::Deployment(_) => ResourceType::Deployment,
+            SupportedResources::DaemonSet(_) => ResourceType::DaemonSet,
+            SupportedResources::Ingress(_) => ResourceType::Ingress,
+            SupportedResources::CronJob(_) => ResourceType::CronJob,
+            SupportedResources::Secret(_) => ResourceType::Secret,
+            SupportedResources::Service(_) => ResourceType::Service,
+            SupportedResources::ClusterIssuer(_) => ResourceType::ClusterIssuer,
+        }
+    }
 }
 
 impl TryFrom<&ObjectListItem> for SupportedResources {
@@ -379,8 +395,6 @@ impl SupportedResources {
                 let extra_labels = HashMap::from([]);
 
                 i.metadata = Self::fixup_metadata(i.metadata.clone(), Some(extra_labels))?;
-                // set name to be name.namespace
-                i.metadata.name = Some(format!("{}", metadata_name(i)));
                 resource
             }
             SupportedResources::Pod(ref mut p) => {
@@ -476,13 +490,10 @@ impl SupportedResources {
                 }
 
                 s.metadata = Self::fixup_metadata(s.metadata.clone(), None)?;
-                // set name to be name.namespace
-                s.metadata.name = Some(format!("{}", metadata_name(s)));
                 resource
             }
             SupportedResources::ClusterIssuer(ref mut issuer) => {
                 issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
-                issuer.metadata.name = Some(format!("{}", metadata_name(issuer)));
                 resource
             }
         };

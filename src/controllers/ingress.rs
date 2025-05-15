@@ -32,8 +32,6 @@ impl IngressController {
     }
 
     pub async fn apply(&self, ingress: &Ingress) -> Result<(), Box<dyn Error>> {
-        let ingress_string = serde_yaml::to_string(ingress)
-            .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
         let fq_name = metadata_name(ingress);
         let name = fq_name.to_string();
 

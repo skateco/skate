@@ -82,6 +82,11 @@ pub struct PodmanPodInfo {
     pub containers: Option<Vec<PodmanContainerInfo>>,
 }
 
+pub enum PodParent {
+    DaemonSet,
+    Deployment,
+}
+
 impl PodmanPodInfo {
     pub fn name(&self) -> String {
         self.labels
@@ -106,6 +111,43 @@ impl PodmanPodInfo {
             .get("skate.io/daemonset")
             .cloned()
             .unwrap_or("".to_string())
+    }
+
+    pub fn matches_parent_ns_name(
+        &self,
+        parent: PodParent,
+        parent_name: &str,
+        parent_ns: &str,
+    ) -> bool {
+        let ns = match parent_ns.is_empty() {
+            true => "",
+            false => parent_ns,
+        };
+
+        if !ns.is_empty() && self.namespace() != ns {
+            return false;
+        }
+
+        if !parent_name.is_empty() {
+            match parent {
+                PodParent::DaemonSet => {
+                    if self.daemonset() != parent_name {
+                        return false;
+                    }
+                }
+                PodParent::Deployment => {
+                    if self.deployment() != parent_name {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        if ns.is_empty() && parent_name.is_empty() && self.namespace() == "skate" {
+            return false;
+        }
+
+        true
     }
 }
 
@@ -132,8 +174,8 @@ impl From<Pod> for PodmanPodInfo {
     }
 }
 
-impl From<PodmanPodInfo> for Pod {
-    fn from(val: PodmanPodInfo) -> Self {
+impl From<&PodmanPodInfo> for Pod {
+    fn from(val: &PodmanPodInfo) -> Self {
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
@@ -166,7 +208,7 @@ impl From<PodmanPodInfo> for Pod {
                 owner_references: None,
                 resource_version: None,
                 self_link: None,
-                uid: Some(val.id),
+                uid: Some(val.id.clone()),
             },
             spec: Some(PodSpec {
                 active_deadline_seconds: None,

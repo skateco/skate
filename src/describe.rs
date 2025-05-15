@@ -68,7 +68,7 @@ impl Describer<NodeState> for NodeDescriber {
     }
 
     fn print(&self, item: NodeState) {
-        let k8s_node: K8sNode = item.into();
+        let k8s_node: K8sNode = (&item).into();
         println!("{}", serde_yaml::to_string(&k8s_node).unwrap());
     }
 }

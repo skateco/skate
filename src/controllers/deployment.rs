@@ -42,6 +42,7 @@ impl DeploymentController {
             ..Default::default()
         };
         upsert_resource(&self.db, &object).await?;
+
         Ok(())
     }
 

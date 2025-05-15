@@ -3,11 +3,9 @@ use crate::filestore::ObjectListItem;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
-use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{
-    Node as K8sNode, NodeAddress, NodeSpec, NodeStatus as K8sNodeStatus, Secret, Service,
+    Node as K8sNode, NodeAddress, NodeSpec, NodeStatus as K8sNodeStatus,
 };
-use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
@@ -21,7 +19,6 @@ use tabled::Tabled;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
-use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
@@ -46,8 +43,8 @@ pub struct NodeState {
     pub host_info: Option<HostInfo>,
 }
 
-impl From<NodeState> for K8sNode {
-    fn from(val: NodeState) -> Self {
+impl From<&NodeState> for K8sNode {
+    fn from(val: &NodeState) -> Self {
         let mut metadata = ObjectMeta::default();
         let mut spec = NodeSpec::default();
         let mut status = K8sNodeStatus::default();
@@ -144,13 +141,6 @@ impl NodeState {
             SupportedResources::Pod(pod) => {
                 self.reconcile_pod_creation(&PodmanPodInfo::from((*pod).clone()))
             }
-            SupportedResources::Ingress(ingress) => self.reconcile_ingress_creation(ingress),
-            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_creation(cronjob),
-            SupportedResources::Secret(secret) => self.reconcile_secret_creation(secret),
-            SupportedResources::Service(service) => self.reconcile_service_creation(service),
-            SupportedResources::ClusterIssuer(issuer) => {
-                self.reconcile_cluster_issuer_creation(issuer)
-            }
             // This is a no-op since the only thing that happens when during the Deployment's ScheduledOperation is that we write the manifest to file for future reference
             // The state change is all done by the Pods' scheduled operations
             SupportedResources::Deployment(_) => {
@@ -161,6 +151,7 @@ impl NodeState {
                 /* nothing to do */
                 Ok(ReconciledResult::default())
             }
+            _ => self.reconcile_resource_creation(object),
         }
     }
 
@@ -172,166 +163,47 @@ impl NodeState {
             SupportedResources::Pod(pod) => {
                 self.reconcile_pod_deletion(&PodmanPodInfo::from((*pod).clone()))
             }
-            SupportedResources::Ingress(ingress) => self.reconcile_ingress_deletion(ingress),
-            SupportedResources::CronJob(cronjob) => self.reconcile_cronjob_deletion(cronjob),
-            SupportedResources::Secret(secret) => self.reconcile_secret_deletion(secret),
-            SupportedResources::Service(service) => self.reconcile_service_deletion(service),
-            SupportedResources::ClusterIssuer(issuer) => {
-                self.reconcile_cluster_issuer_deletion(issuer)
-            }
             SupportedResources::Deployment(deployment) => {
                 self.reconcile_deployment_deletion(deployment)
             }
             SupportedResources::DaemonSet(daemonset) => {
                 self.reconcile_daemonset_deletion(daemonset)
             }
+            _ => self.reconcile_resource_deletion(object),
         }
     }
 
-    fn reconcile_cluster_issuer_creation(
+    fn reconcile_resource_deletion(
         &mut self,
-        issuer: &ClusterIssuer,
+        object: &SupportedResources,
     ) -> Result<ReconciledResult, Box<dyn Error>> {
         self.host_info.as_mut().and_then(|hi| {
             hi.system_info.as_mut().and_then(|si| {
-                si.cluster_issuers
-                    .as_mut()
-                    .map(|i| i.push(ObjectListItem::from(issuer)))
+                Some(
+                    si.resources
+                        .iter()
+                        .filter(|r| r.resource_type == object.into())
+                        .collect::<Vec<_>>(),
+                )
+            })
+        });
+        Ok(ReconciledResult::removed())
+    }
+
+    fn reconcile_resource_creation(
+        &mut self,
+        object: &SupportedResources,
+    ) -> Result<ReconciledResult, Box<dyn Error>> {
+        self.host_info.as_mut().and_then(|hi| {
+            hi.system_info.as_mut().and_then(|si| {
+                if let Some(resource) = object.try_into().ok() {
+                    si.resources.push(resource)
+                }
+                Some(si)
             })
         });
 
         Ok(ReconciledResult::added())
-    }
-    fn reconcile_cluster_issuer_deletion(
-        &mut self,
-        issuer: &ClusterIssuer,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cluster_issuers
-                    .as_mut()
-                    .map(|i| i.retain(|i| i.name != metadata_name(issuer)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-    fn reconcile_service_creation(
-        &mut self,
-        service: &Service,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.services
-                    .as_mut()
-                    .map(|i| i.push(ObjectListItem::from(service)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_service_deletion(
-        &mut self,
-        service: &Service,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.services
-                    .as_mut()
-                    .map(|i| i.retain(|i| i.name != metadata_name(service)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_secret_creation(
-        &mut self,
-        secret: &Secret,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.secrets
-                    .as_mut()
-                    .map(|i| i.push(ObjectListItem::from(secret)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_secret_deletion(
-        &mut self,
-        secret: &Secret,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.secrets
-                    .as_mut()
-                    .map(|i| i.retain(|i| i.name != metadata_name(secret)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_cronjob_creation(
-        &mut self,
-        cronjob: &CronJob,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cronjobs
-                    .as_mut()
-                    .map(|i| i.push(ObjectListItem::from(cronjob)))
-            })
-        });
-
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_cronjob_deletion(
-        &mut self,
-        cronjob: &CronJob,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.cronjobs
-                    .as_mut()
-                    .map(|i| i.retain(|c| c.name != metadata_name(cronjob)))
-            })
-        });
-
-        Ok(ReconciledResult::removed())
-    }
-
-    fn reconcile_ingress_creation(
-        &mut self,
-        ingress: &Ingress,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.ingresses
-                    .as_mut()
-                    .map(|i| i.push(ObjectListItem::from(ingress)))
-            })
-        });
-        Ok(ReconciledResult::added())
-    }
-
-    fn reconcile_ingress_deletion(
-        &mut self,
-        ingress: &Ingress,
-    ) -> Result<ReconciledResult, Box<dyn Error>> {
-        self.host_info.as_mut().and_then(|hi| {
-            hi.system_info.as_mut().and_then(|si| {
-                si.ingresses
-                    .as_mut()
-                    .map(|items| items.retain(|existing| existing.name != metadata_name(ingress)))
-            })
-        });
-        Ok(ReconciledResult::removed())
     }
 
     fn reconcile_pod_creation(
@@ -714,23 +586,6 @@ impl ClusterState {
     }
 }
 
-macro_rules! extract_mappings {
-    ($si: ident, $suffixFunc: ident) => {
-        vec![
-            (ResourceType::DaemonSet, $si.daemonsets.$suffixFunc()),
-            (ResourceType::Deployment, $si.deployments.$suffixFunc()),
-            (ResourceType::CronJob, $si.cronjobs.$suffixFunc()),
-            (ResourceType::Ingress, $si.ingresses.$suffixFunc()),
-            (ResourceType::Service, $si.services.$suffixFunc()),
-            (ResourceType::Secret, $si.secrets.$suffixFunc()),
-            (
-                ResourceType::ClusterIssuer,
-                $si.cluster_issuers.$suffixFunc(),
-            ),
-        ]
-    };
-}
-
 fn extract_mut_catalog<'a>(
     n: &str,
     si: &'a mut SystemInfo,
@@ -738,22 +593,12 @@ fn extract_mut_catalog<'a>(
 ) -> Vec<MutCatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = extract_mappings!(si, as_mut);
-
-    mapping
-        .into_iter()
-        .filter_map(|c| match all_types || filter_types.contains(&c.0) {
-            true => Some(c.1),
-            false => None,
-        })
-        .flatten()
-        .flat_map(|list| {
-            list.iter_mut()
-                .map(|o| MutCatalogueItem {
-                    object: o,
-                    node: n.to_string(),
-                })
-                .collect_vec()
+    si.resources
+        .iter_mut()
+        .filter(|c| all_types || filter_types.contains(&c.resource_type))
+        .map(|o| MutCatalogueItem {
+            object: o,
+            node: n.to_string(),
         })
         .collect()
 }
@@ -765,22 +610,12 @@ fn extract_catalog<'a>(
 ) -> Vec<CatalogueItem<'a>> {
     let all_types = filter_types.is_empty();
 
-    let mapping = extract_mappings!(si, as_ref);
-
-    mapping
+    (&si.resources)
         .into_iter()
-        .filter_map(|c| match all_types || filter_types.contains(&c.0) {
-            true => Some(c.1),
-            false => None,
-        })
-        .flatten()
-        .flat_map(|list| {
-            list.iter()
-                .map(|o| CatalogueItem {
-                    object: o,
-                    node: n.to_string(),
-                })
-                .collect_vec()
+        .filter(|c| all_types || filter_types.contains(&c.resource_type))
+        .map(|o| CatalogueItem {
+            object: o,
+            node: n.to_string(),
         })
         .collect()
 }

@@ -1,6 +1,7 @@
 use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
+use crate::supported_resources::SupportedResources;
 use crate::util::{metadata_name, NamespacedName};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
@@ -135,6 +136,50 @@ impl TryFrom<DirEntry> for ObjectListItem {
             path.to_str()
                 .ok_or(anyhow!("failed to convert file name to string"))?,
         )
+    }
+}
+
+impl TryFrom<&SupportedResources> for ObjectListItem {
+    type Error = Box<dyn Error>;
+    fn try_from(resource: &SupportedResources) -> Result<ObjectListItem, Self::Error> {
+        let meta = match resource {
+            SupportedResources::Pod(p) => &p.metadata,
+            SupportedResources::Deployment(d) => &d.metadata,
+            SupportedResources::DaemonSet(ds) => &ds.metadata,
+            SupportedResources::Ingress(i) => &i.metadata,
+            SupportedResources::CronJob(c) => &c.metadata,
+            SupportedResources::Secret(s) => &s.metadata,
+            SupportedResources::Service(s) => &s.metadata,
+            SupportedResources::ClusterIssuer(i) => &i.metadata,
+        };
+
+        let name = meta
+            .labels
+            .as_ref()
+            .and_then(|l| l.get("skate.io/name"))
+            .ok_or("no name")?;
+        let ns = meta
+            .labels
+            .as_ref()
+            .and_then(|l| l.get("skate.io/namespace"))
+            .ok_or("no namespace")?;
+        let hash = meta
+            .labels
+            .as_ref()
+            .and_then(|l| l.get("skate.io/hash"))
+            .ok_or("no hash")?;
+
+        Ok(ObjectListItem {
+            resource_type: resource.into(),
+            name: NamespacedName {
+                name: name.clone(),
+                namespace: ns.clone(),
+            },
+            manifest_hash: hash.clone(),
+            manifest: Some(serde_yaml::to_value(resource)?),
+            updated_at: Default::default(),
+            created_at: Default::default(),
+        })
     }
 }
 

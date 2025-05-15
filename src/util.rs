@@ -334,6 +334,7 @@ pub fn split_container_image(image: &str) -> (String, ImageTagFormat) {
 }
 
 pub trait VecInto<D> {
+    #[allow(unused)]
     fn vec_into(self) -> Vec<D>;
 }
 

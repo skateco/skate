@@ -1,8 +1,8 @@
 use crate::filestore::ObjectListItem;
 use crate::get::GetObjectArgs;
-use crate::skatelet::SystemInfo;
+use crate::skatelet::database::resource::ResourceType;
 use crate::state::state::ClusterState;
-use itertools::Itertools;
+use std::marker::PhantomData;
 use tabled::Tabled;
 
 pub(crate) trait NameFilters {
@@ -11,7 +11,8 @@ pub(crate) trait NameFilters {
     }
     fn name(&self) -> String;
     fn namespace(&self) -> String;
-    fn filter_names(&self, name: &str, ns: &str) -> bool {
+
+    fn matches_ns_name(&self, name: &str, ns: &str) -> bool {
         let ns = match ns.is_empty() {
             true => "",
             false => ns,
@@ -20,9 +21,11 @@ pub(crate) trait NameFilters {
         if !ns.is_empty() && self.namespace() != ns {
             return false;
         }
-        if !name.is_empty() && (self.id() != name || self.name() != name) {
+
+        if !name.is_empty() && (self.id() != name && self.name() != name) {
             return false;
         }
+
         if ns.is_empty() && name.is_empty() && self.namespace() == "skate" {
             return false;
         }
@@ -35,7 +38,7 @@ impl NameFilters for &ObjectListItem {
         self.name.to_string()
     }
     fn name(&self) -> String {
-        self.name.to_string()
+        self.name.name.clone()
     }
 
     fn namespace(&self) -> String {
@@ -44,33 +47,41 @@ impl NameFilters for &ObjectListItem {
 }
 
 pub(crate) trait Lister<T> {
-    // selects data from each node
-    fn selector(&self, _si: &SystemInfo, _ns: &str, _id: &str) -> Vec<T>
+    fn list(
+        &self,
+        resource_type: ResourceType,
+        filters: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<T>
     where
-        T: Tabled + NameFilters,
-    {
-        unimplemented!("needs to be implemented if `list` is not")
-    }
+        T: Tabled + NameFilters;
+}
 
-    // the outer list function
-    fn list(&self, filters: &GetObjectArgs, state: &ClusterState) -> Vec<T>
-    where
-        T: Tabled + NameFilters,
-    {
+pub struct ResourceLister<T: Tabled + NameFilters + From<ObjectListItem>> {
+    inner: PhantomData<T>,
+}
+
+impl<T: Tabled + NameFilters + From<ObjectListItem>> ResourceLister<T> {
+    pub fn new() -> Self {
+        ResourceLister { inner: PhantomData }
+    }
+}
+impl<T: Tabled + NameFilters + From<ObjectListItem>> Lister<T> for ResourceLister<T> {
+    fn list(
+        &self,
+        resource_type: ResourceType,
+        filters: &GetObjectArgs,
+        state: &ClusterState,
+    ) -> Vec<T> {
         let ns = filters.namespace.clone().unwrap_or_default();
         let id = filters.id.clone().unwrap_or("".to_string());
 
         let resources = state
-            .nodes
-            .iter()
-            .flat_map(|node| match &node.host_info {
-                Some(hi) => match &hi.system_info {
-                    Some(si) => self.selector(si, &ns, &id),
-                    _ => vec![],
-                },
-                None => vec![],
-            })
-            .unique_by(|i| format!("{}.{}", i.name(), i.namespace()))
+            .catalogue(None, &[resource_type.clone()])
+            .into_iter()
+            .filter(|r| r.object.resource_type == resource_type)
+            .filter(|r| r.object.matches_ns_name(&id, &ns))
+            .map(|r| r.object.clone().into())
             .collect();
 
         resources

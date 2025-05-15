@@ -3,7 +3,6 @@ use std::error::Error;
 use std::io::Write;
 use std::process;
 use std::process::{Child, Stdio};
-use tokio::io::AsyncWriteExt;
 
 pub trait ShellExec {
     fn exec(

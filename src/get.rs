@@ -11,6 +11,9 @@ mod service;
 use crate::config::Config;
 use crate::refresh::Refresh;
 use clap::{Args, Subcommand};
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
+use strum_macros::EnumString;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
@@ -18,21 +21,85 @@ use crate::skate::ConfigFileArgs;
 
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
-use crate::get::cronjob::CronjobsLister;
+use crate::filestore::ObjectListItem;
+use crate::get::cronjob::CronListItem;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
-use crate::get::ingress::IngressLister;
-use crate::get::lister::{Lister, NameFilters};
+use crate::get::ingress::IngressListItem;
+use crate::get::lister::{Lister, NameFilters, ResourceLister};
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
-use crate::get::secret::SecretLister;
-use crate::get::service::ServiceLister;
+use crate::get::secret::SecretListItem;
+use crate::get::service::ServiceListItem;
 use crate::refresh;
+use crate::skatelet::database::resource::ResourceType;
 
 #[derive(Debug, Clone, Args)]
 pub struct GetArgs {
     #[command(subcommand)]
     commands: GetCommands,
+}
+
+#[derive(Clone, Debug, EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum OutputFormat {
+    Json,
+    Yaml,
+    Name,
+}
+
+struct GetListV1<'a, T: Serialize> {
+    pub items: &'a Vec<T>,
+}
+
+impl<'a, T: Serialize> Serialize for GetListV1<'a, T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("GetListV1", 3)?;
+        state.serialize_field("apiVersion", "v1")?;
+        state.serialize_field("kind", "List")?;
+        state.serialize_field("items", &self.items)?;
+        state.end()
+    }
+}
+
+impl OutputFormat {
+    pub fn print_one<T: Tabled + Serialize>(self, object: &T) {
+        match self {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(object).unwrap();
+                println!("{}", json);
+            }
+            OutputFormat::Yaml => {
+                let yaml = serde_yaml::to_string(object).unwrap();
+                println!("{}", yaml);
+            }
+            OutputFormat::Name => {
+                let mut table = Table::new(vec![object]);
+                table.with(Style::empty());
+                println!("{}", table);
+            }
+        }
+    }
+    pub fn print_many<T: Tabled + Serialize>(self, objects: &Vec<T>) {
+        match self {
+            OutputFormat::Json => {
+                let json = serde_json::to_string_pretty(&GetListV1 { items: objects }).unwrap();
+                println!("{}", json);
+            }
+            OutputFormat::Yaml => {
+                let yaml = serde_yaml::to_string(&GetListV1 { items: objects }).unwrap();
+                println!("{}", yaml);
+            }
+            OutputFormat::Name => {
+                let mut table = Table::new(objects);
+                table.with(Style::empty());
+                println!("{}", table);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Args)]
@@ -43,6 +110,8 @@ pub struct GetObjectArgs {
     namespace: Option<String>,
     #[arg()]
     id: Option<String>,
+    #[arg(long, short, long_help = "Output format. One of: (json, yaml, name)")]
+    output: Option<OutputFormat>,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -86,8 +155,65 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         }
     }
 
-    async fn get_objects<T: Tabled + NameFilters>(
+    async fn get_resource_objects<
+        T: Tabled + NameFilters + serde::Serialize + From<ObjectListItem>,
+    >(
         &self,
+        resource_type: ResourceType,
+        _global_args: GetArgs,
+        args: GetObjectArgs,
+        lister: impl Lister<T>,
+    ) -> Result<(), SkateError> {
+        let config = Config::load(Some(args.config.skateconfig.clone()))?;
+        let mgr = self.deps.get();
+        let (conns, errors) = mgr
+            .cluster_connect(config.active_cluster(args.config.context.clone())?)
+            .await;
+        if errors.is_some() {
+            eprintln!("{}", errors.unwrap())
+        }
+
+        if conns.is_none() {
+            return Ok(());
+        }
+
+        let conns = conns.unwrap();
+
+        let state = Refresh::<D>::refreshed_state(
+            &config.current_context.clone().unwrap_or("".to_string()),
+            &conns,
+            &config,
+        )
+        .await?;
+
+        let objects = lister.list(resource_type, &args, &state);
+
+        if objects.is_empty() {
+            if args.namespace.is_some() {
+                println!(
+                    "No resources found for namespace {}",
+                    args.namespace.unwrap()
+                );
+            } else {
+                println!("No resources found");
+            }
+            return Ok(());
+        }
+
+        let output_format = args.output.unwrap_or(OutputFormat::Name);
+
+        if args.id.is_some() && objects.len() == 1 {
+            output_format.print_one(&objects[0]);
+        } else {
+            output_format.print_many(&objects);
+        }
+        Ok(())
+    }
+
+    // TODO - move everything in as a resource and remove this
+    async fn get_objects<T: Tabled + NameFilters + serde::Serialize>(
+        &self,
+        resource_type: ResourceType,
         _global_args: GetArgs,
         args: GetObjectArgs,
         lister: &dyn Lister<T>,
@@ -114,7 +240,7 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         )
         .await?;
 
-        let objects = lister.list(&args, &state);
+        let objects = lister.list(resource_type, &args, &state);
 
         if objects.is_empty() {
             if args.namespace.is_some() {
@@ -128,9 +254,13 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
             return Ok(());
         }
 
-        let mut table = Table::new(objects);
-        table.with(Style::empty());
-        println!("{}", table);
+        let output_format = args.output.unwrap_or(OutputFormat::Name);
+
+        if args.id.is_some() && objects.len() == 1 {
+            output_format.print_one(&objects[0]);
+        } else {
+            output_format.print_many(&objects);
+        }
         Ok(())
     }
 
@@ -140,7 +270,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
         let lister = DeploymentLister {};
-        self.get_objects(global_args, args, &lister).await
+        self.get_objects(ResourceType::Deployment, global_args, args, &lister)
+            .await
     }
 
     async fn get_daemonsets(
@@ -149,12 +280,14 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
         let lister = DaemonsetLister {};
-        self.get_objects(global_args, args, &lister).await
+        self.get_objects(ResourceType::DaemonSet, global_args, args, &lister)
+            .await
     }
 
     async fn get_pod(&self, global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
         let lister = PodLister {};
-        self.get_objects(global_args, args, &lister).await
+        self.get_objects(ResourceType::Pod, global_args, args, &lister)
+            .await
     }
 
     async fn get_ingress(
@@ -162,8 +295,9 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = IngressLister {};
-        self.get_objects(global_args, args, &lister).await
+        let lister = ResourceLister::<IngressListItem>::new();
+        self.get_resource_objects(ResourceType::Ingress, global_args, args, lister)
+            .await
     }
 
     async fn get_cronjobs(
@@ -171,13 +305,15 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = CronjobsLister {};
-        self.get_objects(global_args, args, &lister).await
+        let lister = ResourceLister::<CronListItem>::new();
+        self.get_resource_objects(ResourceType::CronJob, global_args, args, lister)
+            .await
     }
 
     async fn get_nodes(&self, global_args: GetArgs, args: GetObjectArgs) -> Result<(), SkateError> {
         let lister = NodeLister {};
-        self.get_objects(global_args, args, &lister).await
+        self.get_objects(ResourceType::Node, global_args, args, &lister)
+            .await
     }
 
     async fn get_secrets(
@@ -185,8 +321,9 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = SecretLister {};
-        self.get_objects(global_args, args, &lister).await
+        let lister = ResourceLister::<SecretListItem>::new();
+        self.get_resource_objects(ResourceType::Secret, global_args, args, lister)
+            .await
     }
 
     async fn get_services(
@@ -194,7 +331,8 @@ impl<D: GetDeps + refresh::RefreshDeps> Get<D> {
         global_args: GetArgs,
         args: GetObjectArgs,
     ) -> Result<(), SkateError> {
-        let lister = ServiceLister {};
-        self.get_objects(global_args, args, &lister).await
+        let lister = ResourceLister::<ServiceListItem>::new();
+        self.get_resource_objects(ResourceType::Service, global_args, args, lister)
+            .await
     }
 }
