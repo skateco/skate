@@ -28,7 +28,6 @@ pub mod deps;
 pub mod errors;
 mod exec;
 mod github;
-mod http_client;
 mod node_shell;
 mod rollout;
 pub mod sind;
