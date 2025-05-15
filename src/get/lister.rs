@@ -1,9 +1,7 @@
 use crate::filestore::ObjectListItem;
 use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
-use itertools::Itertools;
 use std::marker::PhantomData;
 use tabled::Tabled;
 

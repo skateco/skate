@@ -1,15 +1,9 @@
 use crate::filestore::ObjectListItem;
-use crate::get::ingress::IngressListItem;
 use crate::get::lister::NameFilters;
-use crate::get::Lister;
-use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::SystemInfo;
 use crate::util::age;
 use k8s_openapi::api::core::v1::Service;
 use serde::Serialize;
 use tabled::Tabled;
-
-pub(crate) struct ServiceLister {}
 
 #[derive(Tabled, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]

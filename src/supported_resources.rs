@@ -10,7 +10,7 @@ use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::{ClusterResourceScope, Resource};
+use k8s_openapi::Resource;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;

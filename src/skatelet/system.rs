@@ -10,11 +10,10 @@ use clap::{Args, Subcommand};
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::{FileStore, ObjectListItem};
+use crate::filestore::ObjectListItem;
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
-use crate::skatelet::database::resource::{list_resources, list_resources_by_type, ResourceType};
-use crate::skatelet::skatelet::VAR_PATH;
+use crate::skatelet::database::resource::{list_resources, ResourceType};
 use crate::skatelet::system::podman::PodmanSecret;
 use crate::util::{NamespacedName, TryVecInto};
 use k8s_openapi::api::core::v1::Secret;
@@ -122,7 +121,7 @@ fn internal_ip(execer: Box<dyn ShellExec>) -> Result<Option<String>, Box<dyn Err
     Ok(Some(internal_ip))
 }
 
-const BYTES_IN_MIB: u64 = (2u64).pow(20);
+const BYTES_IN_MIB: u64 = 2u64.pow(20);
 
 async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn Error>> {
     let sys = System::new_with_specifics(RefreshKind::everything());

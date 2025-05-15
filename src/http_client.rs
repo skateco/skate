@@ -1,4 +1,7 @@
-pub async fn fetch_json<Req: Serialize, Resp: Deserialize,>(url: hyper::Uri, body: Option<Req>) -> Result<Vec<User>> {
+pub async fn fetch_json<Req: Serialize, Resp: Deserialize>(
+    url: hyper::Uri,
+    body: Option<Req>,
+) -> Result<Vec<User>> {
     let host = url.host().expect("uri has no host");
     let port = url.port_u16().unwrap_or(80);
     let addr = format!("{}:{}", host, port);

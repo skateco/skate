@@ -24,8 +24,6 @@ impl ClusterIssuerController {
     pub async fn apply(&self, cluster_issuer: &ClusterIssuer) -> Result<(), Box<dyn Error>> {
         // only thing special about this is must only have namespace 'skate'
         // and name 'default'
-        let ingress_string = serde_yaml::to_string(cluster_issuer)
-            .map_err(|e| anyhow!(e).context("failed to serialize manifest to yaml"))?;
 
         let ns_name = metadata_name(cluster_issuer);
 

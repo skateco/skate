@@ -24,12 +24,12 @@ use crate::filestore::ObjectListItem;
 use crate::get::cronjob::CronListItem;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
-use crate::get::ingress::{IngressListItem, IngressLister};
+use crate::get::ingress::IngressListItem;
 use crate::get::lister::{Lister, NameFilters, ResourceLister};
 use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
-use crate::get::secret::{SecretListItem, SecretLister};
-use crate::get::service::{ServiceListItem, ServiceLister};
+use crate::get::secret::SecretListItem;
+use crate::get::service::ServiceListItem;
 use crate::refresh;
 use crate::skatelet::database::resource::ResourceType;
 

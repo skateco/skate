@@ -1,4 +1,3 @@
-use crate::skatelet::database::resource::ResourceType;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;

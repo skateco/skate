@@ -2,7 +2,6 @@ use crate::get::lister::{Lister, NameFilters};
 use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
-use crate::skatelet::SystemInfo;
 use crate::state::state::ClusterState;
 use crate::util::age;
 use k8s_openapi::api::core::v1::Pod;

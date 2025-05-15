@@ -3,11 +3,9 @@ use crate::filestore::ObjectListItem;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
-use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{
-    Node as K8sNode, NodeAddress, NodeSpec, NodeStatus as K8sNodeStatus, Secret, Service,
+    Node as K8sNode, NodeAddress, NodeSpec, NodeStatus as K8sNodeStatus,
 };
-use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
@@ -21,7 +19,6 @@ use tabled::Tabled;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::skatelet::SystemInfo;
-use crate::spec::cert::ClusterIssuer;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
