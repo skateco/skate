@@ -12,7 +12,6 @@ use k8s_openapi::Metadata;
 use log::info;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use reqwest::get;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;

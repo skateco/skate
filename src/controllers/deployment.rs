@@ -28,12 +28,15 @@ impl DeploymentController {
         let hash = get_skate_label_value(&deployment.metadata.labels, &SkateLabels::Hash)
             .unwrap_or("".to_string());
 
+        let generation = deployment.metadata.generation.unwrap_or_default();
+
         let object = resource::Resource {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: resource::ResourceType::Deployment,
             manifest: serde_json::to_value(deployment)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
         upsert_resource(&self.db, &object).await?;

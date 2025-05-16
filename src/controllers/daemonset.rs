@@ -26,12 +26,15 @@ impl DaemonSetController {
         let hash = get_skate_label_value(&ds.metadata.labels, &SkateLabels::Hash)
             .unwrap_or("".to_string());
 
+        let generation = ds.metadata.generation.unwrap_or_default();
+
         let object = resource::Resource {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: resource::ResourceType::DaemonSet,
             manifest: serde_json::to_value(ds)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
         resource::upsert_resource(&self.db, &object).await?;

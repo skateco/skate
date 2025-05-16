@@ -29,12 +29,15 @@ impl ClusterIssuerController {
         let hash = get_skate_label_value(&cluster_issuer.metadata.labels, &SkateLabels::Hash)
             .unwrap_or("".to_string());
 
+        let generation = cluster_issuer.metadata.generation.unwrap_or_default();
+
         let object = Resource {
             name: ns_name.name.clone(),
             namespace: ns_name.namespace.clone(),
             resource_type: ResourceType::ClusterIssuer,
             manifest: serde_json::to_value(cluster_issuer)?,
             hash,
+            generation,
             ..Default::default()
         };
 

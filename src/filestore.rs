@@ -2,9 +2,7 @@ use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::supported_resources::SupportedResources;
-use crate::util::{
-    get_label_value, get_skate_label_value, metadata_name, NamespacedName, SkateLabels,
-};
+use crate::util::{get_skate_label_value, metadata_name, NamespacedName, SkateLabels};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::batch::v1::CronJob;

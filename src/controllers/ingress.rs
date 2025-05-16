@@ -43,6 +43,7 @@ impl IngressController {
 
         let hash = get_skate_label_value(&ingress.metadata.labels, &SkateLabels::Hash)
             .unwrap_or("".to_string());
+        let generation = ingress.metadata.generation.unwrap_or_default();
 
         let object = resource::Resource {
             name: fq_name.name,
@@ -50,6 +51,7 @@ impl IngressController {
             resource_type: resource::ResourceType::Ingress,
             manifest: serde_json::to_value(ingress)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
 

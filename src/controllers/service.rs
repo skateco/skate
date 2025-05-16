@@ -52,11 +52,14 @@ impl ServiceController {
         let hash = get_skate_label_value(&service.metadata.labels, &SkateLabels::Hash)
             .unwrap_or("".to_string());
 
+        let generation = service.metadata.generation.unwrap_or_default();
+
         let object = Resource {
             name: name.name.clone(),
             namespace: name.namespace.clone(),
             resource_type: ResourceType::Service,
             manifest,
+            generation,
             hash,
             ..Default::default()
         };

@@ -39,6 +39,13 @@ pub async fn upsert_resource(
 ) -> super::Result<()> {
     let resource_id = uuid::Uuid::new_v4().to_string();
     let str_id = resource_id.to_string();
+    let generation = if resource.generation > 0 {
+        resource.generation
+    } else {
+        resource.manifest["metadata"]["generation"]
+            .as_i64()
+            .unwrap_or_default()
+    };
 
     let _ = sqlx::query!(
         r#"
@@ -64,7 +71,7 @@ pub async fn upsert_resource(
         resource.resource_type,
         resource.manifest,
         resource.hash,
-        resource.generation,
+        generation
     )
     .execute(db)
     .await?;

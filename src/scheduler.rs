@@ -114,8 +114,12 @@ pub struct NodeSelection {
 impl DefaultScheduler {
     fn next_generation(existing: Option<&CatalogueItem>) -> i64 {
         if let Some(existing_gen) = existing.and_then(|m| Some(m.object.generation.clone())) {
-            return existing_gen + 1;
-        }
+            if existing_gen > 0 {
+                return existing_gen + 1;
+            } else {
+                return 1;
+            }
+        };
         1
     }
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
@@ -195,6 +199,20 @@ impl DefaultScheduler {
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut ds = ds.clone();
+        let daemonset_name = ds
+            .metadata
+            .name
+            .clone()
+            .ok_or(anyhow!("no daemonset name"))?;
+
+        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
+        let existing_daemonset = state.catalogue(
+            None,
+            &[ResourceType::DaemonSet],
+            Some(&ns),
+            Some(&daemonset_name),
+        );
+        ds.metadata.generation = Some(Self::next_generation(existing_daemonset.first()));
 
         let default_ops: Vec<_> = state
             .nodes
@@ -207,21 +225,6 @@ impl DefaultScheduler {
             .collect();
 
         let mut actions = HashMap::from([(metadata_name(&ds), default_ops)]);
-
-        let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
-
-        if daemonset_name.is_empty() {
-            return Err(anyhow!("no daemonset name").into());
-        }
-        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
-
-        let existing_deployment = state.catalogue(
-            None,
-            &[ResourceType::DaemonSet],
-            Some(&ns),
-            Some(&daemonset_name),
-        );
-        ds.metadata.generation = Some(Self::next_generation(existing_deployment.first()));
 
         let schedulable_nodes = state.nodes.iter().filter(|n| n.schedulable());
         let unschedulable_nodes = state.nodes.iter().filter(|n| !n.schedulable());
