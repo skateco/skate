@@ -12,7 +12,7 @@ use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
-use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, CROSS_EMOJI};
+use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels, CROSS_EMOJI};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
@@ -228,9 +228,9 @@ impl DefaultScheduler {
 
         for node in unschedulable_nodes {
             let existing_pods = node.filter_pods(&|p| {
-                p.labels.contains_key("skate.io/daemonset")
-                    && p.labels.get("skate.io/daemonset").unwrap() == &daemonset_name
-                    && p.labels.get("skate.io/namespace").unwrap() == &ns
+                p.labels.contains_key(&SkateLabels::Daemonset.to_string())
+                    && p.labels.get(&SkateLabels::Daemonset.to_string()).unwrap() == &daemonset_name
+                    && p.labels.get(&SkateLabels::Namespace.to_string()).unwrap() == &ns
             });
             for pod_info in existing_pods {
                 let pod: Pod = (&pod_info).into();
@@ -274,14 +274,14 @@ impl DefaultScheduler {
             meta.namespace = Some(ns.clone());
 
             let mut labels = meta.labels.clone().unwrap_or_default();
-            labels.insert("skate.io/name".to_string(), name.clone());
-            labels.insert("skate.io/daemonset".to_string(), daemonset_name.clone());
+            labels.insert(SkateLabels::Name.to_string(), name.clone());
+            labels.insert(SkateLabels::Daemonset.to_string(), daemonset_name.clone());
             meta.labels = Some(labels);
 
             // bind to specific node
             pod_spec.node_selector = Some({
                 let mut selector = pod_spec.node_selector.unwrap_or_default();
-                selector.insert("skate.io/nodename".to_string(), node_name.clone());
+                selector.insert(SkateLabels::Nodename.to_string(), node_name.clone());
                 selector
             });
 
@@ -426,7 +426,7 @@ impl DefaultScheduler {
             .map(|(dp, node)| {
                 let replica = dp
                     .labels
-                    .get("skate.io/replica")
+                    .get(&SkateLabels::Replica.to_string())
                     .unwrap_or(&"0".to_string())
                     .clone();
                 let replica = replica.parse::<u32>().unwrap_or(0);
@@ -481,9 +481,9 @@ impl DefaultScheduler {
             meta.namespace = Some(ns.clone());
 
             let mut labels = meta.labels.unwrap_or_default();
-            labels.insert("skate.io/name".to_string(), name);
-            labels.insert("skate.io/deployment".to_string(), deployment_name.clone());
-            labels.insert("skate.io/replica".to_string(), i.to_string());
+            labels.insert(SkateLabels::Name.to_string(), name);
+            labels.insert(SkateLabels::Deployment.to_string(), deployment_name.clone());
+            labels.insert(SkateLabels::Replica.to_string(), i.to_string());
             meta.labels = Some(labels);
 
             let pod = Pod {
@@ -553,7 +553,7 @@ impl DefaultScheduler {
             Some((pod_info, node)) => {
                 let previous_hash = pod_info
                     .labels
-                    .get("skate.io/hash")
+                    .get(&SkateLabels::Hash.to_string())
                     .unwrap_or(&"".to_string())
                     .clone();
                 let state_running = pod_info.status == PodmanPodStatus::Running;
@@ -1253,9 +1253,12 @@ mod tests {
 
             let mut pod_meta = ObjectMeta {
                 labels: Some(BTreeMap::from([
-                    ("skate.io/deployment".to_string(), ns_name.name.clone()),
-                    ("skate.io/name".to_string(), pod_name.clone()),
-                    ("skate.io/namespace".to_string(), ns_name.namespace.clone()),
+                    (SkateLabels::Deployment.to_string(), ns_name.name.clone()),
+                    (SkateLabels::Name.to_string(), pod_name.clone()),
+                    (
+                        SkateLabels::Namespace.to_string(),
+                        ns_name.namespace.clone(),
+                    ),
                 ])),
                 ..Default::default()
             };

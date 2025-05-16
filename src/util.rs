@@ -12,6 +12,7 @@ use k8s_openapi::Metadata;
 use log::info;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use reqwest::get;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -21,6 +22,7 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::Path;
+use strum_macros::{Display, EnumString};
 
 pub const CHECKBOX_EMOJI: char = '✔';
 pub const CROSS_EMOJI: char = '✖';
@@ -31,6 +33,19 @@ pub const INFO_EMOJI: &str = "[i]";
 
 pub fn slugify<S: AsRef<str>>(s: S) -> String {
     _slugify(s.as_ref())
+}
+
+#[derive(EnumString, Display)]
+#[strum(serialize_all = "lowercase", prefix = "skate.io/")]
+pub enum SkateLabels {
+    Name,
+    Namespace,
+    Hash,
+    Replica,
+    Arch,
+    Daemonset,
+    Deployment,
+    Nodename,
 }
 
 #[doc(hidden)]
@@ -69,10 +84,10 @@ fn _slugify(s: &str) -> String {
 
         for c in s.chars() {
             if c.is_ascii() {
-                (push_char)(c as u8);
+                push_char(c as u8);
             } else {
                 for &cx in deunicode_char(c).unwrap_or("-").as_bytes() {
-                    (push_char)(cx);
+                    push_char(cx);
                 }
             }
         }
@@ -101,12 +116,17 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize +
     let mut obj = obj.clone();
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
+    // remove stuff that changes regardless
     labels.remove("skate.io/hash");
+    obj.metadata_mut().generation = None;
+
+    // sort labels
     labels = labels.into_iter().sorted_by_key(|l| l.1.clone()).collect();
     obj.metadata_mut().labels = Option::from(labels);
 
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 
+    // sort annotations
     annotations = annotations
         .into_iter()
         .sorted_by_key(|l| l.1.clone())
@@ -151,18 +171,31 @@ impl NamespacedName {
     }
 }
 
-pub trait SkateLabels {
+pub trait GetSkateLabels {
     fn namespaced_name(&self) -> NamespacedName;
     fn hash(&self) -> String;
 }
 
-impl SkateLabels for ObjectMeta {
+pub fn get_label_value(
+    labels: &Option<std::collections::BTreeMap<String, String>>,
+    key: &str,
+) -> Option<String> {
+    labels.as_ref().and_then(|l| l.get(key).cloned())
+}
+
+pub fn get_skate_label_value(
+    labels: &Option<std::collections::BTreeMap<String, String>>,
+    key: &SkateLabels,
+) -> Option<String> {
+    labels
+        .as_ref()
+        .and_then(|l| l.get(&key.to_string()).cloned())
+}
+
+impl GetSkateLabels for ObjectMeta {
     fn namespaced_name(&self) -> NamespacedName {
-        let name = self.labels.as_ref().and_then(|l| l.get("skate.io/name"));
-        let ns = self
-            .labels
-            .as_ref()
-            .and_then(|l| l.get("skate.io/namespace"));
+        let name = get_label_value(&self.labels, "skate.io/name");
+        let ns = get_label_value(&self.labels, "skate.io/namespace");
 
         if name.is_none() {
             panic!("metadata missing skate.io/name label")
@@ -172,17 +205,11 @@ impl SkateLabels for ObjectMeta {
             panic!("metadata missing skate.io/namespace label")
         }
 
-        NamespacedName::new(name.unwrap(), ns.unwrap())
+        NamespacedName::new(&name.unwrap(), &ns.unwrap())
     }
 
     fn hash(&self) -> String {
-        let hash = self
-            .labels
-            .as_ref()
-            .and_then(|l| l.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
-        hash
+        get_label_value(&self.labels, "skate.io/hash").unwrap_or("".to_string())
     }
 }
 
@@ -387,7 +414,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::util::age;
+    use crate::util::{age, get_label_value, SkateLabels};
     use chrono::{Duration, Local};
 
     #[test]
@@ -404,5 +431,21 @@ mod tests {
             let output = age(*input);
             assert_eq!(output, *expect, "input: {}", input);
         }
+    }
+
+    #[test]
+    fn test_get_label_value() {
+        let labels = std::collections::BTreeMap::from([
+            ("skate.io/name".to_string(), "test".to_string()),
+            ("skate.io/namespace".to_string(), "default".to_string()),
+        ]);
+        let name = get_label_value(&Some(labels), "skate.io/name");
+        assert_eq!(name, Some("test".to_string()));
+    }
+
+    #[test]
+    fn test_skate_labels_serialize() {
+        assert_eq!("skate.io/name", SkateLabels::Name.to_string());
+        assert_eq!("skate.io/daemonset", SkateLabels::Daemonset.to_string());
     }
 }

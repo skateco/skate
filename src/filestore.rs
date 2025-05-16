@@ -2,7 +2,9 @@ use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::supported_resources::SupportedResources;
-use crate::util::{metadata_name, NamespacedName};
+use crate::util::{
+    get_label_value, get_skate_label_value, metadata_name, NamespacedName, SkateLabels,
+};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::batch::v1::CronJob;
@@ -56,7 +58,7 @@ impl ObjectListItem {
                 .metadata()
                 .labels
                 .as_ref()
-                .and_then(|l| l.get("skate.io/hash"))
+                .and_then(|l| l.get(&SkateLabels::Hash.to_string()))
                 .cloned()
                 .unwrap_or("".to_string()),
             manifest: Some(
@@ -161,21 +163,12 @@ impl TryFrom<&SupportedResources> for ObjectListItem {
             SupportedResources::ClusterIssuer(i) => &i.metadata,
         };
 
-        let name = meta
-            .labels
-            .as_ref()
-            .and_then(|l| l.get("skate.io/name"))
-            .ok_or("no name")?;
-        let ns = meta
-            .labels
-            .as_ref()
-            .and_then(|l| l.get("skate.io/namespace"))
-            .ok_or("no namespace")?;
-        let hash = meta
-            .labels
-            .as_ref()
-            .and_then(|l| l.get("skate.io/hash"))
-            .ok_or("no hash")?;
+        let name = get_skate_label_value(&meta.labels, &SkateLabels::Name).ok_or("no name")?;
+
+        let ns =
+            get_skate_label_value(&meta.labels, &SkateLabels::Namespace).ok_or("no namespace")?;
+
+        let hash = get_skate_label_value(&meta.labels, &SkateLabels::Hash).ok_or("no hash")?;
 
         Ok(ObjectListItem {
             resource_type: resource.into(),
