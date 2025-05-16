@@ -1,6 +1,6 @@
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::util::{lock_file, spawn_orphan_process};
+use crate::util::{lock_file, spawn_orphan_process, SkateLabels};
 use anyhow::anyhow;
 use log::{debug, info, warn};
 use serde_json::Value;
@@ -148,15 +148,15 @@ impl<'a> DnsService<'a> {
         let ip = ip.unwrap();
 
         let labels = json["Labels"].as_object().unwrap();
-        let ns = labels["skate.io/namespace"]
+        let ns = labels[&SkateLabels::Namespace.to_string()]
             .as_str()
-            .ok_or_else(|| anyhow!("missing skate.io/namespace label"))?;
+            .ok_or_else(|| anyhow!("missing {} label", SkateLabels::Namespace))?;
 
         // only add for daemonsets or deployments
         let parent_resource = {
-            if labels.contains_key("skate.io/daemonset") {
+            if labels.contains_key(&SkateLabels::Daemonset.to_string()) {
                 Some("daemonset")
-            } else if labels.contains_key("skate.io/deployment") {
+            } else if labels.contains_key(&SkateLabels::Deployment.to_string()) {
                 Some("deployment")
             } else {
                 None

@@ -46,6 +46,8 @@ pub enum SkateLabels {
     Daemonset,
     Deployment,
     Nodename,
+    Hostname,
+    Cronjob,
 }
 
 #[doc(hidden)]
@@ -117,7 +119,7 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize +
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
     // remove stuff that changes regardless
-    labels.remove("skate.io/hash");
+    labels.remove(&SkateLabels::Hash.to_string());
     obj.metadata_mut().generation = None;
 
     // sort labels
@@ -194,8 +196,8 @@ pub fn get_skate_label_value(
 
 impl GetSkateLabels for ObjectMeta {
     fn namespaced_name(&self) -> NamespacedName {
-        let name = get_label_value(&self.labels, "skate.io/name");
-        let ns = get_label_value(&self.labels, "skate.io/namespace");
+        let name = get_skate_label_value(&self.labels, &SkateLabels::Name);
+        let ns = get_skate_label_value(&self.labels, &SkateLabels::Namespace);
 
         if name.is_none() {
             panic!("metadata missing skate.io/name label")
@@ -209,7 +211,7 @@ impl GetSkateLabels for ObjectMeta {
     }
 
     fn hash(&self) -> String {
-        get_label_value(&self.labels, "skate.io/hash").unwrap_or("".to_string())
+        get_skate_label_value(&self.labels, &SkateLabels::Hash).unwrap_or("".to_string())
     }
 }
 
@@ -224,7 +226,7 @@ pub fn hash_k8s_resource(obj: &mut (impl Metadata<Ty = ObjectMeta> + Serialize +
     let hash = calc_k8s_resource_hash(obj.clone());
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
-    labels.insert("skate.io/hash".to_string(), hash.clone());
+    labels.insert(SkateLabels::Hash.to_string(), hash.clone());
     obj.metadata_mut().labels = Option::from(labels);
     hash
 }

@@ -2,7 +2,7 @@ use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::{delete_resource, upsert_resource, ResourceType};
-use crate::util::metadata_name;
+use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use k8s_openapi::api::apps::v1::Deployment;
 use sqlx::SqlitePool;
 use std::error::Error;
@@ -25,13 +25,8 @@ impl DeploymentController {
     pub async fn apply(&self, deployment: &Deployment) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(deployment);
 
-        let hash = deployment
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&deployment.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
 
         let object = resource::Resource {
             name: ns_name.name.clone(),

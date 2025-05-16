@@ -146,7 +146,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
                     .clone(),
                 namespace: o
                     .labels
-                    .get("skate.io/namespace")
+                    .get(&SkateLabels::Namespace.to_string())
                     .unwrap_or(&"".to_string())
                     .clone(),
             },

@@ -23,7 +23,7 @@ use crate::skatelet::SystemInfo;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
-use crate::util::{metadata_name, slugify, tabled_display_option};
+use crate::util::{metadata_name, slugify, tabled_display_option, SkateLabels};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
@@ -104,11 +104,11 @@ impl From<&NodeState> for K8sNode {
                     }
                     Some(addresses)
                 }),
-                (Some(BTreeMap::<String, String>::from([
-                    ("skate.io/arch".to_string(), si.platform.arch.clone()),
-                    ("skate.io/nodename".to_string(), val.node_name.clone()),
-                    ("skate.io/hostname".to_string(), si.hostname.clone()),
-                ]))),
+                Some(BTreeMap::<String, String>::from([
+                    (SkateLabels::Arch.to_string(), si.platform.arch.clone()),
+                    (SkateLabels::Nodename.to_string(), val.node_name.clone()),
+                    (SkateLabels::Hostname.to_string(), si.hostname.clone()),
+                ])),
             ),
             None => (None, None, None, None),
         };

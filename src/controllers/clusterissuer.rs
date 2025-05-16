@@ -3,7 +3,7 @@ use crate::skatelet::database::resource::{
     delete_resource, upsert_resource, Resource, ResourceType,
 };
 use crate::spec::cert::ClusterIssuer;
-use crate::util::metadata_name;
+use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use sqlx::SqlitePool;
 use std::error::Error;
 
@@ -26,13 +26,8 @@ impl ClusterIssuerController {
 
         let ns_name = metadata_name(cluster_issuer);
 
-        let hash = cluster_issuer
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&cluster_issuer.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
 
         let object = Resource {
             name: ns_name.name.clone(),

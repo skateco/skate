@@ -3,7 +3,7 @@ use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodParent, PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
-use crate::util::{age, NamespacedName};
+use crate::util::{age, get_skate_label_value, NamespacedName, SkateLabels};
 use chrono::Local;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -70,11 +70,12 @@ impl Lister<DeploymentListItem> for DeploymentLister {
                         }
 
                         if p.matches_parent_ns_name(PodParent::Deployment, &id, &ns) {
-                            let pod_ns = p
-                                .labels
-                                .get("skate.io/namespace")
-                                .unwrap_or(&"default".to_string())
-                                .clone();
+                            let pod_ns = get_skate_label_value(
+                                &Some(p.labels.clone()),
+                                &SkateLabels::Namespace,
+                            )
+                            .unwrap_or("default".to_string());
+
                             return Some((
                                 NamespacedName::from(
                                     format!("{}.{}", pod_deployment, pod_ns).as_str(),

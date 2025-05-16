@@ -15,7 +15,7 @@ use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::database::resource::{list_resources, ResourceType};
 use crate::skatelet::system::podman::PodmanSecret;
-use crate::util::{NamespacedName, TryVecInto};
+use crate::util::{get_skate_label_value, NamespacedName, SkateLabels, TryVecInto};
 use k8s_openapi::api::core::v1::Secret;
 use log::error;
 use podman::PodmanPodInfo;
@@ -199,11 +199,8 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
                 Err(_) => return None,
             };
 
-            let hash = manifest
-                .metadata
-                .labels
-                .as_ref()
-                .and_then(|l| l.get("skate.io/hash").cloned());
+            let hash = get_skate_label_value(&manifest.metadata.labels, &SkateLabels::Hash)
+                .unwrap_or("".to_string());
 
             // if we want to redact the secret values.
             // removing for now since we don't store the state anyway.
@@ -222,7 +219,7 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
             Some(ObjectListItem {
                 resource_type: ResourceType::Secret,
                 name: NamespacedName::from(s.spec.name.as_str()),
-                manifest_hash: hash.unwrap_or("".to_string()),
+                manifest_hash: hash,
                 manifest: Some(yaml),
                 generation: manifest.metadata.generation.unwrap_or_default(),
                 created_at: s.created_at,

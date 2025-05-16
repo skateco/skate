@@ -1,3 +1,4 @@
+use crate::util::SkateLabels;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -90,25 +91,25 @@ pub enum PodParent {
 impl PodmanPodInfo {
     pub fn name(&self) -> String {
         self.labels
-            .get("skate.io/name")
+            .get(&SkateLabels::Name.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }
     pub fn namespace(&self) -> String {
         self.labels
-            .get("skate.io/namespace")
+            .get(&SkateLabels::Namespace.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }
     pub fn deployment(&self) -> String {
         self.labels
-            .get("skate.io/deployment")
+            .get(&SkateLabels::Deployment.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }
     pub fn daemonset(&self) -> String {
         self.labels
-            .get("skate.io/daemonset")
+            .get(&SkateLabels::Daemonset.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }

@@ -3,7 +3,7 @@ use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
 use crate::state::state::NodeState;
-use crate::util::{metadata_name, NamespacedName};
+use crate::util::{metadata_name, NamespacedName, SkateLabels};
 use anyhow::anyhow;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
@@ -156,7 +156,7 @@ impl SupportedResources {
                 let labels = pod.metadata.labels.as_ref().ok_or("no labels")?;
 
                 let name = metadata_name(pod);
-                let deployment = labels.get("skate.io/deployment");
+                let deployment = labels.get(&SkateLabels::Deployment.to_string());
                 if deployment.is_none() {
                     return Ok(());
                 }
@@ -306,8 +306,8 @@ impl SupportedResources {
 
         // labels apply to both pods and containers
         let mut labels = meta.labels.unwrap_or_default();
-        labels.insert("skate.io/name".to_string(), name.clone());
-        labels.insert("skate.io/namespace".to_string(), ns.clone());
+        labels.insert(SkateLabels::Name.to_string(), name.clone());
+        labels.insert(SkateLabels::Namespace.to_string(), ns.clone());
 
         if let Some(extra_labels) = extra_labels {
             labels.extend(extra_labels)
@@ -351,7 +351,8 @@ impl SupportedResources {
                     return Err(anyhow!("metadata.namespace is empty").into());
                 }
 
-                let extra_labels = HashMap::from([("skate.io/cronjob".to_string(), original_name)]);
+                let extra_labels =
+                    HashMap::from([(SkateLabels::Cronjob.to_string(), original_name)]);
                 c.metadata = Self::fixup_metadata(c.metadata.clone(), None)?;
                 c.spec = match c.spec.clone() {
                     Some(mut spec) => {
@@ -420,7 +421,7 @@ impl SupportedResources {
                 }
 
                 let extra_labels =
-                    HashMap::from([("skate.io/deployment".to_string(), original_name.clone())]);
+                    HashMap::from([(SkateLabels::Deployment.to_string(), original_name.clone())]);
                 d.metadata = Self::fixup_metadata(d.metadata.clone(), Some(extra_labels.clone()))?;
 
                 d.spec = match d.spec.clone() {
@@ -456,7 +457,7 @@ impl SupportedResources {
                 }
 
                 let extra_labels =
-                    HashMap::from([("skate.io/daemonset".to_string(), original_name.clone())]);
+                    HashMap::from([(SkateLabels::Daemonset.to_string(), original_name.clone())]);
                 ds.metadata = Self::fixup_metadata(ds.metadata.clone(), None)?;
                 ds.spec = match ds.spec.clone() {
                     Some(mut spec) => {
