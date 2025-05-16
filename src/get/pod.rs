@@ -3,7 +3,7 @@ use crate::get::GetObjectArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::state::state::ClusterState;
-use crate::util::age;
+use crate::util::{age, SkateLabels};
 use k8s_openapi::api::core::v1::Pod;
 use serde::Serialize;
 use tabled::Tabled;
@@ -16,14 +16,14 @@ impl NameFilters for &PodmanPodInfo {
     }
     fn name(&self) -> String {
         self.labels
-            .get("skate.io/name")
+            .get(&SkateLabels::Name.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }
 
     fn namespace(&self) -> String {
         self.labels
-            .get("skate.io/namespace")
+            .get(&SkateLabels::Namespace.to_string())
             .cloned()
             .unwrap_or("".to_string())
     }

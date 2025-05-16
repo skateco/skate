@@ -5,7 +5,7 @@ use crate::filestore::Store;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::get_resource;
 use crate::template;
-use crate::util::metadata_name;
+use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use anyhow::anyhow;
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::Pod;
@@ -33,13 +33,9 @@ impl CronjobController {
 
         let ns_name = metadata_name(cron_job);
 
-        let hash = cron_job
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&cron_job.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
+        let generation = cron_job.metadata.generation.unwrap_or_default();
 
         let object = resource::Resource {
             name: ns_name.name.clone(),
@@ -47,6 +43,7 @@ impl CronjobController {
             resource_type: resource::ResourceType::CronJob,
             manifest: serde_json::to_value(cron_job)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
         resource::upsert_resource(&self.db, &object).await?;

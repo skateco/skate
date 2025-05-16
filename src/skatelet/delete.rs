@@ -23,6 +23,7 @@ use crate::exec::ShellExec;
 use crate::filestore::Store;
 use crate::skatelet::VAR_PATH;
 use crate::spec;
+use crate::util::SkateLabels;
 use k8s_openapi::api::core::v1::Service as K8sService;
 use k8s_openapi::api::networking::v1::Ingress as K8sIngress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
@@ -112,8 +113,8 @@ impl<D: DeleteDeps> Deleter<D> {
         meta.name = Some(resource_args.name.clone());
         meta.namespace = Some(resource_args.namespace.clone());
         meta.labels = Some(BTreeMap::from([
-            ("skate.io/name".to_string(), resource_args.name),
-            ("skate.io/namespace".to_string(), resource_args.namespace),
+            (SkateLabels::Name.to_string(), resource_args.name),
+            (SkateLabels::Namespace.to_string(), resource_args.namespace),
         ]));
         meta
     }

@@ -8,7 +8,7 @@ use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
-use crate::util::NamespacedName;
+use crate::util::{NamespacedName, SkateLabels};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use dialoguer::Confirm;
@@ -64,7 +64,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
     }
 
     fn taint_manifest(mut v: Value) -> Value {
-        v["metadata"]["labels"]["skate.io/hash"] = Value::from("");
+        v["metadata"]["labels"][SkateLabels::Hash.to_string().as_str()] = Value::from("");
         v
     }
 
@@ -83,7 +83,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
                                     return;
                                 }
                                 let mut labels = item.labels.clone();
-                                labels.insert("skate.io/hash".to_string(), "".to_string());
+                                labels.insert(SkateLabels::Hash.to_string(), "".to_string());
                                 item.labels = labels;
                             }
                         });
@@ -146,7 +146,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
                     .clone(),
                 namespace: o
                     .labels
-                    .get("skate.io/namespace")
+                    .get(&SkateLabels::Namespace.to_string())
                     .unwrap_or(&"".to_string())
                     .clone(),
             },

@@ -6,10 +6,8 @@ use crate::refresh::{Refresh, RefreshDeps};
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::JobArgs;
-use crate::util::NamespacedName;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use itertools::Itertools;
 use node::CreateNodeArgs;
 
 mod node;
@@ -153,16 +151,12 @@ impl<D: CreateDeps> Create<D> {
             .await
             .expect("failed to refresh state");
 
-        let search_name = NamespacedName {
-            name: from_name.to_string(),
-            namespace: args.namespace.clone(),
-        };
-
-        let cjobs = state
-            .catalogue(None, &[ResourceType::CronJob])
-            .into_iter()
-            .filter(|c| c.object.name == search_name)
-            .collect_vec();
+        let cjobs = state.catalogue(
+            None,
+            &[ResourceType::CronJob],
+            Some(&args.namespace),
+            Some(&from_name),
+        );
 
         if cjobs.is_empty() {
             return Err(anyhow!(
@@ -178,7 +172,7 @@ impl<D: CreateDeps> Create<D> {
         let node = state
             .nodes
             .iter()
-            .find(|n| n.node_name == cjob.node)
+            .find(|n| n.node_name == cjob.node.node_name)
             .unwrap();
 
         let conn = conns.find(&node.node_name).unwrap();

@@ -77,10 +77,8 @@ impl<T: Tabled + NameFilters + From<ObjectListItem>> Lister<T> for ResourceListe
         let id = filters.id.clone().unwrap_or("".to_string());
 
         let resources = state
-            .catalogue(None, &[resource_type.clone()])
+            .catalogue(None, &[resource_type.clone()], Some(&ns), Some(&id))
             .into_iter()
-            .filter(|r| r.object.resource_type == resource_type)
-            .filter(|r| r.object.matches_ns_name(&id, &ns))
             .map(|r| r.object.clone().into())
             .collect();
 

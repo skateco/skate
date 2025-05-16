@@ -10,9 +10,9 @@ use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::ssh::SshClients;
-use crate::state::state::{ClusterState, NodeState};
+use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
-use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, CROSS_EMOJI};
+use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels, CROSS_EMOJI};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
@@ -112,6 +112,16 @@ pub struct NodeSelection {
 // maybe > 0 per node (daemonset)
 // distributed (pod, cron)
 impl DefaultScheduler {
+    fn next_generation(existing: Option<&CatalogueItem>) -> i64 {
+        if let Some(existing_gen) = existing.and_then(|m| Some(m.object.generation.clone())) {
+            if existing_gen > 0 {
+                return existing_gen + 1;
+            } else {
+                return 1;
+            }
+        };
+        1
+    }
     fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
@@ -188,7 +198,21 @@ impl DefaultScheduler {
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
-        let ds = ds.clone();
+        let mut ds = ds.clone();
+        let daemonset_name = ds
+            .metadata
+            .name
+            .clone()
+            .ok_or(anyhow!("no daemonset name"))?;
+
+        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
+        let existing_daemonset = state.catalogue(
+            None,
+            &[ResourceType::DaemonSet],
+            Some(&ns),
+            Some(&daemonset_name),
+        );
+        ds.metadata.generation = Some(Self::next_generation(existing_daemonset.first()));
 
         let default_ops: Vec<_> = state
             .nodes
@@ -202,21 +226,14 @@ impl DefaultScheduler {
 
         let mut actions = HashMap::from([(metadata_name(&ds), default_ops)]);
 
-        let daemonset_name = ds.metadata.name.clone().unwrap_or("".to_string());
-
-        if daemonset_name.is_empty() {
-            return Err(anyhow!("no daemonset name").into());
-        }
-        let ns = ds.metadata.namespace.clone().unwrap_or("".to_string());
-
         let schedulable_nodes = state.nodes.iter().filter(|n| n.schedulable());
         let unschedulable_nodes = state.nodes.iter().filter(|n| !n.schedulable());
 
         for node in unschedulable_nodes {
             let existing_pods = node.filter_pods(&|p| {
-                p.labels.contains_key("skate.io/daemonset")
-                    && p.labels.get("skate.io/daemonset").unwrap() == &daemonset_name
-                    && p.labels.get("skate.io/namespace").unwrap() == &ns
+                p.labels.contains_key(&SkateLabels::Daemonset.to_string())
+                    && p.labels.get(&SkateLabels::Daemonset.to_string()).unwrap() == &daemonset_name
+                    && p.labels.get(&SkateLabels::Namespace.to_string()).unwrap() == &ns
             });
             for pod_info in existing_pods {
                 let pod: Pod = (&pod_info).into();
@@ -260,14 +277,14 @@ impl DefaultScheduler {
             meta.namespace = Some(ns.clone());
 
             let mut labels = meta.labels.clone().unwrap_or_default();
-            labels.insert("skate.io/name".to_string(), name.clone());
-            labels.insert("skate.io/daemonset".to_string(), daemonset_name.clone());
+            labels.insert(SkateLabels::Name.to_string(), name.clone());
+            labels.insert(SkateLabels::Daemonset.to_string(), daemonset_name.clone());
             meta.labels = Some(labels);
 
             // bind to specific node
             pod_spec.node_selector = Some({
                 let mut selector = pod_spec.node_selector.unwrap_or_default();
-                selector.insert("skate.io/nodename".to_string(), node_name.clone());
+                selector.insert(SkateLabels::Nodename.to_string(), node_name.clone());
                 selector
             });
 
@@ -372,15 +389,24 @@ impl DefaultScheduler {
         state: &ClusterState,
         d: &Deployment,
     ) -> Result<ApplyPlan, Box<dyn Error>> {
-        let d = d.clone();
+        let mut d = d.clone();
+
+        let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
+        let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
+
+        let existing_deployment = state.catalogue(
+            None,
+            &[ResourceType::Deployment],
+            Some(&ns),
+            Some(&deployment_name),
+        );
+        d.metadata.generation = Some(Self::next_generation(existing_deployment.first()));
 
         let replicas = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(0);
 
-        let deployment_name = d.metadata.name.clone().unwrap_or("".to_string());
         if deployment_name.is_empty() {
             return Err(anyhow!("no deployment name").into());
         }
-        let ns = d.metadata.namespace.clone().unwrap_or("".to_string());
 
         let default_ops: Vec<_> = state
             .nodes
@@ -403,7 +429,7 @@ impl DefaultScheduler {
             .map(|(dp, node)| {
                 let replica = dp
                     .labels
-                    .get("skate.io/replica")
+                    .get(&SkateLabels::Replica.to_string())
                     .unwrap_or(&"0".to_string())
                     .clone();
                 let replica = replica.parse::<u32>().unwrap_or(0);
@@ -458,9 +484,9 @@ impl DefaultScheduler {
             meta.namespace = Some(ns.clone());
 
             let mut labels = meta.labels.unwrap_or_default();
-            labels.insert("skate.io/name".to_string(), name);
-            labels.insert("skate.io/deployment".to_string(), deployment_name.clone());
-            labels.insert("skate.io/replica".to_string(), i.to_string());
+            labels.insert(SkateLabels::Name.to_string(), name);
+            labels.insert(SkateLabels::Deployment.to_string(), deployment_name.clone());
+            labels.insert(SkateLabels::Replica.to_string(), i.to_string());
             meta.labels = Some(labels);
 
             let pod = Pod {
@@ -530,7 +556,7 @@ impl DefaultScheduler {
             Some((pod_info, node)) => {
                 let previous_hash = pod_info
                     .labels
-                    .get("skate.io/hash")
+                    .get(&SkateLabels::Hash.to_string())
                     .unwrap_or(&"".to_string())
                     .clone();
                 let state_running = pod_info.status == PodmanPodStatus::Running;
@@ -566,36 +592,29 @@ impl DefaultScheduler {
 
         let mut new_cron = cron.clone();
 
+        let existing_cron = state.catalogue(
+            None,
+            &[ResourceType::CronJob],
+            Some(&name.namespace),
+            Some(&name.name),
+        );
+        let existing_cron = existing_cron.first();
+        new_cron.metadata.generation = Some(Self::next_generation(existing_cron));
         // Sanitise manifest since we'll be running that later via kube play
         // - only 1 replica
         let mut actions = vec![];
 
         let new_hash = hash_k8s_resource(&mut new_cron);
 
-        let existing_cron = state
-            .locate_objects(
-                None,
-                |si| {
-                    Some(
-                        (&si.resources)
-                            .iter()
-                            .filter(|r| r.resource_type == ResourceType::CronJob)
-                            .map(|o| o.clone())
-                            .collect::<Vec<_>>(),
-                    )
-                },
-                Some(&name.name),
-                Some(&name.namespace),
-            )
-            .first()
-            .cloned();
-
         let op_types = match existing_cron {
-            Some((item, node)) => {
-                if item.manifest_hash == new_hash && node.schedulable() {
-                    vec![(OpType::Unchanged, Some(node.clone()))]
+            Some(existing_cron) => {
+                let node = existing_cron.node.clone();
+                if existing_cron.object.manifest_hash == new_hash
+                    && existing_cron.node.schedulable()
+                {
+                    vec![(OpType::Unchanged, Some(node))]
                 } else {
-                    vec![(OpType::Delete, Some(node.clone())), (OpType::Create, None)]
+                    vec![(OpType::Delete, Some(node)), (OpType::Create, None)]
                 }
             }
             None => {
@@ -626,35 +645,35 @@ impl DefaultScheduler {
         let mut actions = vec![];
         let ns_name = metadata_name(&new_secret);
 
+        let existing_secret = state.catalogue(
+            None,
+            &[ResourceType::Secret],
+            Some(&ns_name.namespace),
+            Some(&ns_name.name),
+        );
+        new_secret.metadata.generation = Some(Self::next_generation(existing_secret.first()));
+
         let new_hash = hash_k8s_resource(&mut new_secret);
 
         let mut op_types: Vec<_> = vec![];
 
         for node in state.nodes.iter() {
-            let existing_secrets = state.locate_objects(
+            let existing_secrets = state.catalogue(
                 Some(&node.node_name),
-                |si| {
-                    Some(
-                        (&si.resources)
-                            .iter()
-                            .filter(|r| r.resource_type == ResourceType::Secret)
-                            .map(|o| o.clone())
-                            .collect::<Vec<_>>(),
-                    )
-                },
-                Some(&ns_name.name),
+                &[ResourceType::Secret],
                 Some(&ns_name.namespace),
+                Some(&ns_name.name),
             );
             let existing_secret = existing_secrets.first();
 
             op_types.extend(match existing_secret {
-                Some((item, node)) => {
+                Some(existing_secret) => {
                     if !node.schedulable() {
-                        vec![(OpType::Delete, &**node)]
-                    } else if item.manifest_hash == new_hash {
-                        vec![(OpType::Unchanged, &**node)]
+                        vec![(OpType::Delete, node)]
+                    } else if existing_secret.object.manifest_hash == new_hash {
+                        vec![(OpType::Unchanged, node)]
                     } else {
-                        vec![(OpType::Clobber, &**node)]
+                        vec![(OpType::Clobber, node)]
                     }
                 }
                 None => {
@@ -693,32 +712,31 @@ impl DefaultScheduler {
 
         let mut new_service = service.clone();
 
+        let existing_service = state.catalogue(
+            None,
+            &[ResourceType::Service],
+            Some(&name.namespace),
+            Some(&name.name),
+        );
+        new_service.metadata.generation = Some(Self::next_generation(existing_service.first()));
+
         let new_hash = hash_k8s_resource(&mut new_service);
 
         for node in state.nodes.iter() {
-            let existing_service = state
-                .locate_objects(
-                    Some(&node.node_name),
-                    |si| {
-                        Some(
-                            (&si.resources)
-                                .iter()
-                                .filter(|r| r.resource_type == ResourceType::Service)
-                                .map(|o| o.clone())
-                                .collect::<Vec<_>>(),
-                        )
-                    },
-                    Some(&name.name),
-                    Some(&name.namespace),
-                )
-                .first()
-                .cloned();
+            let existing_service = state.catalogue(
+                Some(&node.node_name),
+                &[ResourceType::Service],
+                Some(&name.namespace),
+                Some(&name.name),
+            );
+
+            let existing_service = existing_service.first();
 
             let op_types = match existing_service {
-                Some((item, node)) => {
+                Some(existing_service) => {
                     if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if item.manifest_hash == new_hash {
+                    } else if existing_service.object.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
@@ -758,30 +776,29 @@ impl DefaultScheduler {
 
         let name = metadata_name(ingress);
 
+        let existing_ingress = state.catalogue(
+            None,
+            &[ResourceType::Ingress],
+            Some(&name.namespace),
+            Some(&name.name),
+        );
+
+        new_ingress.metadata.generation = Some(Self::next_generation(existing_ingress.first()));
+
         for node in state.nodes.iter() {
-            let existing_ingress = state
-                .locate_objects(
-                    Some(&node.node_name),
-                    |si| {
-                        Some(
-                            (&si.resources)
-                                .iter()
-                                .filter(|r| r.resource_type == ResourceType::Ingress)
-                                .map(|o| o.clone())
-                                .collect::<Vec<_>>(),
-                        )
-                    },
-                    Some(&name.name),
-                    Some(&name.namespace),
-                )
-                .first()
-                .cloned();
+            let existing_ingress = state.catalogue(
+                Some(&node.node_name),
+                &[ResourceType::Ingress],
+                Some(&name.namespace),
+                Some(&name.name),
+            );
+            let existing_ingress = existing_ingress.first();
 
             let op_types = match existing_ingress {
-                Some((item, node)) => {
+                Some(existing_ingress) => {
                     if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if item.manifest_hash == new_hash {
+                    } else if existing_ingress.object.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
@@ -821,32 +838,31 @@ impl DefaultScheduler {
 
         let mut new_cluster_issuer = cluster_issuer.clone();
 
+        let existing_cluster_issuer = state.catalogue(
+            None,
+            &[ResourceType::ClusterIssuer],
+            Some("skate"),
+            Some(&ns_name.name),
+        );
+
+        new_cluster_issuer.metadata.generation =
+            Some(Self::next_generation(existing_cluster_issuer.first()));
+
         let new_hash = hash_k8s_resource(&mut new_cluster_issuer);
 
         for node in state.nodes.iter() {
-            let existing = state
-                .locate_objects(
-                    Some(&node.node_name),
-                    |si| {
-                        Some(
-                            (&si.resources)
-                                .iter()
-                                .filter(|r| r.resource_type == ResourceType::ClusterIssuer)
-                                .map(|o| o.clone())
-                                .collect::<Vec<_>>(),
-                        )
-                    },
-                    Some(&ns_name.name),
-                    Some("skate"),
-                )
-                .first()
-                .cloned();
+            let existing = state.catalogue(
+                Some(&node.node_name),
+                &[ResourceType::ClusterIssuer],
+                Some("skate"),
+                Some(&ns_name.name),
+            );
 
-            let op_types = match existing {
-                Some((item, node)) => {
+            let op_types = match existing.first() {
+                Some(existing) => {
                     if !node.schedulable() {
                         vec![OpType::Delete]
-                    } else if item.manifest_hash == new_hash {
+                    } else if existing.object.manifest_hash == new_hash {
                         vec![OpType::Unchanged]
                     } else {
                         vec![OpType::Delete, OpType::Create]
@@ -1240,9 +1256,12 @@ mod tests {
 
             let mut pod_meta = ObjectMeta {
                 labels: Some(BTreeMap::from([
-                    ("skate.io/deployment".to_string(), ns_name.name.clone()),
-                    ("skate.io/name".to_string(), pod_name.clone()),
-                    ("skate.io/namespace".to_string(), ns_name.namespace.clone()),
+                    (SkateLabels::Deployment.to_string(), ns_name.name.clone()),
+                    (SkateLabels::Name.to_string(), pod_name.clone()),
+                    (
+                        SkateLabels::Namespace.to_string(),
+                        ns_name.namespace.clone(),
+                    ),
                 ])),
                 ..Default::default()
             };

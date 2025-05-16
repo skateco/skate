@@ -5,7 +5,7 @@ use crate::skatelet::database::resource::{
 };
 use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
-use crate::util::metadata_name;
+use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
@@ -41,13 +41,9 @@ impl IngressController {
             None,
         )?;
 
-        let hash = ingress
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&ingress.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
+        let generation = ingress.metadata.generation.unwrap_or_default();
 
         let object = resource::Resource {
             name: fq_name.name,
@@ -55,6 +51,7 @@ impl IngressController {
             resource_type: resource::ResourceType::Ingress,
             manifest: serde_json::to_value(ingress)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
 

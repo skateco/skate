@@ -4,7 +4,7 @@ use crate::skatelet::SystemInfo;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeState;
 use crate::state::state::NodeStatus::Healthy;
-use crate::util::NamespacedName;
+use crate::util::{NamespacedName, SkateLabels};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use std::collections::BTreeMap;
@@ -88,8 +88,8 @@ impl From<NamespacedName> for ObjectMeta {
             name: Some(ns_name.name.clone()),
             namespace: Some(ns_name.namespace.clone()),
             labels: Some(BTreeMap::from([
-                ("skate.io/name".to_string(), ns_name.name),
-                ("skate.io/namespace".to_string(), ns_name.namespace),
+                (SkateLabels::Name.to_string(), ns_name.name),
+                (SkateLabels::Namespace.to_string(), ns_name.namespace),
             ])),
             ..Default::default()
         }

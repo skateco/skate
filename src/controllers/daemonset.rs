@@ -1,7 +1,7 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
-use crate::util::metadata_name;
+use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use k8s_openapi::api::apps::v1::DaemonSet;
 use sqlx::SqlitePool;
 use std::error::Error;
@@ -23,13 +23,10 @@ impl DaemonSetController {
 
     pub async fn apply(&self, ds: &DaemonSet) -> Result<(), Box<dyn Error>> {
         let ns_name = metadata_name(ds);
-        let hash = ds
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&ds.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
+
+        let generation = ds.metadata.generation.unwrap_or_default();
 
         let object = resource::Resource {
             name: ns_name.name.clone(),
@@ -37,6 +34,7 @@ impl DaemonSetController {
             resource_type: resource::ResourceType::DaemonSet,
             manifest: serde_json::to_value(ds)?,
             hash: hash.clone(),
+            generation,
             ..Default::default()
         };
         resource::upsert_resource(&self.db, &object).await?;

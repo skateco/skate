@@ -5,7 +5,7 @@ use crate::skatelet::database::resource::{
 };
 use crate::skatelet::services::dns::DnsService;
 use crate::template;
-use crate::util::{lock_file, metadata_name};
+use crate::util::{get_skate_label_value, lock_file, metadata_name, SkateLabels};
 use anyhow::anyhow;
 use k8s_openapi::api::core::v1::Service;
 use log::{error, info};
@@ -49,19 +49,17 @@ impl ServiceController {
 
         // manifest goes into store
 
-        let hash = service
-            .metadata
-            .labels
-            .as_ref()
-            .and_then(|m| m.get("skate.io/hash"))
-            .unwrap_or(&"".to_string())
-            .to_string();
+        let hash = get_skate_label_value(&service.metadata.labels, &SkateLabels::Hash)
+            .unwrap_or("".to_string());
+
+        let generation = service.metadata.generation.unwrap_or_default();
 
         let object = Resource {
             name: name.name.clone(),
             namespace: name.namespace.clone(),
             resource_type: ResourceType::Service,
             manifest,
+            generation,
             hash,
             ..Default::default()
         };
