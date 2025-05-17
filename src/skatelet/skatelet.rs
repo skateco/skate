@@ -115,7 +115,7 @@ pub async fn skatelet() -> Result<(), SkateError> {
     };
 
     log::set_boxed_logger(Box::new(BasicLogger::new(logger)))
-        .map(|()| log::set_max_level(LevelFilter::Debug))
+        .map(|()| log::set_max_level(LevelFilter::Info))
         .map_err(|e| anyhow!(e))?;
 
     let deps = SkateletDeps { db };

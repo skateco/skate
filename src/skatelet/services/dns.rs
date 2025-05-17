@@ -107,6 +107,8 @@ impl<'a> DnsService<'a> {
             let container_json: serde_json::Value = serde_json::from_str(&output)
                 .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))
                 .map_err(|e| (false, e.into()))?;
+            // it's only the infra container that has the skate network
+            // and ip
             let is_infra = container_json[0]["IsInfra"].as_bool().unwrap();
             if !is_infra {
                 warn!("{} not infra container", log_tag);
