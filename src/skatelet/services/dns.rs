@@ -94,7 +94,7 @@ impl<'a> DnsService<'a> {
         info!("{} dns add for {} {:?}", log_tag, container_id, supplied_ip);
 
         // TODO - store pod info in store, if no info, break retry loop
-        let (extracted_ip, json) = Self::retry(10, || {
+        let result = Self::retry(10, || {
             debug!("{} inspecting container {}", log_tag, container_id);
             let output = self
                 .execer
@@ -134,7 +134,17 @@ impl<'a> DnsService<'a> {
                 .map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))
                 .map_err(|e| (false, e.into()))?;
             Ok((ip, pod_json))
-        })?;
+        });
+
+        let (extracted_ip, json) = match result {
+            Ok((extracted_ip, json)) => (extracted_ip, json),
+            Err(err) => {
+                if err.to_string().ends_with("not infra container") {
+                    return Ok(());
+                }
+                return Err(err.into());
+            }
+        };
 
         let ip = match supplied_ip {
             Some(ip) => Some(ip),
