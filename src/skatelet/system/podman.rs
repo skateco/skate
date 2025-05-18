@@ -1,6 +1,6 @@
 use crate::util::SkateLabels;
 use chrono::{DateTime, Local};
-use k8s_openapi::api::core::v1::{Pod, PodSpec, PodStatus as K8sPodStatus};
+use k8s_openapi::api::core::v1::{Container, Pod, PodSpec, PodStatus as K8sPodStatus};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -177,6 +177,37 @@ impl From<Pod> for PodmanPodInfo {
 
 impl From<&PodmanPodInfo> for Pod {
     fn from(val: &PodmanPodInfo) -> Self {
+        let containers = val
+            .containers
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|c| Container {
+                args: None,
+                command: None,
+                env: None,
+                env_from: None,
+                image: None,
+                image_pull_policy: None,
+                lifecycle: None,
+                liveness_probe: None,
+                name: c.names.to_string(),
+                ports: None,
+                readiness_probe: None,
+                resize_policy: None,
+                resources: None,
+                restart_policy: None,
+                security_context: None,
+                startup_probe: None,
+                stdin: None,
+                stdin_once: None,
+                termination_message_path: None,
+                termination_message_policy: None,
+                tty: None,
+                volume_devices: None,
+                volume_mounts: None,
+                working_dir: None,
+            });
         Pod {
             metadata: ObjectMeta {
                 annotations: None,
@@ -215,7 +246,7 @@ impl From<&PodmanPodInfo> for Pod {
                 active_deadline_seconds: None,
                 affinity: None,
                 automount_service_account_token: None,
-                containers: vec![],
+                containers: containers.collect(),
                 dns_config: None,
                 dns_policy: None,
                 enable_service_links: None,

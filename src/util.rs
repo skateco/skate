@@ -124,7 +124,7 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize +
     // sort labels
     labels = labels
         .into_iter()
-        .sorted_by_key(|(k, v)| k.clone())
+        .sorted_by_key(|(k, _v)| k.clone())
         .collect();
     obj.metadata_mut().labels = Option::from(labels);
 
@@ -133,7 +133,7 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize +
     // sort annotations
     annotations = annotations
         .into_iter()
-        .sorted_by_key(|(k, v)| k.clone())
+        .sorted_by_key(|(k, _v)| k.clone())
         .collect();
     obj.metadata_mut().annotations = Option::from(annotations);
 
