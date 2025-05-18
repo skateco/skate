@@ -122,13 +122,19 @@ pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize +
     obj.metadata_mut().generation = None;
 
     // sort labels
-    labels = labels.into_iter().sorted_by_key(|(k, v)| k).collect();
+    labels = labels
+        .into_iter()
+        .sorted_by_key(|(k, v)| k.clone())
+        .collect();
     obj.metadata_mut().labels = Option::from(labels);
 
     let mut annotations = obj.metadata().annotations.clone().unwrap_or_default();
 
     // sort annotations
-    annotations = annotations.into_iter().sorted_by_key(|(k, v)| k).collect();
+    annotations = annotations
+        .into_iter()
+        .sorted_by_key(|(k, v)| k.clone())
+        .collect();
     obj.metadata_mut().annotations = Option::from(annotations);
 
     let serialized = serde_yaml::to_string(&obj).unwrap();
