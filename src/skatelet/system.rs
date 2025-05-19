@@ -174,23 +174,28 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
         })
         .collect();
 
-    let secret_json = execer
-        .exec(
-            "podman",
-            &[
-                vec!["secret", "inspect", "--showsecret"],
-                secret_names.clone(),
-            ]
-            .concat(),
-            None,
-        )
-        .unwrap_or_else(|e| {
-            error!("failed to get secret info for {:?}: {}", secret_names, e);
-            "[]".to_string()
-        });
+    let secret_json = if secret_names.is_empty() {
+        "[]".to_string()
+    } else {
+        execer
+            .exec(
+                "podman",
+                &[
+                    vec!["secret", "inspect", "--showsecret"],
+                    secret_names.clone(),
+                ]
+                .concat(),
+                None,
+            )
+            .unwrap_or_else(|e| {
+                error!("failed to get secret info for {:?}: {}", secret_names, e);
+                "[]".to_string()
+            })
+    };
 
     let secret_info: Vec<PodmanSecret> = serde_json::from_str(&secret_json)
         .map_err(|e| anyhow!(e).context("failed to deserialize secret info"))?;
+
     let secret_info: Vec<ObjectListItem> = secret_info
         .iter()
         .filter_map(|s| {

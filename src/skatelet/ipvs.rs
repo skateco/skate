@@ -119,7 +119,7 @@ impl<D: IPVSDeps> IPVS<D> {
             || !Path::new(&args.out).exists();
         // hashes match and output file exists
         if !something_changed {
-            info!("no changes detected: {:?}", &addrs);
+            info!("no changes detected: {:?}", &addrs.into_iter().sorted());
             return Ok(());
         }
 
@@ -339,8 +339,8 @@ impl<D: IPVSDeps> IPVS<D> {
                 info!(
                     "keeping {} since it was terminated {} seconds ago ( < {} seconds ago )",
                     ip,
+                    now - ts,
                     TERMINATED_MAX_AGE,
-                    now - ts
                 );
                 keep_set.insert(ip);
                 new_contents.push_str(line);
