@@ -1,11 +1,3 @@
-use anyhow::anyhow;
-use async_trait::async_trait;
-use colored::Colorize;
-use itertools::Itertools;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
-use std::error::Error;
-
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
@@ -13,11 +5,19 @@ use crate::ssh::SshClients;
 use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
 use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels, CROSS_EMOJI};
+use anyhow::anyhow;
+use async_trait::async_trait;
+use colored::Colorize;
+use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, HashMap};
+use std::error::Error;
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct ScheduleResult {
@@ -608,10 +608,8 @@ impl DefaultScheduler {
 
         let op_types = match existing_cron {
             Some(existing_cron) => {
-                let node = existing_cron.node.clone();
-                if existing_cron.object.manifest_hash == new_hash
-                    && existing_cron.node.schedulable()
-                {
+                let node = existing_cron.nodes.first().unwrap().deref();
+                if existing_cron.object.manifest_hash == new_hash && node.schedulable() {
                     vec![(OpType::Unchanged, Some(node))]
                 } else {
                     vec![(OpType::Delete, Some(node)), (OpType::Create, None)]
@@ -625,7 +623,7 @@ impl DefaultScheduler {
             actions.push(ScheduledOperation {
                 operation: op_type,
                 resource: SupportedResources::CronJob(new_cron.clone()),
-                node,
+                node: node.cloned(),
                 error: None,
                 silent: false,
             })

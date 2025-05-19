@@ -10,8 +10,9 @@ use k8s_openapi::api::core::v1::{
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
 use std::path::Path;
 use strum_macros::Display;
@@ -318,6 +319,18 @@ impl ReconciledResult {
     }
 }
 
+/// Unwraps an Option, returning the value if it is Some, or continuing the loop if it is None.
+macro_rules! unwrap_or_continue {
+    ($opt: expr) => {
+        match $opt {
+            Some(v) => v,
+            None => {
+                continue;
+            }
+        }
+    };
+}
+
 impl ClusterState {
     fn path(cluster_name: &str) -> String {
         format!("{}/{}.state", cache_dir(), slugify(cluster_name))
@@ -541,24 +554,91 @@ impl ClusterState {
         namespace: Option<&str>,
         name: Option<&str>,
     ) -> Vec<CatalogueItem> {
-        self.nodes
-            .iter()
-            .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
-            .filter_map(|n| {
-                n.host_info.as_ref().and_then(|hi| {
-                    hi.system_info
-                        .as_ref()
-                        .map(|si| extract_catalog(&n, si, filter_types, namespace, name))
-                })
-            })
-            .flatten()
-            // sort by time descending
-            .sorted_by(|a, b| a.object.updated_at.cmp(&b.object.updated_at))
-            // sort by generation descending
-            .sorted_by(|a, b| a.object.generation.cmp(&b.object.generation))
-            // will ignore duplicates,
-            .unique_by(|x| format!("{}-{}", x.object.resource_type, x.object.name))
-            .collect()
+        let mut map: HashMap<String, CatalogueItem> = HashMap::new();
+
+        for node in &self.nodes {
+            if filter_node.is_some() && node.node_name != filter_node.unwrap_or_default() {
+                continue;
+            }
+
+            let si = node
+                .host_info
+                .as_ref()
+                .and_then(|hi| hi.system_info.as_ref());
+            let si = unwrap_or_continue!(si);
+
+            let objects = extract_catalog(&si, filter_types, namespace, name);
+
+            for object in objects {
+                let key = format!("{}-{}", object.resource_type, object.name);
+
+                if let Some(existing) = map.get_mut(&key) {
+                    if object.generation == existing.object.generation {
+                        // not a conflict
+                        // push onto nodes if not alerady there
+                        if !existing.nodes.contains(&&node) {
+                            existing.nodes.push(&node);
+                        }
+                        continue;
+                    } else if object.generation > existing.object.generation {
+                        // object is newer
+                        // replace and push existing onto conflicts
+                        let conflict = ConflictingResource {
+                            object: existing.object,
+                            nodes: existing.nodes.clone(),
+                            reason: ConflictReason::LesserVersion,
+                        };
+
+                        eprintln!("WARNING: {}: resource on {} has lower generation ({}) than latest ({})",
+                                  object.name,
+                                  existing.nodes.iter().map(|i| i.node_name.to_string()).join(", "),
+                                  existing.object.generation,
+                                  object.generation);
+
+                        map.insert(
+                            key,
+                            CatalogueItem {
+                                object,
+                                conflict: vec![conflict],
+                                nodes: vec![&node],
+                            },
+                        );
+                    } else if object.generation < existing.object.generation {
+                        // object is old
+                        // put it onto conflicts
+                        if let Some(existing_conflict) = existing
+                            .conflict
+                            .iter_mut()
+                            .find(|i| i.object.generation == object.generation)
+                        {
+                            // already exists
+                            if !existing_conflict.nodes.contains(&&node) {
+                                existing_conflict.nodes.push(&node);
+                            }
+                        } else {
+                            // new conflict
+                            let conflict = ConflictingResource {
+                                object,
+                                nodes: vec![&node],
+                                reason: ConflictReason::LesserVersion,
+                            };
+                            existing.conflict.push(conflict);
+                        }
+
+                        eprintln!("WARNING: {}: resource on {} has lower generation ({}) than latest ({})", object.name, node.node_name, object.generation, existing.object.generation);
+                    }
+                } else {
+                    let item = CatalogueItem {
+                        object,
+                        conflict: vec![],
+                        nodes: vec![&node],
+                    };
+                    map.insert(key, item);
+                }
+            }
+        }
+
+        map.into_iter().map(|(_, item)| item).collect()
     }
 }
 
@@ -579,23 +659,23 @@ fn extract_mut_catalog<'a>(
         .collect()
 }
 
-fn extract_catalog<'a, 'b>(
-    n: &'b NodeState,
+struct PlacedResource<'a, 'b> {
+    object: &'a ObjectListItem,
+    node: &'b NodeState,
+}
+
+fn extract_catalog<'a>(
     si: &'a SystemInfo,
     filter_types: &[ResourceType],
     namespace: Option<&str>,
     name: Option<&str>,
-) -> Vec<CatalogueItem<'a, 'b>> {
+) -> Vec<&'a ObjectListItem> {
     let all_types = filter_types.is_empty();
 
     (&si.resources)
         .into_iter()
         .filter(|c| all_types || filter_types.contains(&c.resource_type))
         .filter(|c| c.matches_ns_name(name.unwrap_or_default(), namespace.unwrap_or_default()))
-        .map(|o| CatalogueItem {
-            object: o,
-            node: &n,
-        })
         .collect()
 }
 
@@ -606,7 +686,177 @@ pub struct MutCatalogueItem<'a> {
     pub node: String,
 }
 
-pub struct CatalogueItem<'a, 'b> {
+pub enum ConflictReason {
+    LesserVersion,
+    // HashMismatch, TODO
+}
+
+pub struct ConflictingResource<'a, 'b> {
     pub object: &'a ObjectListItem,
-    pub node: &'b NodeState,
+    pub nodes: Vec<&'b NodeState>,
+    pub reason: ConflictReason,
+}
+
+impl Display for ConflictingResource<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} on {} has {}",
+            self.object.name,
+            self.nodes
+                .iter()
+                .map(|i| i.node_name.to_string())
+                .join(", "),
+            match self.reason {
+                ConflictReason::LesserVersion =>
+                    format!("lower generation ({}) than latest", self.object.generation),
+                // ConflictReason::HashMismatch => "Hash Mismatch",
+            }
+        )
+    }
+}
+pub struct CatalogueItem<'a, 'b, 'c, 'd> {
+    pub object: &'a ObjectListItem,
+    pub conflict: Vec<ConflictingResource<'b, 'c>>,
+    pub nodes: Vec<&'d NodeState>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::filestore::ObjectListItem;
+    use crate::skatelet::database::resource::ResourceType;
+    use crate::skatelet::SystemInfo;
+    use crate::ssh::HostInfo;
+    use crate::state::state::{ClusterState, NodeState, NodeStatus};
+    use crate::util::NamespacedName;
+
+    #[test]
+    fn should_detect_conflicts() {
+        let state = ClusterState {
+            cluster_name: "test".to_string(),
+            nodes: vec![
+                NodeState {
+                    node_name: "node1".to_string(),
+                    status: NodeStatus::Healthy,
+                    message: None,
+                    host_info: Some(HostInfo {
+                        node_name: "node1".to_string(),
+                        system_info: Some(SystemInfo {
+                            resources: vec![
+                                ObjectListItem {
+                                    name: "same-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 1,
+                                    ..Default::default()
+                                },
+                                ObjectListItem {
+                                    name: "lesser-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 2,
+                                    ..Default::default()
+                                },
+                                ObjectListItem {
+                                    name: "greater-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 1,
+                                    ..Default::default()
+                                },
+                            ],
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                },
+                NodeState {
+                    node_name: "node2".to_string(),
+                    status: NodeStatus::Healthy,
+                    message: None,
+                    host_info: Some(HostInfo {
+                        node_name: "node2".to_string(),
+                        system_info: Some(SystemInfo {
+                            resources: vec![
+                                ObjectListItem {
+                                    name: "same-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 1,
+                                    ..Default::default()
+                                },
+                                ObjectListItem {
+                                    name: "lesser-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 1,
+                                    ..Default::default()
+                                },
+                                ObjectListItem {
+                                    name: "greater-version.ns".into(),
+                                    resource_type: ResourceType::Pod,
+                                    generation: 2,
+                                    ..Default::default()
+                                },
+                            ],
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                },
+            ],
+        };
+
+        let same_version =
+            state.catalogue(None, &[ResourceType::Pod], Some("ns"), Some("same-version"));
+        assert_eq!(same_version.len(), 1);
+        assert_eq!(
+            same_version[0].object.name.to_string(),
+            "same-version.ns".to_string()
+        );
+        assert_eq!(same_version[0].conflict.len(), 0);
+
+        let lesser_version = state.catalogue(
+            None,
+            &[ResourceType::Pod],
+            Some("ns"),
+            Some("lesser-version"),
+        );
+        assert_eq!(lesser_version.len(), 1);
+        assert_eq!(
+            lesser_version[0].object.name.to_string(),
+            "lesser-version.ns".to_string()
+        );
+        assert_eq!(lesser_version[0].object.generation, 2);
+        assert_eq!(lesser_version[0].conflict.len(), 1);
+        assert_eq!(
+            lesser_version[0].conflict[0].object.name.to_string(),
+            "lesser-version.ns".to_string()
+        );
+        assert_eq!(lesser_version[0].conflict[0].nodes.len(), 1);
+        assert_eq!(
+            lesser_version[0].conflict[0].nodes[0].node_name,
+            "node2".to_string()
+        );
+        assert_eq!(lesser_version[0].conflict[0].object.generation, 1);
+
+        let greater_version = state.catalogue(
+            None,
+            &[ResourceType::Pod],
+            Some("ns"),
+            Some("greater-version"),
+        );
+        assert_eq!(greater_version.len(), 1);
+        assert_eq!(
+            greater_version[0].object.name.to_string(),
+            "greater-version.ns".to_string()
+        );
+        assert_eq!(greater_version[0].object.generation, 2);
+        assert_eq!(greater_version[0].conflict.len(), 1);
+        assert_eq!(
+            greater_version[0].conflict[0].object.name.to_string(),
+            "greater-version.ns".to_string()
+        );
+        assert_eq!(greater_version[0].conflict[0].nodes.len(), 1);
+        assert_eq!(
+            greater_version[0].conflict[0].nodes[0].node_name,
+            "node1".to_string()
+        );
+        assert_eq!(greater_version[0].conflict[0].object.generation, 1);
+    }
 }

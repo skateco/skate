@@ -172,7 +172,7 @@ impl<D: CreateDeps> Create<D> {
         let node = state
             .nodes
             .iter()
-            .find(|n| n.node_name == cjob.node.node_name)
+            .find(|n| n.node_name == cjob.nodes.first().unwrap().node_name)
             .unwrap();
 
         let conn = conns.find(&node.node_name).unwrap();
