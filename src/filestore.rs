@@ -32,7 +32,7 @@ pub struct FileStore {
     base_path: String,
 }
 
-#[derive(Tabled, Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Tabled, Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
 pub struct ObjectListItem {
     pub resource_type: ResourceType,
