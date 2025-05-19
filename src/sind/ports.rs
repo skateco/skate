@@ -38,7 +38,9 @@ pub async fn ports<D: PortsDeps>(deps: D, _: PortsArgs) -> Result<(), SkateError
         let name = name.strip_prefix("/").unwrap_or_default();
         let ports = shell_exec.exec("docker", &["port", id], None)?;
 
-        println!("{name} {}", ports.lines().next().unwrap_or(""));
+        for line in ports.lines() {
+            println!("{name} {}", line);
+        }
     }
 
     Ok(())
