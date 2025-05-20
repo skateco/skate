@@ -589,11 +589,17 @@ impl ClusterState {
                             reason: ConflictReason::LesserVersion,
                         };
 
-                        eprintln!("WARNING: {}: resource on {} has lower generation ({}) than latest ({})",
-                                  object.name,
-                                  existing.nodes.iter().map(|i| i.node_name.to_string()).join(", "),
-                                  existing.object.generation,
-                                  object.generation);
+                        eprintln!(
+                            "WARNING: {}: resource on {} has generation {} when latest is {}",
+                            object.name,
+                            existing
+                                .nodes
+                                .iter()
+                                .map(|i| i.node_name.to_string())
+                                .join(", "),
+                            existing.object.generation,
+                            object.generation
+                        );
 
                         map.insert(
                             key,
@@ -625,7 +631,13 @@ impl ClusterState {
                             existing.conflict.push(conflict);
                         }
 
-                        eprintln!("WARNING: {}: resource on {} has lower generation ({}) than latest ({})", object.name, node.node_name, object.generation, existing.object.generation);
+                        eprintln!(
+                            "WARNING: {}: resource on {} has generation {} when latest is {}",
+                            object.name,
+                            node.node_name,
+                            object.generation,
+                            existing.object.generation
+                        );
                     }
                 } else {
                     let item = CatalogueItem {
