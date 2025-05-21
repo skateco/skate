@@ -56,6 +56,8 @@ RUN groupadd skate && useradd skate -g skate; \
 echo skate:200000:65536 > /etc/subuid; \
 echo skate:200000:65536 > /etc/subgid;
 
+RUN useradd syslog -g adm
+
 VOLUME /var/lib/containers
 VOLUME /home/skate/.local/share/containers
 

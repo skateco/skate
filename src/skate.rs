@@ -15,7 +15,7 @@ use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::node_shell::{NodeShell, NodeShellArgs, NodeShellDeps};
 use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
-use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
+use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
@@ -211,6 +211,7 @@ pub enum Distribution {
     Debian,
     Raspbian,
     Ubuntu,
+    Fedora,
 }
 
 impl From<&str> for Distribution {
@@ -219,6 +220,7 @@ impl From<&str> for Distribution {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,
             s if s.starts_with("ubuntu") => Ubuntu,
+            s if s.starts_with("fedora") => Fedora,
             _ => Unknown,
         }
     }

@@ -142,25 +142,31 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         }
         // instruct on installing newer podman version
         None => {
-            let installed = match info.platform.distribution {
-                Distribution::Unknown => false,
+            let command = match info.platform.distribution {
+                Distribution::Unknown => {
+                    return Err(anyhow!("unknown distribution").into());
+                }
                 Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
-                    let command =
-                        "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'";
-                    println!("installing podman with command {}", command);
-                    let result = conn.execute(command).await;
-                    match result {
-                        Ok(_) => {
-                            println!("podman installed successfully {} ", CHECKBOX_EMOJI);
-                            true
-                        }
-                        Err(e) => {
-                            println!("failed to install podman {} :\n{}", CROSS_EMOJI, e);
-                            false
-                        }
+                    "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'"
+                }
+                Distribution::Fedora => "sh -c 'sudo dnf -y update && sudo dnf install -y podman'",
+            };
+
+            let installed = {
+                println!("installing podman with command {}", command);
+                let result = conn.execute(command).await;
+                match result {
+                    Ok(_) => {
+                        println!("podman installed successfully {} ", CHECKBOX_EMOJI);
+                        true
+                    }
+                    Err(e) => {
+                        println!("failed to install podman {} :\n{}", CROSS_EMOJI, e);
+                        false
                     }
                 }
             };
+
             if !installed {
                 return Err(anyhow!(
                     "podman not installed, see https://podman.io/docs/installation"
