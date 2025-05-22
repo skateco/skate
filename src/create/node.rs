@@ -147,13 +147,6 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     println!("{:}", &info.platform);
 
-    conn.execute_stdout(
-        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade",
-        true,
-        true,
-    )
-    .await?;
-
     match info.skatelet_version.as_ref() {
         None => {
             // install skatelet
@@ -175,6 +168,9 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             return Err(anyhow!("unknown distribution").into());
         }
     };
+
+    conn.execute_stdout(&provisioner.system_update(), true, true)
+        .await?;
 
     match info.podman_version.as_ref() {
         Some(version) => {
