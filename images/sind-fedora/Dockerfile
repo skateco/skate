@@ -20,6 +20,7 @@ FROM $BASE_IMAGE AS base
 #COPY --chmod=0644 files/etc/systemd/system/* /etc/systemd/system/
 
 RUN sudo dnf -y install \
+     awk \
      podman \
      netavark \
      # uidmap \
@@ -28,7 +29,7 @@ RUN sudo dnf -y install \
      vim \
      openssh-server \
      systemd \
-     # dnsmasq \
+     dnsmasq \
      wget \
      dnsutils \
      catatonit \
