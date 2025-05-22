@@ -69,7 +69,7 @@ run-e2e-tests-docker-fedora:
 	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
 	# start vms
-	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH} --image ghcr.io/skateco/sind:0.0.3-fedora
+	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH} --image ghcr.io/skateco/sind:0.0.4-fedora
 	cargo run --bin skate -- config use-context sind
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
