@@ -447,6 +447,7 @@ enable_rsyslog() {
 #fix_certificate() {
 fix_machine_id
 
+chmod 640 /etc/shadow
 systemctl enable sshd.service
 
 enable_rsyslog

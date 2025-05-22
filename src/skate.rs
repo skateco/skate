@@ -216,7 +216,7 @@ pub enum Distribution {
 
 impl From<&str> for Distribution {
     fn from(s: &str) -> Self {
-        match s.to_lowercase() {
+        match s.to_lowercase().trim_matches(|c| c == '\'' || c == '"') {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,
             s if s.starts_with("ubuntu") => Ubuntu,
