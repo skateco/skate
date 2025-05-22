@@ -449,6 +449,7 @@ fix_machine_id
 
 chmod 640 /etc/shadow
 systemctl enable sshd.service
+systemctl enable dnsmasq
 
 enable_rsyslog
 
