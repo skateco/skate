@@ -55,6 +55,51 @@ pub struct CreateNodeArgs {
     config: ConfigFileArgs,
 }
 
+trait CommandVariant {
+    fn system_update(&self) -> String;
+    fn install_podman(&self) -> String;
+    fn install_keepalived(&self) -> String;
+    fn remove_apparmor(&self) -> String;
+}
+
+struct UbuntuProvisioner {}
+struct FedoraProvisioner {}
+
+impl CommandVariant for UbuntuProvisioner {
+    fn system_update(&self) -> String {
+        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade".into()
+    }
+
+    fn install_podman(&self) -> String {
+        "sudo apt-get install -y podman".into()
+    }
+    fn install_keepalived(&self) -> String {
+        "sudo apt-get install -y keepalived".into()
+    }
+
+    fn remove_apparmor(&self) -> String {
+        "sudo aa-teardown && sudo apt purge -y apparmor".into()
+    }
+}
+
+impl CommandVariant for FedoraProvisioner {
+    fn system_update(&self) -> String {
+        "sudo dnf -y update && sudo dnf -y upgrade".into()
+    }
+
+    fn install_podman(&self) -> String {
+        "sudo dnf -y install podman".into()
+    }
+
+    fn install_keepalived(&self) -> String {
+        "sudo dnf -y install keepalived".into()
+    }
+
+    fn remove_apparmor(&self) -> String {
+        "".into()
+    }
+}
+
 pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Result<(), SkateError> {
     args.validate()?;
     let mut config = Config::load(Some(args.config.skateconfig.clone()))?;
@@ -121,6 +166,15 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             )
         }
     }
+    let provisioner: Box<dyn CommandVariant> = match info.platform.distribution {
+        Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
+            Box::new(UbuntuProvisioner {})
+        }
+        Distribution::Fedora => Box::new(FedoraProvisioner {}),
+        _ => {
+            return Err(anyhow!("unknown distribution").into());
+        }
+    };
 
     match info.podman_version.as_ref() {
         Some(version) => {
@@ -142,19 +196,11 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         }
         // instruct on installing newer podman version
         None => {
-            let command = match info.platform.distribution {
-                Distribution::Unknown => {
-                    return Err(anyhow!("unknown distribution").into());
-                }
-                Distribution::Debian | Distribution::Raspbian | Distribution::Ubuntu => {
-                    "sh -c 'sudo apt-get -y update && sudo apt-get install -y podman'"
-                }
-                Distribution::Fedora => "sh -c 'sudo dnf -y update && sudo dnf install -y podman'",
-            };
+            let command = provisioner.install_podman();
 
             let installed = {
                 println!("installing podman with command {}", command);
-                let result = conn.execute(command).await;
+                let result = conn.execute(&command).await;
                 match result {
                     Ok(_) => {
                         println!("podman installed successfully {} ", CHECKBOX_EMOJI);
@@ -177,6 +223,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     }
 
     // seems to be missing when using kube play
+    // TODO - might not need this anymore
     let cmd =
         "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
     let _ = conn.execute_stdout(cmd, true, true).await;
@@ -238,6 +285,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         &node,
         coredns_image,
         coredns_tag,
+        provisioner,
     )
     .await?;
 
@@ -379,10 +427,11 @@ async fn setup_networking(
     node: &Node,
     coredns_image: String,
     coredns_tag: ImageTagFormat,
+    provisioner: Box<dyn CommandVariant>,
 ) -> Result<(), Box<dyn Error>> {
     let network_backend = "netavark";
 
-    conn.execute_stdout("sudo apt-get install -y keepalived", true, true)
+    conn.execute_stdout(&provisioner.install_keepalived(), true, true)
         .await?;
     conn.execute_stdout(
         &util::transfer_file_cmd(
@@ -468,10 +517,9 @@ async fn setup_networking(
         conn.execute_stdout("sudo systemctl disable apparmor.service --now", true, true)
             .await?;
     }
-    let cmd = "sudo aa-teardown";
-    _ = conn.execute_stdout(cmd, true, true).await;
-    let cmd = "sudo apt purge -y apparmor";
-    _ = conn.execute_stdout(cmd, true, true).await;
+
+    let cmd = provisioner.remove_apparmor();
+    _ = conn.execute_stdout(&cmd, true, true).await;
 
     // disable dns services if exists
     for dns_service in ["dnsmasq", "systemd-resolved"] {
