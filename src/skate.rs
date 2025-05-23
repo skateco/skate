@@ -15,7 +15,7 @@ use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::node_shell::{NodeShell, NodeShellArgs, NodeShellDeps};
 use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
-use crate::skate::Distribution::{Debian, Raspbian, Ubuntu, Unknown};
+use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
@@ -211,14 +211,16 @@ pub enum Distribution {
     Debian,
     Raspbian,
     Ubuntu,
+    Fedora,
 }
 
 impl From<&str> for Distribution {
     fn from(s: &str) -> Self {
-        match s.to_lowercase() {
+        match s.to_lowercase().trim_matches(|c| c == '\'' || c == '"') {
             s if s.starts_with("debian") => Debian,
             s if s.starts_with("raspbian") => Raspbian,
             s if s.starts_with("ubuntu") => Ubuntu,
+            s if s.starts_with("fedora") => Fedora,
             _ => Unknown,
         }
     }
@@ -239,7 +241,8 @@ mod tests {
     use crate::refresh::{RefreshArgs, RefreshDeps};
     use crate::rollout::RolloutDeps;
     use crate::skate::Commands::Refresh;
-    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
+    use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
+    use crate::skate::{skate_with_args, Cli, ConfigFileArgs, Distribution, Platform};
     use crate::test_helpers::ssh_mocks::MockSshManager;
     use crate::upgrade::UpgradeDeps;
     use crate::{skate, AllDeps};
@@ -284,5 +287,14 @@ mod tests {
             },
         )
         .await;
+    }
+
+    #[test]
+    fn test_distribution_from_str() {
+        assert_eq!(Distribution::from("Debian"), Debian);
+        assert_eq!(Distribution::from("Raspbian"), Raspbian);
+        assert_eq!(Distribution::from("Ubuntu"), Ubuntu);
+        assert_eq!(Distribution::from(r#""Fedora Linux""#), Fedora);
+        assert_eq!(Distribution::from("unknown"), Unknown);
     }
 }

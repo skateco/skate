@@ -21,6 +21,8 @@ pub struct CreateArgs {
         long_help = "Path to skatelet binary to use instead of downloading"
     )]
     skatelet_binary_path: Option<String>,
+    #[arg(long, long_help = "Container image to use", default_value_t = String::from("ghcr.io/skateco/sind"))]
+    image: String,
 }
 
 pub trait CreateDeps: With<dyn ShellExec> {}
@@ -85,7 +87,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 CONTAINER_LABEL,
                 "--name",
                 name,
-                "ghcr.io/skateco/sind",
+                &main_args.image,
             ],
             None,
         )?;
@@ -99,7 +101,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "bash",
                 "-c",
                 &format!(
-                    "echo '{}' > /home/skate/.ssh/authorized_keys",
+                    "echo '{}' > /home/skate/.ssh/authorized_keys; chown -R skate:skate /home/skate/.ssh &&  chmod 600 /home/skate/.ssh/authorized_keys",
                     public_key_contents
                 ),
             ],
@@ -205,7 +207,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
             .into());
         }
 
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
 
         shell_exec.exec_stdout(
             "skate",

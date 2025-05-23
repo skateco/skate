@@ -12,7 +12,7 @@
   ],
   "ipv6_enabled": false,
   "internal": false,
-  "dns_enabled": true,
+  "dns_enabled": false,
   "ipam_options": {
     "driver": "host-local"
   }

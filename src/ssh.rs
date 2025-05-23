@@ -212,7 +212,7 @@ impl SshClient for RealSsh {
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
-{ { cat /etc/issue |head -1|awk '{print $1}'; }  || echo '' ; } > /tmp/distro-$$ &
+{ { grep -e "^NAME=" /etc/os-release|head -1|awk '{print substr($0,index($0,"=")+1)}'; }  || echo '' ; } > /tmp/distro-$$ &
 skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
