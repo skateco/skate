@@ -290,6 +290,7 @@ impl<'a> DnsService<'a> {
             return Ok(());
         }
 
+        let containers_str = format!("{:?}", containers);
         let args = [vec!["0.2", "podman", "inspect"], containers].concat();
 
         let mut healthy = false;
@@ -302,7 +303,7 @@ impl<'a> DnsService<'a> {
             // Check json for [*].State.Health.Status == "healthy"
             let containers: Vec<_> = json
                 .as_array()
-                .ok_or_else(|| anyhow!("no containers found while inspecting {:?}", containers))?
+                .ok_or_else(|| anyhow!("no containers found while inspecting {}", containers_str))?
                 .iter()
                 .map(|c| c["State"]["Health"]["Status"].as_str().unwrap())
                 .collect();
