@@ -100,6 +100,7 @@ RUN mkdir -p /etc/containers && \
         's|^mountopt[[:space:]]*=.*$|mountopt = "nodev,fsync=0"|g' \
         /etc/containers/storage.conf && \
     chmod 644 /etc/containers/storage.conf && \
+    echo 'short-name-mode = "permissive"' >> /etc/containers/registries.conf && \
     mkdir -p /etc/containers/networks && \
     mkdir -p /home/skate/.config/containers &&  \
     mkdir -p /etc/sudoers.d && \
