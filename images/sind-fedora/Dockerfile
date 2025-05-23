@@ -20,6 +20,7 @@ FROM $BASE_IMAGE AS base
 #COPY --chmod=0644 files/etc/systemd/system/* /etc/systemd/system/
 
 RUN sudo dnf -y install \
+     iproute \
      awk \
      podman \
      netavark \
