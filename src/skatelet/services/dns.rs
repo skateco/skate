@@ -280,10 +280,15 @@ impl<'a> DnsService<'a> {
 
         let containers: Vec<_> = pod_json["Containers"]
             .as_array()
-            .ok_or_else(|| anyhow!("no containers found"))?
+            .ok_or_else(|| anyhow!("no pod containers found"))?
             .iter()
             .map(|c| c["Id"].as_str().unwrap())
             .collect();
+
+        if containers.is_empty() {
+            warn!("{} no pod containers found", log_tag);
+            return Ok(());
+        }
 
         let args = [vec!["0.2", "podman", "inspect"], containers].concat();
 
