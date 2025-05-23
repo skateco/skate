@@ -241,7 +241,8 @@ mod tests {
     use crate::refresh::{RefreshArgs, RefreshDeps};
     use crate::rollout::RolloutDeps;
     use crate::skate::Commands::Refresh;
-    use crate::skate::{skate_with_args, Cli, ConfigFileArgs};
+    use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
+    use crate::skate::{skate_with_args, Cli, ConfigFileArgs, Distribution, Platform};
     use crate::test_helpers::ssh_mocks::MockSshManager;
     use crate::upgrade::UpgradeDeps;
     use crate::{skate, AllDeps};
@@ -286,5 +287,14 @@ mod tests {
             },
         )
         .await;
+    }
+
+    #[test]
+    fn test_distribution_from_str() {
+        assert_eq!(Distribution::from("Debian"), Debian);
+        assert_eq!(Distribution::from("Raspbian"), Raspbian);
+        assert_eq!(Distribution::from("Ubuntu"), Ubuntu);
+        assert_eq!(Distribution::from(r#""Fedora Linux""#), Fedora);
+        assert_eq!(Distribution::from("unknown"), Unknown);
     }
 }

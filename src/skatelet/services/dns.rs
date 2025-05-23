@@ -159,6 +159,12 @@ impl<'a> DnsService<'a> {
         }
         let ip = ip.unwrap();
 
+        let json = if json.is_array() {
+            json[0].clone()
+        } else {
+            json
+        };
+
         let labels = json["Labels"].as_object().unwrap();
         let ns = labels[&SkateLabels::Namespace.to_string()]
             .as_str()
