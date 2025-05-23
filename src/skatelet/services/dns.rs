@@ -301,23 +301,23 @@ impl<'a> DnsService<'a> {
                 .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
 
             // Check json for [*].State.Health.Status == "healthy"
-            let containers: Vec<_> = json
+            let mut containers = json
                 .as_array()
                 .ok_or_else(|| anyhow!("no containers found while inspecting {}", containers_str))?
                 .iter()
-                .map(|c| c["State"]["Health"]["Status"].as_str().unwrap())
-                .collect();
+                .map(|c| {
+                    c["State"]["Health"]["Status"]
+                        .as_str()
+                        .unwrap_or(c["State"]["Status"].as_str().unwrap_or("unknown"))
+                });
 
-            if containers.iter().any(|c| *c == "unhealthy") {
+            if containers.any(|c| c == "unhealthy") {
                 debug!("{} at least one container unhealthy", log_tag);
                 // do nothing
                 return Ok(());
             };
 
-            if containers
-                .into_iter()
-                .all(|c| c == "healthy" || c.is_empty())
-            {
+            if containers.all(|c| c == "healthy" || c.is_empty()) {
                 debug!("{} all containers healthy or no healthcheck", log_tag);
                 healthy = true;
                 break;
