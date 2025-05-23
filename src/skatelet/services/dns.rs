@@ -302,7 +302,7 @@ impl<'a> DnsService<'a> {
             // Check json for [*].State.Health.Status == "healthy"
             let containers: Vec<_> = json
                 .as_array()
-                .ok_or_else(|| anyhow!("no containers found"))?
+                .ok_or_else(|| anyhow!("no containers found while inspecting {:?}", containers))?
                 .iter()
                 .map(|c| c["State"]["Health"]["Status"].as_str().unwrap())
                 .collect();
