@@ -272,6 +272,12 @@ impl<'a> DnsService<'a> {
         let pod_json: serde_json::Value = serde_json::from_str(&output)
             .map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
 
+        let pod_json = if pod_json.is_array() {
+            pod_json[0].clone()
+        } else {
+            pod_json
+        };
+
         let containers: Vec<_> = pod_json["Containers"]
             .as_array()
             .ok_or_else(|| anyhow!("no containers found"))?
