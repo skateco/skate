@@ -2,7 +2,7 @@ use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::util::{lock_file, spawn_orphan_process, SkateLabels};
 use anyhow::anyhow;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::error::Error;
 use std::fs;
@@ -306,9 +306,12 @@ impl<'a> DnsService<'a> {
                 .ok_or_else(|| anyhow!("no containers found while inspecting {}", containers_str))?
                 .iter()
                 .map(|c| {
-                    c["State"]["Health"]["Status"]
-                        .as_str()
-                        .unwrap_or(c["State"]["Status"].as_str().unwrap_or("unknown"))
+                    c["State"]["Health"]["Status"].as_str().unwrap_or(
+                        c["State"]["Status"].as_str().unwrap_or_else(|| {
+                            error!("{} failed to find health status", log_tag);
+                            "unknown"
+                        }),
+                    )
                 });
 
             if containers.any(|c| c == "unhealthy") {
