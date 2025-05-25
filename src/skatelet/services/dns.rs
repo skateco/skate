@@ -2,7 +2,7 @@ use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::util::{lock_file, spawn_orphan_process, SkateLabels};
 use anyhow::anyhow;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::error::Error;
 use std::fs;
@@ -159,6 +159,12 @@ impl<'a> DnsService<'a> {
         }
         let ip = ip.unwrap();
 
+        let json = if json.is_array() {
+            json[0].clone()
+        } else {
+            json
+        };
+
         let labels = json["Labels"].as_object().unwrap();
         let ns = labels[&SkateLabels::Namespace.to_string()]
             .as_str()
@@ -266,13 +272,25 @@ impl<'a> DnsService<'a> {
         let pod_json: serde_json::Value = serde_json::from_str(&output)
             .map_err(|e| anyhow!("failed to parse podman pod inspect output: {}", e))?;
 
+        let pod_json = if pod_json.is_array() {
+            pod_json[0].clone()
+        } else {
+            pod_json
+        };
+
         let containers: Vec<_> = pod_json["Containers"]
             .as_array()
-            .ok_or_else(|| anyhow!("no containers found"))?
+            .ok_or_else(|| anyhow!("no pod containers found"))?
             .iter()
             .map(|c| c["Id"].as_str().unwrap())
             .collect();
 
+        if containers.is_empty() {
+            warn!("{} no pod containers found", log_tag);
+            return Ok(());
+        }
+
+        let containers_str = format!("{:?}", containers);
         let args = [vec!["0.2", "podman", "inspect"], containers].concat();
 
         let mut healthy = false;
@@ -283,23 +301,26 @@ impl<'a> DnsService<'a> {
                 .map_err(|e| anyhow!("failed to parse podman inspect output: {}", e))?;
 
             // Check json for [*].State.Health.Status == "healthy"
-            let containers: Vec<_> = json
+            let mut containers = json
                 .as_array()
-                .ok_or_else(|| anyhow!("no containers found"))?
+                .ok_or_else(|| anyhow!("no containers found while inspecting {}", containers_str))?
                 .iter()
-                .map(|c| c["State"]["Health"]["Status"].as_str().unwrap())
-                .collect();
+                .map(|c| {
+                    c["State"]["Health"]["Status"].as_str().unwrap_or(
+                        c["State"]["Status"].as_str().unwrap_or_else(|| {
+                            error!("{} failed to find health status", log_tag);
+                            "unknown"
+                        }),
+                    )
+                });
 
-            if containers.iter().any(|c| *c == "unhealthy") {
+            if containers.any(|c| c == "unhealthy") {
                 debug!("{} at least one container unhealthy", log_tag);
                 // do nothing
                 return Ok(());
             };
 
-            if containers
-                .into_iter()
-                .all(|c| c == "healthy" || c.is_empty())
-            {
+            if containers.all(|c| c == "healthy" || c.is_empty()) {
                 debug!("{} all containers healthy or no healthcheck", log_tag);
                 healthy = true;
                 break;
