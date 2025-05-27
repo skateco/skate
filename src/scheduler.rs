@@ -1,3 +1,5 @@
+mod score;
+
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
@@ -166,36 +168,55 @@ impl DefaultScheduler {
             })
             .collect::<Vec<_>>();
 
-        let feasible_node = filtered_nodes
-            .into_iter()
-            .fold(None, |maybe_prev_node, node| {
-                let node_pods = node
-                    .clone()
-                    .host_info
-                    .and_then(|h| h.system_info.and_then(|si| si.pods.map(|p| p.len())))
-                    .unwrap_or(0);
+        if filtered_nodes.is_none() {
+            return NodeSelection {
+                selected: None,
+                rejected: rejected_nodes,
+            };
+        }
 
-                maybe_prev_node
-                    .and_then(|prev_node: NodeState| {
-                        prev_node.host_info.clone().and_then(|h| {
-                            h.system_info.and_then(|si| {
-                                si.pods
-                                    .map(|prev_pods| match prev_pods.len().cmp(&node_pods) {
-                                        Ordering::Less => prev_node.clone(),
-                                        Ordering::Equal => node.clone(),
-                                        Ordering::Greater => node.clone(),
-                                    })
-                            })
-                        })
-                    })
-                    .or_else(|| Some(node.clone()))
-            });
+        let scored_nodes: Vec<_> = filtered_nodes
+            .into_iter()
+            .sorted_by(|p, c| Ord::cmp(p.score(), c.score()))
+            .rev()
+            .collect();
+
+        // we know we have a list here > 0
+        let feasible_node = scored_nodes.first().unwrap();
 
         NodeSelection {
-            selected: feasible_node,
+            selected: feasible_node.unwrap().cloned(),
             rejected: rejected_nodes,
         }
     }
+
+    // fn is_this_betteVr(prev_node: &NodeState, this_node: &NodeState) -> bool {
+    //     let prev_host_info = prev_node
+    //         .host_info
+    //         .as_ref()
+    //         .expect("prev_node has no host info");
+    //     let host_info = this_node
+    //         .host_info
+    //         .as_ref()
+    //         .expect("this_node has no host info");
+    //
+    //
+    //
+    //
+    //     // number of pods is irrelevant really
+    //     // should be to do with
+    //     // available cpu
+    //     // available memory
+    //
+    //     let node_pods = this_node.filter_pods(&|p| true);
+    //
+    //     let prev_pods = (&prev_node).filter_pods(&|p| true);
+    //     match prev_pods.len().cmp(&node_pods.len()) {
+    //         Ordering::Less => false,
+    //         Ordering::Equal => true,
+    //         Ordering::Greater => true,
+    //     }
+    // }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut ds = ds.clone();
@@ -608,7 +629,7 @@ impl DefaultScheduler {
 
         let op_types = match existing_cron {
             Some(existing_cron) => {
-                let node = existing_cron.nodes.first().unwrap().deref();
+                let node = existing_cron.nodes.first().unwrap();
                 if existing_cron.object.manifest_hash == new_hash && node.schedulable() {
                     vec![(OpType::Unchanged, Some(node))]
                 } else {
@@ -623,7 +644,7 @@ impl DefaultScheduler {
             actions.push(ScheduledOperation {
                 operation: op_type,
                 resource: SupportedResources::CronJob(new_cron.clone()),
-                node: node.cloned(),
+                node: node.cloned().cloned(),
                 error: None,
                 silent: false,
             })
