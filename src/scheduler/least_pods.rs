@@ -1,4 +1,4 @@
-use crate::scheduler::plugins::{inverted_normalize_scores, Score};
+use crate::scheduler::plugins::{inverted_normalize_scores, Plugin, Score};
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::state::state::NodeState;
 use std::collections::BTreeMap;
@@ -6,6 +6,12 @@ use std::error::Error;
 
 /// LeastPods is a scoring plugin that scores nodes based on the number of pods they are currently running.
 pub(crate) struct LeastPods {}
+
+impl Plugin for LeastPods {
+    fn name(&self) -> &'static str {
+        "LeastPods"
+    }
+}
 
 impl Score for LeastPods {
     fn score(

@@ -675,11 +675,6 @@ fn extract_mut_catalog<'a>(
         .collect()
 }
 
-struct PlacedResource<'a, 'b> {
-    object: &'a ObjectListItem,
-    node: &'b NodeState,
-}
-
 fn extract_catalog<'a>(
     si: &'a SystemInfo,
     filter_types: &[ResourceType],

@@ -33,6 +33,10 @@ use std::ops::DerefMut;
 // 	}
 
 const MAX_NODE_SCORE: u32 = 100;
+
+pub(crate) trait Plugin {
+    fn name(&self) -> &'static str;
+}
 //*
 // NOTE: the plugin system is inspired by the Kubernetes scheduler plugin system.
 
@@ -50,21 +54,21 @@ const MAX_NODE_SCORE: u32 = 100;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // */
-pub trait QueueSort {
+pub trait QueueSort: Plugin {
     fn less(&self, pod1: &Pod, pod2: &Pod) -> bool;
 }
 
 // /// These plugins are used to pre-process info about the Pod, or to check certain conditions that
 // /// the cluster or the Pod must meet. If a PreFilter plugin returns an error,
 // /// the scheduling cycle is aborted
-// pub trait PreFilter {
-//     fn pre_filter(&self, pod: &Pod, nodes: &[NodeState]) -> Result<(), Box<dyn Error>>;
-// }
+pub trait PreFilter {
+    fn pre_filter(&self, pod: &Pod, nodes: &[NodeState]) -> Result<(), Box<dyn Error>>;
+}
 
 /// These plugins are used to filter out nodes that cannot run the Pod. For each node, the scheduler
 /// will call filter plugins in their configured order. If any filter plugin marks the node as
 /// infeasible, the remaining plugins will not be called for that node.
-pub trait Filter {
+pub trait Filter: Plugin {
     fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String>;
 }
 
@@ -72,7 +76,7 @@ pub trait Filter {
 /// call each scoring plugin for each node. There will be a well defined range of integers
 /// representing the minimum and maximum scores. After the NormalizeScore phase, the scheduler will
 /// combine node scores from all plugins according to the configured plugin weights.
-pub trait Score {
+pub trait Score: Plugin {
     fn score(&self, pod: &Pod, node: &NodeState) -> Result<u32, Box<dyn Error>>;
 
     /// These plugins are used to modify node scores before the scheduler computes a final ranking of Nodes.
@@ -121,19 +125,27 @@ pub(crate) fn inverted_normalize_scores(
 /// This plugin is called before the scheduler binds the Pod to a Node.
 /// It can be used to perform any final setup on the Node prior to binding, like setting up a
 /// network interface or preparing a volume
-pub trait PreBind {
+pub trait PreBind: Plugin {
     fn pre_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }
 
-pub trait PostBind {
+pub trait PostBind: Plugin {
     fn post_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }
 
 mod tests {
+    use crate::scheduler::plugins::Plugin;
     use std::collections::BTreeMap;
     use std::error::Error;
 
     struct TestScore {}
+
+    impl Plugin for TestScore {
+        fn name(&self) -> &'static str {
+            "test-score"
+        }
+    }
+
     impl super::Score for TestScore {
         fn score(
             &self,

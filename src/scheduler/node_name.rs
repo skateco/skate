@@ -1,8 +1,14 @@
-use crate::scheduler::plugins::Filter;
+use crate::scheduler::plugins::{Filter, Plugin};
 use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::Pod;
 
 pub(crate) struct NodeNameFilter {}
+
+impl Plugin for NodeNameFilter {
+    fn name(&self) -> &'static str {
+        "NodeNameFilter"
+    }
+}
 
 impl Filter for NodeNameFilter {
     fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String> {

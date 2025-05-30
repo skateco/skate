@@ -1,4 +1,4 @@
-use crate::scheduler::plugins::{Filter, QueueSort, Score};
+use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 mod filter;
 mod least_pods;
 mod node_name;
@@ -10,6 +10,7 @@ mod unschedulable;
 use crate::scheduler::filter::NodeSelectorFilter;
 use crate::scheduler::least_pods::LeastPods;
 use crate::scheduler::node_name::NodeNameFilter;
+use crate::scheduler::node_resources_fit::NodeResourcesFit;
 use crate::scheduler::priority_sort::PrioritySort;
 use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::skatelet::database::resource::ResourceType;
@@ -33,6 +34,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct ScheduleResult {
@@ -52,6 +54,7 @@ pub trait Scheduler {
 
 pub struct DefaultScheduler {
     sorter: Box<dyn QueueSort>,
+    pre_filters: Vec<Box<dyn PreFilter>>,
     filters: Vec<Box<dyn Filter>>,
     scorers: Vec<Box<dyn Score>>,
 }
@@ -132,14 +135,17 @@ pub struct NodeSelection {
 // distributed (pod, cron)
 impl DefaultScheduler {
     pub fn new() -> Self {
+        let node_resources_fit = Rc::new(Box::new(node_resources_fit::NodeResourcesFit {}));
         DefaultScheduler {
             sorter: Box::new(PrioritySort {}),
+            pre_filters: vec![Box::new(NodeResourcesFit {})],
             filters: vec![
                 Box::new(NodeNameFilter {}),
                 Box::new(NodeSelectorFilter {}),
                 Box::new(UnschedulableFilter {}),
+                Box::new(NodeResourcesFit {}),
             ],
-            scorers: vec![Box::new(LeastPods {})],
+            scorers: vec![Box::new(LeastPods {}), Box::new(NodeResourcesFit {})],
         }
     }
     fn next_generation(existing: Option<&CatalogueItem>) -> i64 {
@@ -155,14 +161,21 @@ impl DefaultScheduler {
     fn choose_node(&self, nodes: &[NodeState], pod: &Pod) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
-        let filters: &[Box<dyn Filter>] = &[
-            Box::new(NodeSelectorFilter {}),
-            Box::new(UnschedulableFilter {}),
-        ];
+        for pre_filter in &self.pre_filters {
+            if let Err(e) = pre_filter.pre_filter(pod, nodes) {
+                return NodeSelection {
+                    selected: None,
+                    rejected: vec![RejectedNode {
+                        node_name: "*".to_string(),
+                        reason: e.to_string(),
+                    }],
+                };
+            }
+        }
 
         let (filtered_nodes, rejected_nodes): (Vec<_>, Vec<_>) = nodes.iter().partition_map(|n| {
             // apply all filters
-            for filter in filters {
+            for filter in &self.filters {
                 if let Err(e) = filter.filter(pod, n) {
                     return Either::Right(RejectedNode {
                         node_name: n.node_name.clone(),
