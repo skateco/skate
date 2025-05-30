@@ -89,7 +89,7 @@ pub trait Score: Plugin {
         let values = scores.values().cloned();
         let (min, max) = values.minmax().into_option().unwrap_or((0, 0));
         for (_, score) in scores.iter_mut() {
-            if max == 0 {
+            if max == 0 || min == max {
                 *score = MAX_NODE_SCORE;
                 continue;
             }
@@ -111,7 +111,7 @@ pub(crate) fn inverted_normalize_scores(
     let values = scores.values().cloned();
     let (min, max) = values.minmax().into_option().unwrap_or((0, 0));
     for (_, score) in scores.iter_mut() {
-        if max == 0 {
+        if max == 0 || min == max {
             *score = MAX_NODE_SCORE;
             continue;
         }
