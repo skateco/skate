@@ -1,7 +1,7 @@
 use crate::state::state::NodeState;
 use itertools::Itertools;
 use k8s_openapi::api::core::v1::Pod;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::ops::DerefMut;
 
@@ -76,11 +76,33 @@ pub trait Score {
                 *score = MAX_NODE_SCORE;
                 continue;
             }
-            *score = MAX_NODE_SCORE * (max + min - *score) / max;
+
+            // Normalize the score to a range of 0 to MAX_NODE_SCORE
+            *score = (*score - min) * MAX_NODE_SCORE / (max - min)
         }
 
         Ok(())
     }
+}
+
+pub(crate) fn inverted_normalize_scores(
+    mut scores: &mut BTreeMap<String, u32>,
+) -> Result<(), Box<dyn Error>> {
+    if scores.is_empty() {
+        return Ok(());
+    }
+    let values = scores.values().cloned();
+    let (min, max) = values.minmax().into_option().unwrap_or((0, 0));
+    for (_, score) in scores.iter_mut() {
+        if max == 0 {
+            *score = MAX_NODE_SCORE;
+            continue;
+        }
+        // Invert the normalized score to a range of 0 to MAX_NODE_SCORE
+        *score = MAX_NODE_SCORE - (*score - min) * MAX_NODE_SCORE / (max - min);
+    }
+
+    Ok(())
 }
 
 /// This plugin is called before the scheduler binds the Pod to a Node.
@@ -92,4 +114,35 @@ pub trait PreBind {
 
 pub trait PostBind {
     fn post_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
+}
+
+mod tests {
+    use std::collections::BTreeMap;
+    use std::error::Error;
+
+    struct TestScore {}
+    impl super::Score for TestScore {
+        fn score(
+            &self,
+            _pod: &k8s_openapi::api::core::v1::Pod,
+            _node: &super::NodeState,
+        ) -> Result<u32, Box<dyn Error>> {
+            Ok(0)
+        }
+    }
+    #[test]
+    fn test_normalize_scores() {
+        use super::*;
+        let mut scores: BTreeMap<String, u32> = BTreeMap::new();
+        scores.insert("node1".to_string(), 10);
+        scores.insert("node2".to_string(), 50);
+        scores.insert("node3".to_string(), 75);
+
+        let mut plugin = TestScore {};
+        plugin.normalize_scores(&mut scores).unwrap();
+
+        assert_eq!(scores.get("node1").unwrap(), &0);
+        assert_eq!(scores.get("node2").unwrap(), &61);
+        assert_eq!(scores.get("node3").unwrap(), &100);
+    }
 }

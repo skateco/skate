@@ -3,6 +3,7 @@ use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::Pod;
 use std::error::Error;
 
+/// Default pre-filter plugin that does nothing.
 pub struct DefaultPreFilter {}
 
 impl PreFilter for DefaultPreFilter {

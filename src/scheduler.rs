@@ -199,12 +199,7 @@ impl DefaultScheduler {
             }
         }
 
-        // .into_iter()
-        // .sorted_by(|p, c| Ord::cmp(p.score(), c.score()))
-        // .rev()
-        // .collect();
-
-        // we know we have a list here > 0
+        // Find the node with the highest score
         let (feasible_node, _) = node_score_total
             .iter()
             .max_by(|(_, score1), (_, score2)| score1.cmp(score2))
@@ -221,34 +216,6 @@ impl DefaultScheduler {
             rejected: rejected_nodes,
         }
     }
-
-    // fn is_this_betteVr(prev_node: &NodeState, this_node: &NodeState) -> bool {
-    //     let prev_host_info = prev_node
-    //         .host_info
-    //         .as_ref()
-    //         .expect("prev_node has no host info");
-    //     let host_info = this_node
-    //         .host_info
-    //         .as_ref()
-    //         .expect("this_node has no host info");
-    //
-    //
-    //
-    //
-    //     // number of pods is irrelevant really
-    //     // should be to do with
-    //     // available cpu
-    //     // available memory
-    //
-    //     let node_pods = this_node.filter_pods(&|p| true);
-    //
-    //     let prev_pods = (&prev_node).filter_pods(&|p| true);
-    //     match prev_pods.len().cmp(&node_pods.len()) {
-    //         Ordering::Less => false,
-    //         Ordering::Equal => true,
-    //         Ordering::Greater => true,
-    //     }
-    // }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
         let mut ds = ds.clone();
