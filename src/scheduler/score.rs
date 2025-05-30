@@ -1,9 +1,11 @@
 use crate::state::state::NodeState;
+use itertools::Itertools;
 use k8s_openapi::api::core::v1::Pod;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::error::Error;
+use std::ops::DerefMut;
 
-pub enum Error {}
-
+const MAX_NODE_SCORE: u32 = 100;
 //*
 // NOTE: the plugin system is inspired by the Kubernetes scheduler plugin system.
 
@@ -40,14 +42,14 @@ pub trait QueueSort {
 /// the cluster or the Pod must meet. If a PreFilter plugin returns an error,
 /// the scheduling cycle is aborted
 pub trait PreFilter {
-    fn pre_filter(pod: &Pod, nodes: &[NodeState]) -> Result<(), Error>;
+    fn pre_filter(&self, pod: &Pod, nodes: &[NodeState]) -> Result<(), Box<dyn Error>>;
 }
 
 /// These plugins are used to filter out nodes that cannot run the Pod. For each node, the scheduler
 /// will call filter plugins in their configured order. If any filter plugin marks the node as
 /// infeasible, the remaining plugins will not be called for that node.
 pub trait Filter {
-    fn filter(pod: &Pod, node: &NodeState) -> Result<(), Error>;
+    fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String>;
 }
 
 /// These plugins are used to rank nodes that have passed the filtering phase. The scheduler will
@@ -55,13 +57,28 @@ pub trait Filter {
 /// representing the minimum and maximum scores. After the NormalizeScore phase, the scheduler will
 /// combine node scores from all plugins according to the configured plugin weights.
 pub trait Score {
-    fn name() -> &'static str;
-    fn score(pod: &Pod, node: &NodeState) -> Result<i32, Error>;
+    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u32, Box<dyn Error>>;
 
     /// These plugins are used to modify node scores before the scheduler computes a final ranking of Nodes.
     /// A plugin that registers for this extension point will be called with the Score results from the
     /// same plugin.
-    fn normalize_scores(mut scores: &HashMap<String, i32>) -> Result<(), Error> {
+    fn normalize_scores(
+        &self,
+        mut scores: &mut BTreeMap<String, u32>,
+    ) -> Result<(), Box<dyn Error>> {
+        if scores.is_empty() {
+            return Ok(());
+        }
+        let values = scores.values().cloned();
+        let (min, max) = values.minmax().into_option().unwrap_or((0, 0));
+        for (_, score) in scores.iter_mut() {
+            if max == 0 {
+                *score = MAX_NODE_SCORE;
+                continue;
+            }
+            *score = MAX_NODE_SCORE * (max + min - *score) / max;
+        }
+
         Ok(())
     }
 }
@@ -70,9 +87,9 @@ pub trait Score {
 /// It can be used to perform any final setup on the Node prior to binding, like setting up a
 /// network interface or preparing a volume
 pub trait PreBind {
-    fn pre_bind(pod: &Pod, node: &NodeState) -> Result<(), Error>;
+    fn pre_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }
 
 pub trait PostBind {
-    fn post_bind(pod: &Pod, node: &NodeState) -> Result<(), Error>;
+    fn post_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }

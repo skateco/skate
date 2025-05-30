@@ -124,11 +124,8 @@ impl From<&NodeState> for K8sNode {
 
 impl NodeState {
     /// scores the node for scheduling based on free memory and cpu
-    pub fn system_info(&self) -> &SystemInfo {
-        self.host_info
-            .as_ref()
-            .and_then(|h| h.system_info.as_ref())
-            .unwrap_or(&SystemInfo::default())
+    pub fn system_info(&self) -> Option<&SystemInfo> {
+        self.host_info.as_ref().and_then(|h| h.system_info.as_ref())
     }
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<PodmanPodInfo> {
         self.host_info

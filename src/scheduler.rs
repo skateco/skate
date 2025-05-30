@@ -1,5 +1,12 @@
+use crate::scheduler::score::{Filter, PreFilter, Score};
+mod filter;
+mod least_pods;
+mod pre_filter;
 mod score;
 
+use crate::scheduler::filter::DefaultFilter;
+use crate::scheduler::least_pods::LeastPods;
+use crate::scheduler::pre_filter::DefaultPreFilter;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
@@ -10,7 +17,8 @@ use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels,
 use anyhow::anyhow;
 use async_trait::async_trait;
 use colored::Colorize;
-use itertools::Itertools;
+use fs2::total_space;
+use itertools::{Either, Itertools};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
@@ -124,68 +132,92 @@ impl DefaultScheduler {
         };
         1
     }
-    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
+    fn choose_node(nodes: &[NodeState], pod: &Pod) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
-        let node_selector = match object {
-            SupportedResources::Pod(pod) => pod.spec.as_ref().and_then(|s| s.node_selector.clone()),
-            _ => None,
+        if let Err(e) = (DefaultPreFilter {}).pre_filter(pod, nodes) {
+            return NodeSelection {
+                selected: None,
+                rejected: vec![RejectedNode {
+                    node_name: "*".to_string(),
+                    reason: e.to_string(),
+                }],
+            };
         }
-        .unwrap_or(BTreeMap::new());
 
-        let mut rejected_nodes: Vec<RejectedNode> = vec![];
-
-        let filtered_nodes = nodes
-            .iter()
-            .filter(|n| {
-                let k8s_node: K8sNode = (*n).into();
-                let node_labels = k8s_node.metadata.labels.unwrap_or_default();
-                // only schedulable nodes
-                let is_schedulable = k8s_node
-                    .spec
-                    .and_then(|s| s.unschedulable.map(|u| !u))
-                    .unwrap_or(false);
-
-                if !is_schedulable {
-                    rejected_nodes.push(RejectedNode {
+        let (filtered_nodes, rejected_nodes): (Vec<_>, Vec<_>) =
+            nodes
+                .iter()
+                .partition_map(|n| match (DefaultFilter {}).filter(pod, n) {
+                    Ok(_) => Either::Left(n),
+                    Err(e) => Either::Right(RejectedNode {
                         node_name: n.node_name.clone(),
-                        reason: "node is unschedulable".to_string(),
-                    });
-                    return false;
-                }
+                        reason: e,
+                    }),
+                });
 
-                // only nodes that match the nodeselectors
-                node_selector.iter().all(|(k, v)| {
-                    let matches = node_labels.get(k).unwrap_or(&"".to_string()) == v;
-                    if !matches {
-                        rejected_nodes.push(RejectedNode {
-                            node_name: n.node_name.clone(),
-                            reason: format!("node selector {}:{} did not match", k, v),
-                        });
-                    }
-                    matches
-                })
-            })
-            .collect::<Vec<_>>();
-
-        if filtered_nodes.is_none() {
+        if filtered_nodes.is_empty() {
             return NodeSelection {
                 selected: None,
                 rejected: rejected_nodes,
             };
         }
 
-        let scored_nodes: Vec<_> = filtered_nodes
-            .into_iter()
-            .sorted_by(|p, c| Ord::cmp(p.score(), c.score()))
-            .rev()
-            .collect();
+        let scorers = &[LeastPods {}];
+
+        let mut node_score_total = BTreeMap::<String, u32>::new();
+
+        for scorer in scorers {
+            let mut scored_nodes = BTreeMap::<String, u32>::new();
+            for node in &filtered_nodes {
+                match scorer.score(pod, node) {
+                    Err(e) => {
+                        return NodeSelection {
+                            selected: None,
+                            rejected: vec![RejectedNode {
+                                node_name: node.node_name.clone(),
+                                reason: e.to_string(),
+                            }],
+                        }
+                    }
+                    Ok(score) => scored_nodes.insert(node.node_name.clone(), score),
+                };
+            }
+            if let Err(e) = scorer.normalize_scores(&mut scored_nodes) {
+                return NodeSelection {
+                    selected: None,
+                    rejected: vec![RejectedNode {
+                        node_name: "*".to_string(),
+                        reason: e.to_string(),
+                    }],
+                };
+            }
+
+            for (node_name, score) in scored_nodes {
+                let total_score = node_score_total.entry(node_name).or_insert(0);
+                *total_score += score;
+            }
+        }
+
+        // .into_iter()
+        // .sorted_by(|p, c| Ord::cmp(p.score(), c.score()))
+        // .rev()
+        // .collect();
 
         // we know we have a list here > 0
-        let feasible_node = scored_nodes.first().unwrap();
+        let (feasible_node, _) = node_score_total
+            .iter()
+            .max_by(|(_, score1), (_, score2)| score1.cmp(score2))
+            .unwrap();
 
         NodeSelection {
-            selected: feasible_node.unwrap().cloned(),
+            selected: Some(
+                nodes
+                    .iter()
+                    .find(|n| n.node_name == *feasible_node)
+                    .unwrap()
+                    .clone(),
+            ),
             rejected: rejected_nodes,
         }
     }
@@ -1028,7 +1060,21 @@ impl DefaultScheduler {
                                 rejected: vec![],
                             },
                             // anything else and things with node selectors go here
-                            None => Self::choose_node(state.nodes.clone(), &op.resource),
+                            None => {
+                                match op.resource {
+                                    SupportedResources::Pod(ref pod) => {
+                                        Self::choose_node(&state.nodes, pod)
+                                    }
+                                    _ => {
+                                        // we should not get here
+                                        return Err(anyhow!(
+                                            "internal scheduler error: found non pod resource {}:{} without a pre allocated node",
+                                            op.resource,
+                                            op.resource.name()
+                                        ).into());
+                                    }
+                                }
+                            }
                         };
                         if selection.selected.is_none() {
                             let reasons = selection
@@ -1059,7 +1105,7 @@ impl DefaultScheduler {
                                 println!(
                                     "{} {} {} created on node {}",
                                     op.operation.symbol(),
-                                    op.resource,
+                                    &op.resource,
                                     &op.resource.name(),
                                     node_name
                                 );
