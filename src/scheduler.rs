@@ -1,12 +1,17 @@
-use crate::scheduler::score::{Filter, PreFilter, Score};
+use crate::scheduler::plugins::{Filter, QueueSort, Score};
 mod filter;
 mod least_pods;
-mod pre_filter;
-mod score;
+mod node_name;
+mod node_resources_fit;
+mod plugins;
+mod priority_sort;
+mod unschedulable;
 
-use crate::scheduler::filter::DefaultFilter;
+use crate::scheduler::filter::NodeSelectorFilter;
 use crate::scheduler::least_pods::LeastPods;
-use crate::scheduler::pre_filter::DefaultPreFilter;
+use crate::scheduler::node_name::NodeNameFilter;
+use crate::scheduler::priority_sort::PrioritySort;
+use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
@@ -45,7 +50,11 @@ pub trait Scheduler {
     ) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
-pub struct DefaultScheduler {}
+pub struct DefaultScheduler {
+    sorter: Box<dyn QueueSort>,
+    filters: Vec<Box<dyn Filter>>,
+    scorers: Vec<Box<dyn Score>>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpType {
@@ -122,6 +131,17 @@ pub struct NodeSelection {
 // maybe > 0 per node (daemonset)
 // distributed (pod, cron)
 impl DefaultScheduler {
+    pub fn new() -> Self {
+        DefaultScheduler {
+            sorter: Box::new(PrioritySort {}),
+            filters: vec![
+                Box::new(NodeNameFilter {}),
+                Box::new(NodeSelectorFilter {}),
+                Box::new(UnschedulableFilter {}),
+            ],
+            scorers: vec![Box::new(LeastPods {})],
+        }
+    }
     fn next_generation(existing: Option<&CatalogueItem>) -> i64 {
         if let Some(existing_gen) = existing.and_then(|m| Some(m.object.generation.clone())) {
             if existing_gen > 0 {
@@ -132,29 +152,28 @@ impl DefaultScheduler {
         };
         1
     }
-    fn choose_node(nodes: &[NodeState], pod: &Pod) -> NodeSelection {
+    fn choose_node(&self, nodes: &[NodeState], pod: &Pod) -> NodeSelection {
         // filter nodes based on resource requirements  - cpu, memory, etc
 
-        if let Err(e) = (DefaultPreFilter {}).pre_filter(pod, nodes) {
-            return NodeSelection {
-                selected: None,
-                rejected: vec![RejectedNode {
-                    node_name: "*".to_string(),
-                    reason: e.to_string(),
-                }],
-            };
-        }
+        let filters: &[Box<dyn Filter>] = &[
+            Box::new(NodeSelectorFilter {}),
+            Box::new(UnschedulableFilter {}),
+        ];
 
-        let (filtered_nodes, rejected_nodes): (Vec<_>, Vec<_>) =
-            nodes
-                .iter()
-                .partition_map(|n| match (DefaultFilter {}).filter(pod, n) {
-                    Ok(_) => Either::Left(n),
-                    Err(e) => Either::Right(RejectedNode {
+        let (filtered_nodes, rejected_nodes): (Vec<_>, Vec<_>) = nodes.iter().partition_map(|n| {
+            // apply all filters
+            for filter in filters {
+                if let Err(e) = filter.filter(pod, n) {
+                    return Either::Right(RejectedNode {
                         node_name: n.node_name.clone(),
                         reason: e,
-                    }),
-                });
+                    });
+                }
+            }
+
+            // if all filters pass, return the node
+            Either::Left(n.clone())
+        });
 
         if filtered_nodes.is_empty() {
             return NodeSelection {
@@ -163,11 +182,9 @@ impl DefaultScheduler {
             };
         }
 
-        let scorers = &[LeastPods {}];
-
         let mut node_score_total = BTreeMap::<String, u32>::new();
 
-        for scorer in scorers {
+        for scorer in &self.scorers {
             let mut scored_nodes = BTreeMap::<String, u32>::new();
             for node in &filtered_nodes {
                 match scorer.score(pod, node) {
@@ -960,6 +977,7 @@ impl DefaultScheduler {
     }
 
     async fn apply(
+        &self,
         plan: ApplyPlan,
         conns: &SshClients,
         state: &mut ClusterState,
@@ -1030,7 +1048,7 @@ impl DefaultScheduler {
                             None => {
                                 match op.resource {
                                     SupportedResources::Pod(ref pod) => {
-                                        Self::choose_node(&state.nodes, pod)
+                                        self.choose_node(&state.nodes, pod)
                                     }
                                     _ => {
                                         // we should not get here
@@ -1155,6 +1173,7 @@ impl DefaultScheduler {
     }
 
     async fn schedule_one(
+        &self,
         conns: &SshClients,
         state: &mut ClusterState,
         object: SupportedResources,
@@ -1165,7 +1184,7 @@ impl DefaultScheduler {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
 
-        Self::apply(plan, conns, state, dry_run).await
+        self.apply(plan, conns, state, dry_run).await
     }
 }
 
@@ -1180,7 +1199,10 @@ impl Scheduler for DefaultScheduler {
     ) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(conns, state, object.clone(), dry_run).await {
+            match self
+                .schedule_one(conns, state, object.clone(), dry_run)
+                .await
+            {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }

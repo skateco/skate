@@ -5,6 +5,33 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::ops::DerefMut;
 
+///
+/// func getDefaultPlugins() *v1.Plugins {
+// 	plugins := &v1.Plugins{
+// 		MultiPoint: v1.PluginSet{
+// 			Enabled: []v1.Plugin{
+// 				{Name: names.SchedulingGates}, No
+// 				{Name: names.PrioritySort}, yes
+// 				{Name: names.NodeUnschedulable}, yes
+// 				{Name: names.NodeName}, yes
+// 				{Name: names.TaintToleration, Weight: ptr.To[int32](3)}, TODO
+// 				{Name: names.NodeAffinity, Weight: ptr.To[int32](2)}, TODO
+// 				{Name: names.NodePorts}, TODO
+// 				{Name: names.NodeResourcesFit, Weight: ptr.To[int32](1)}, TODO
+// 				{Name: names.VolumeRestrictions},
+// 				{Name: names.NodeVolumeLimits},
+// 				{Name: names.VolumeBinding},
+// 				{Name: names.VolumeZone},
+// 				{Name: names.PodTopologySpread, Weight: ptr.To[int32](2)},
+// 				{Name: names.InterPodAffinity, Weight: ptr.To[int32](2)},
+// 				{Name: names.DefaultPreemption},
+// 				{Name: names.NodeResourcesBalancedAllocation, Weight: ptr.To[int32](1)},
+// 				{Name: names.ImageLocality, Weight: ptr.To[int32](1)},
+// 				{Name: names.DefaultBinder},
+// 			},
+// 		},
+// 	}
+
 const MAX_NODE_SCORE: u32 = 100;
 //*
 // NOTE: the plugin system is inspired by the Kubernetes scheduler plugin system.
@@ -23,27 +50,16 @@ const MAX_NODE_SCORE: u32 = 100;
 // See the License for the specific language governing permissions and
 // limitations under the License.
 // */
-fn pod_priority(pod: &Pod) -> i32 {
-    pod.spec
-        .as_ref()
-        .and_then(|spec| spec.priority)
-        .unwrap_or(0)
-}
 pub trait QueueSort {
-    fn less(pod1: &Pod, pod2: &Pod) -> bool {
-        let p1 = pod_priority(pod1);
-        let p2 = pod_priority(pod2);
-        // k8s orders earlier pods first, but we don't have that info
-        p1 > p2
-    }
+    fn less(&self, pod1: &Pod, pod2: &Pod) -> bool;
 }
 
-/// These plugins are used to pre-process info about the Pod, or to check certain conditions that
-/// the cluster or the Pod must meet. If a PreFilter plugin returns an error,
-/// the scheduling cycle is aborted
-pub trait PreFilter {
-    fn pre_filter(&self, pod: &Pod, nodes: &[NodeState]) -> Result<(), Box<dyn Error>>;
-}
+// /// These plugins are used to pre-process info about the Pod, or to check certain conditions that
+// /// the cluster or the Pod must meet. If a PreFilter plugin returns an error,
+// /// the scheduling cycle is aborted
+// pub trait PreFilter {
+//     fn pre_filter(&self, pod: &Pod, nodes: &[NodeState]) -> Result<(), Box<dyn Error>>;
+// }
 
 /// These plugins are used to filter out nodes that cannot run the Pod. For each node, the scheduler
 /// will call filter plugins in their configured order. If any filter plugin marks the node as
@@ -62,10 +78,7 @@ pub trait Score {
     /// These plugins are used to modify node scores before the scheduler computes a final ranking of Nodes.
     /// A plugin that registers for this extension point will be called with the Score results from the
     /// same plugin.
-    fn normalize_scores(
-        &self,
-        mut scores: &mut BTreeMap<String, u32>,
-    ) -> Result<(), Box<dyn Error>> {
+    fn normalize_scores(&self, scores: &mut BTreeMap<String, u32>) -> Result<(), Box<dyn Error>> {
         if scores.is_empty() {
             return Ok(());
         }
@@ -86,7 +99,7 @@ pub trait Score {
 }
 
 pub(crate) fn inverted_normalize_scores(
-    mut scores: &mut BTreeMap<String, u32>,
+    scores: &mut BTreeMap<String, u32>,
 ) -> Result<(), Box<dyn Error>> {
     if scores.is_empty() {
         return Ok(());
