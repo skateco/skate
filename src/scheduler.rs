@@ -457,7 +457,6 @@ impl DefaultScheduler {
         object: &Pod,
     ) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let mut new_pod = object.clone();
-        //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
         let new_hash = hash_k8s_resource(&mut new_pod);
 
@@ -958,6 +957,8 @@ impl DefaultScheduler {
                                         self.pod_scheduler.choose_node(&state.nodes, pod)
                                     }
                                     SupportedResources::CronJob(ref cron) => {
+                                        // What we currently care about is what the pod spec is
+                                        // for the job. So we make a pseudo pod and use that to schedule
                                         let pod_spec = cron
                                             .spec
                                             .as_ref()
