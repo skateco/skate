@@ -1,5 +1,6 @@
 use crate::scheduler::plugins::{Filter, Plugin, PreFilter, Score};
 use crate::scheduler::pod_scheduler::{DEFAULT_MEMORY_REQUEST, DEFAULT_MILLI_CPU_REQUEST};
+use crate::skatelet::database::resource::get_resource;
 use crate::spec::pod_helpers;
 use crate::spec::pod_helpers::{get_requests, ResourceRequests};
 use crate::state::state::NodeState;
@@ -34,9 +35,12 @@ impl Filter for NodeResourcesFit {
     // Checks if a node has sufficient resources, such as cpu, memory, gpu, opaque int resources etc to run a pod.
     // It returns a list of insufficient resources, if empty, then the node has all the resources requested by the pod.
     fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String> {
-        let (cpu_request, memory_request) =
-            Self::requests_or_default(pod.spec.as_ref().ok_or("no pod spec")?)
-                .map_err(|e| e.to_string())?;
+        let requests =
+            get_requests(pod.spec.as_ref().ok_or("no pod spec")?).map_err(|e| e.to_string())?;
+
+        if requests.cpu_millis.is_none() && requests.memory_bytes.is_none() {
+            return Ok(()); // no resources requested, so no need to check
+        }
 
         let si = node.system_info().ok_or("no node system info")?;
 
@@ -61,17 +65,21 @@ impl Filter for NodeResourcesFit {
         );
         println!("{},{}", total_cpu, total_mem / (1024 * 1024));
 
-        if available_cpu_millis < cpu_request {
-            return Err(format!(
-                "Node {} has insufficient CPU: requested {}m, available {}m",
-                node.node_name, cpu_request, available_cpu_millis
-            ));
+        if let Some(cpu_request) = requests.cpu_millis {
+            if available_cpu_millis < cpu_request {
+                return Err(format!(
+                    "Node {} has insufficient CPU: requested {}m, available {}m",
+                    node.node_name, cpu_request, available_cpu_millis
+                ));
+            }
         }
-        if available_mem_bytes < memory_request {
-            return Err(format!(
-                "Node {} has insufficient memory: requested {} bytes, available {} bytes",
-                node.node_name, memory_request, available_mem_bytes
-            ));
+        if let Some(memory_request) = requests.memory_bytes {
+            if available_mem_bytes < memory_request {
+                return Err(format!(
+                    "Node {} has insufficient memory: requested {} bytes, available {} bytes",
+                    node.node_name, memory_request, available_mem_bytes
+                ));
+            }
         }
 
         Ok(())
