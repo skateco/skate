@@ -11,6 +11,9 @@ use itertools::{Either, Itertools};
 use k8s_openapi::api::core::v1::Pod;
 use std::collections::BTreeMap;
 
+pub const DEFAULT_MILLI_CPU_REQUEST: u64 = 100; // 0.1 CPU in milliCPU
+pub const DEFAULT_MEMORY_REQUEST: u64 = 200 * 1024 * 1024; // 200 MiB in bytes
+
 pub struct PodScheduler {
     sorter: Box<dyn QueueSort>,
     pre_filters: Vec<Box<dyn PreFilter>>,
