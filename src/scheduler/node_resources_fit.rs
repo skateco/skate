@@ -59,13 +59,6 @@ impl Filter for NodeResourcesFit {
         let available_cpu_millis = (si.num_cpus as u64) * 1000 - total_cpu; // convert cores to milliCPU
         let available_mem_bytes = (si.total_memory_mib) * 1024 * 1024 - total_mem; // convert MiB to bytes
 
-        println!(
-            "{},{}",
-            available_cpu_millis,
-            available_mem_bytes / (1024 * 1024)
-        );
-        println!("{},{}", total_cpu, total_mem / (1024 * 1024));
-
         if let Some(cpu_request) = requests.cpu_millis {
             if available_cpu_millis < cpu_request {
                 return Err(format!(
