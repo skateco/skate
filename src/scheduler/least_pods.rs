@@ -23,7 +23,15 @@ impl Score for LeastPods {
             Ok(si
                 .pods
                 .as_ref()
-                .and_then(|p| Some(p.iter().count()))
+                .and_then(|p| {
+                    Some(
+                        p.iter()
+                            .filter(|p| {
+                                !matches!(p.status, PodmanPodStatus::Dead | PodmanPodStatus::Exited)
+                            })
+                            .count(),
+                    )
+                })
                 .unwrap_or_default() as u32)
         } else {
             Ok(0)
@@ -115,7 +123,10 @@ mod tests {
                 ..Default::default()
             },
             spec: None,
-            status: None,
+            status: Some(k8s_openapi::api::core::v1::PodStatus {
+                phase: Some("Failed".to_string()),
+                ..Default::default()
+            }),
         };
 
         let node = node.with_pod(&pod);

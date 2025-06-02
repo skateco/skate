@@ -19,7 +19,7 @@ use strum_macros::Display;
 use tabled::Tabled;
 
 use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::system::podman::PodmanPodInfo;
+use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::skatelet::SystemInfo;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
@@ -219,7 +219,9 @@ impl NodeState {
         self.host_info.as_mut().and_then(|hi| {
             hi.system_info.as_mut().and_then(|si| {
                 si.pods.as_mut().map(|pods| {
-                    pods.push(pod.clone());
+                    let mut pod = pod.clone();
+                    pod.status = PodmanPodStatus::Created;
+                    pods.push(pod);
                 })
             })
         });
