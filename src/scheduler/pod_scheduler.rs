@@ -57,7 +57,7 @@ impl PodScheduler {
             }
 
             // if all filters pass, return the node
-            Either::Left(n.clone())
+            Either::Left(n)
         });
 
         if filtered_nodes.is_empty() {
@@ -82,7 +82,9 @@ impl PodScheduler {
                             }],
                         }
                     }
-                    Ok(score) => scored_nodes.insert(node.node_name.clone(), score),
+                    Ok(score) => {
+                        scored_nodes.insert(node.node_name.clone(), score);
+                    }
                 };
             }
             if let Err(e) = scorer.normalize_scores(&mut scored_nodes) {

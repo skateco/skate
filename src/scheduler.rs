@@ -991,6 +991,7 @@ impl DefaultScheduler {
                                 }
                             }
                         };
+
                         if selection.selected.is_none() {
                             let reasons = selection
                                 .rejected

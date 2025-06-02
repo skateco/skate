@@ -23,13 +23,7 @@ impl Score for LeastPods {
             Ok(si
                 .pods
                 .as_ref()
-                .and_then(|p| {
-                    Some(
-                        p.iter()
-                            .filter(|p| p.status == PodmanPodStatus::Running)
-                            .count(),
-                    )
-                })
+                .and_then(|p| Some(p.iter().count()))
                 .unwrap_or_default() as u32)
         } else {
             Ok(0)
