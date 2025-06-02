@@ -38,7 +38,7 @@ russh = "=0.51.1"
 syslog = "7.0.0"
 tabled = "0.19.0"
 dialoguer = "0.11.0"
-reqwest = { version = "0.12.15", features = ["json"] }
+reqwest = { version = "0.12.19", features = ["json"] }
 shadow-rs = "0.35.2"
 openssl = { version = "0.10.72", features = ["vendored"] }
 validator = { version = "0.20.0", features= ["derive"] }
