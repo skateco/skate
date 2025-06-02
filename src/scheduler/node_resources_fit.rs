@@ -50,6 +50,7 @@ impl Filter for NodeResourcesFit {
         for p in &node.filter_pods(&|_| true) {
             let k8s_pod: Pod = p.into();
             let spec = k8s_pod.spec.as_ref().ok_or("no pod spec")?;
+            // TODO - I'm not sure if we should be defaulting here of should just ignore pods without requests
             let (pod_cpu, pod_mem) = Self::requests_or_default(spec).map_err(|e| e.to_string())?;
             total_cpu += pod_cpu;
             total_mem += pod_mem;
