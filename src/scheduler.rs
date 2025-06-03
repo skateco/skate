@@ -1,3 +1,14 @@
+use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
+mod filter;
+mod least_pods;
+mod node_name;
+mod node_resources_fit;
+mod plugins;
+mod pod_scheduler;
+mod priority_sort;
+mod unschedulable;
+
+use crate::scheduler::pod_scheduler::PodScheduler;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
@@ -11,7 +22,7 @@ use colored::Colorize;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Node as K8sNode, Pod, Secret, Service};
+use k8s_openapi::api::core::v1::{Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 use std::cmp::Ordering;
@@ -35,7 +46,9 @@ pub trait Scheduler {
     ) -> Result<ScheduleResult, Box<dyn Error>>;
 }
 
-pub struct DefaultScheduler {}
+pub struct DefaultScheduler {
+    pod_scheduler: PodScheduler,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpType {
@@ -112,6 +125,11 @@ pub struct NodeSelection {
 // maybe > 0 per node (daemonset)
 // distributed (pod, cron)
 impl DefaultScheduler {
+    pub fn new() -> Self {
+        DefaultScheduler {
+            pod_scheduler: PodScheduler::new(),
+        }
+    }
     fn next_generation(existing: Option<&CatalogueItem>) -> i64 {
         if let Some(existing_gen) = existing.and_then(|m| Some(m.object.generation.clone())) {
             if existing_gen > 0 {
@@ -121,80 +139,6 @@ impl DefaultScheduler {
             }
         };
         1
-    }
-    fn choose_node(nodes: Vec<NodeState>, object: &SupportedResources) -> NodeSelection {
-        // filter nodes based on resource requirements  - cpu, memory, etc
-
-        let node_selector = match object {
-            SupportedResources::Pod(pod) => pod.spec.as_ref().and_then(|s| s.node_selector.clone()),
-            _ => None,
-        }
-        .unwrap_or(BTreeMap::new());
-
-        let mut rejected_nodes: Vec<RejectedNode> = vec![];
-
-        let filtered_nodes = nodes
-            .iter()
-            .filter(|n| {
-                let k8s_node: K8sNode = (*n).into();
-                let node_labels = k8s_node.metadata.labels.unwrap_or_default();
-                // only schedulable nodes
-                let is_schedulable = k8s_node
-                    .spec
-                    .and_then(|s| s.unschedulable.map(|u| !u))
-                    .unwrap_or(false);
-
-                if !is_schedulable {
-                    rejected_nodes.push(RejectedNode {
-                        node_name: n.node_name.clone(),
-                        reason: "node is unschedulable".to_string(),
-                    });
-                    return false;
-                }
-
-                // only nodes that match the nodeselectors
-                node_selector.iter().all(|(k, v)| {
-                    let matches = node_labels.get(k).unwrap_or(&"".to_string()) == v;
-                    if !matches {
-                        rejected_nodes.push(RejectedNode {
-                            node_name: n.node_name.clone(),
-                            reason: format!("node selector {}:{} did not match", k, v),
-                        });
-                    }
-                    matches
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let feasible_node = filtered_nodes
-            .into_iter()
-            .fold(None, |maybe_prev_node, node| {
-                let node_pods = node
-                    .clone()
-                    .host_info
-                    .and_then(|h| h.system_info.and_then(|si| si.pods.map(|p| p.len())))
-                    .unwrap_or(0);
-
-                maybe_prev_node
-                    .and_then(|prev_node: NodeState| {
-                        prev_node.host_info.clone().and_then(|h| {
-                            h.system_info.and_then(|si| {
-                                si.pods
-                                    .map(|prev_pods| match prev_pods.len().cmp(&node_pods) {
-                                        Ordering::Less => prev_node.clone(),
-                                        Ordering::Equal => node.clone(),
-                                        Ordering::Greater => node.clone(),
-                                    })
-                            })
-                        })
-                    })
-                    .or_else(|| Some(node.clone()))
-            });
-
-        NodeSelection {
-            selected: feasible_node,
-            rejected: rejected_nodes,
-        }
     }
 
     fn plan_daemonset(state: &ClusterState, ds: &DaemonSet) -> Result<ApplyPlan, Box<dyn Error>> {
@@ -513,7 +457,6 @@ impl DefaultScheduler {
         object: &Pod,
     ) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
         let mut new_pod = object.clone();
-        //let feasible_node = Self::choose_node(state.nodes.clone(), &SupportedResources::Pod(object.clone())).ok_or("failed to find feasible node")?;
 
         let new_hash = hash_k8s_resource(&mut new_pod);
 
@@ -608,7 +551,7 @@ impl DefaultScheduler {
 
         let op_types = match existing_cron {
             Some(existing_cron) => {
-                let node = existing_cron.nodes.first().unwrap().deref();
+                let node = existing_cron.nodes.first().unwrap();
                 if existing_cron.object.manifest_hash == new_hash && node.schedulable() {
                     vec![(OpType::Unchanged, Some(node))]
                 } else {
@@ -623,7 +566,7 @@ impl DefaultScheduler {
             actions.push(ScheduledOperation {
                 operation: op_type,
                 resource: SupportedResources::CronJob(new_cron.clone()),
-                node: node.cloned(),
+                node: node.cloned().cloned(),
                 error: None,
                 silent: false,
             })
@@ -940,6 +883,7 @@ impl DefaultScheduler {
     }
 
     async fn apply(
+        &self,
         plan: ApplyPlan,
         conns: &SshClients,
         state: &mut ClusterState,
@@ -1007,8 +951,47 @@ impl DefaultScheduler {
                                 rejected: vec![],
                             },
                             // anything else and things with node selectors go here
-                            None => Self::choose_node(state.nodes.clone(), &op.resource),
+                            None => {
+                                match op.resource {
+                                    SupportedResources::Pod(ref pod) => {
+                                        self.pod_scheduler.choose_node(&state.nodes, pod)
+                                    }
+                                    SupportedResources::CronJob(ref cron) => {
+                                        // What we currently care about is what the pod spec is
+                                        // for the job. So we make a pseudo pod and use that to schedule
+                                        let pod_spec = cron
+                                            .spec
+                                            .as_ref()
+                                            .and_then(|s| s.job_template.spec.clone())
+                                            .and_then(|s| s.template.spec);
+                                        if let Some(pod_spec) = pod_spec {
+                                            let pod = Pod {
+                                                metadata: cron.metadata.clone(),
+                                                spec: Some(pod_spec),
+                                                status: None,
+                                            };
+
+                                            self.pod_scheduler.choose_node(&state.nodes, &pod)
+                                        } else {
+                                            return Err(anyhow!(
+                                                "failed to find pod spec in cron job {}",
+                                                cron.metadata.name.clone().unwrap_or_default()
+                                            )
+                                            .into());
+                                        }
+                                    }
+                                    _ => {
+                                        // we should not get here
+                                        return Err(anyhow!(
+                                            "internal scheduler error: found non pod resource {}:{} without a pre allocated node",
+                                            op.resource,
+                                            op.resource.name()
+                                        ).into());
+                                    }
+                                }
+                            }
                         };
+
                         if selection.selected.is_none() {
                             let reasons = selection
                                 .rejected
@@ -1038,7 +1021,7 @@ impl DefaultScheduler {
                                 println!(
                                     "{} {} {} created on node {}",
                                     op.operation.symbol(),
-                                    op.resource,
+                                    &op.resource,
                                     &op.resource.name(),
                                     node_name
                                 );
@@ -1121,6 +1104,7 @@ impl DefaultScheduler {
     }
 
     async fn schedule_one(
+        &self,
         conns: &SshClients,
         state: &mut ClusterState,
         object: SupportedResources,
@@ -1131,7 +1115,7 @@ impl DefaultScheduler {
             return Err(anyhow!("failed to schedule resources, no planned actions").into());
         }
 
-        Self::apply(plan, conns, state, dry_run).await
+        self.apply(plan, conns, state, dry_run).await
     }
 }
 
@@ -1146,7 +1130,10 @@ impl Scheduler for DefaultScheduler {
     ) -> Result<ScheduleResult, Box<dyn Error>> {
         let mut results = ScheduleResult { placements: vec![] };
         for object in objects {
-            match Self::schedule_one(conns, state, object.clone(), dry_run).await {
+            match self
+                .schedule_one(conns, state, object.clone(), dry_run)
+                .await
+            {
                 Ok(placements) => {
                     results.placements = [results.placements, placements].concat();
                 }

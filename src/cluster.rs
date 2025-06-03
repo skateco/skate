@@ -96,7 +96,7 @@ impl<D: ClusterDeps> Cluster<D> {
             filtered_state.nodes.len()
         );
 
-        let scheduler = DefaultScheduler {};
+        let scheduler = DefaultScheduler::new();
 
         scheduler
             .schedule(all_conns, &mut filtered_state, all_manifests, dry_run)

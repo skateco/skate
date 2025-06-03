@@ -19,7 +19,7 @@ use strum_macros::Display;
 use tabled::Tabled;
 
 use crate::skatelet::database::resource::ResourceType;
-use crate::skatelet::system::podman::PodmanPodInfo;
+use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::skatelet::SystemInfo;
 use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
@@ -123,6 +123,10 @@ impl From<&NodeState> for K8sNode {
 }
 
 impl NodeState {
+    /// scores the node for scheduling based on free memory and cpu
+    pub fn system_info(&self) -> Option<&SystemInfo> {
+        self.host_info.as_ref().and_then(|h| h.system_info.as_ref())
+    }
     pub fn filter_pods(&self, f: &dyn Fn(&PodmanPodInfo) -> bool) -> Vec<PodmanPodInfo> {
         self.host_info
             .as_ref()
@@ -215,7 +219,9 @@ impl NodeState {
         self.host_info.as_mut().and_then(|hi| {
             hi.system_info.as_mut().and_then(|si| {
                 si.pods.as_mut().map(|pods| {
-                    pods.push(pod.clone());
+                    let mut pod = pod.clone();
+                    pod.status = PodmanPodStatus::Created;
+                    pods.push(pod);
                 })
             })
         });
@@ -669,11 +675,6 @@ fn extract_mut_catalog<'a>(
             node: n.to_string(),
         })
         .collect()
-}
-
-struct PlacedResource<'a, 'b> {
-    object: &'a ObjectListItem,
-    node: &'b NodeState,
 }
 
 fn extract_catalog<'a>(

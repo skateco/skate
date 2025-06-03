@@ -178,7 +178,7 @@ impl<D: RolloutDeps + RefreshDeps> Rollout<D> {
                 }
             }
 
-            let scheduler = DefaultScheduler {};
+            let scheduler = DefaultScheduler::new();
 
             let _ = scheduler
                 .schedule(&conns, state, resources, args.dry_run)

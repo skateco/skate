@@ -90,7 +90,7 @@ impl<D: ApplyDeps> Apply<D> {
             .await
             .expect("failed to refresh state");
 
-        let scheduler = DefaultScheduler {};
+        let scheduler = DefaultScheduler::new();
         match scheduler
             .schedule(&conns, &mut state, objects, dry_run)
             .await

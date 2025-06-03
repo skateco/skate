@@ -350,7 +350,7 @@ async fn propagate_static_resources(
         .cloned()
         .unwrap()];
 
-    let scheduler = DefaultScheduler {};
+    let scheduler = DefaultScheduler::new();
 
     // TODO - remove
     scheduler
