@@ -70,10 +70,10 @@ impl PodScheduler {
             };
         }
 
-        let mut node_score_total = BTreeMap::<String, u32>::new();
+        let mut node_score_total = BTreeMap::<String, u64>::new();
 
         for scorer in &self.scorers {
-            let mut scored_nodes = BTreeMap::<String, u32>::new();
+            let mut scored_nodes = BTreeMap::<String, u64>::new();
             for node in &filtered_nodes {
                 match scorer.score(pod, node) {
                     Err(e) => {

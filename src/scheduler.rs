@@ -6,6 +6,7 @@ mod node_resources_fit;
 mod plugins;
 mod pod_scheduler;
 mod priority_sort;
+mod resource_allocation;
 mod unschedulable;
 
 use crate::scheduler::pod_scheduler::PodScheduler;

@@ -284,3 +284,13 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
 
     Ok(())
 }
+
+impl SystemInfo {
+    pub fn cpu_total_millis(&self) -> usize {
+        self.num_cpus * 1000
+    }
+
+    pub fn cpu_usage_millis(&self) -> usize {
+        self.cpu_total_millis() * (self.cpu_usage / 100.0) as usize
+    }
+}

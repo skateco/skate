@@ -1,4 +1,4 @@
-use crate::scheduler::plugins::{inverted_normalize_scores, Plugin, Score};
+use crate::scheduler::plugins::{inverted_normalize_scores, Plugin, Score, ScoreError};
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::state::state::NodeState;
 use std::collections::BTreeMap;
@@ -18,7 +18,7 @@ impl Score for LeastPods {
         &self,
         pod: &k8s_openapi::api::core::v1::Pod,
         node: &NodeState,
-    ) -> Result<u32, Box<dyn Error>> {
+    ) -> Result<u64, ScoreError> {
         if let Some(si) = node.system_info() {
             Ok(si
                 .pods
@@ -32,14 +32,14 @@ impl Score for LeastPods {
                             .count(),
                     )
                 })
-                .unwrap_or_default() as u32)
+                .unwrap_or_default() as u64)
         } else {
             Ok(0)
         }
     }
 
     /// Since we want the node with the least number of pods to have the highest score,
-    fn normalize_scores(&self, scores: &mut BTreeMap<String, u32>) -> Result<(), Box<dyn Error>> {
+    fn normalize_scores(&self, scores: &mut BTreeMap<String, u64>) -> Result<(), ScoreError> {
         inverted_normalize_scores(scores)
     }
 }

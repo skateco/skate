@@ -1,10 +1,9 @@
 use k8s_openapi::api::core::v1::PodSpec;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use openssl::init;
-use strum_macros::{EnumString, ToString};
 
-#[derive(Debug, ToString)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("invalid quantity for {0}: {1}")]
     InvalidQuantity(String, String),
 }
 
@@ -90,6 +89,7 @@ pub fn parse_memory_quantity(memory: &Quantity) -> Result<u64, Error> {
         memory.0.clone(),
     ))
 }
+
 pub fn get_requests(p: &PodSpec) -> Result<ResourceRequests, Error> {
     let mut cpu_millis = 0;
     let mut memory_bytes = 0;
@@ -106,6 +106,29 @@ pub fn get_requests(p: &PodSpec) -> Result<ResourceRequests, Error> {
             }
         }
     }
+    let mut max_init_cpu_millis = 0;
+    let mut max_init_memory_bytes = 0;
+
+    if let Some(init_containers) = &p.init_containers {
+        for c in init_containers {
+            if let Some(resources) = &c.resources {
+                if let Some(requests) = &resources.requests {
+                    if let Some(cpu) = requests.get("cpu") {
+                        max_init_cpu_millis = max_init_cpu_millis.max(parse_cpu_quantity(cpu)?);
+                    }
+                    if let Some(memory) = requests.get("memory") {
+                        max_init_memory_bytes =
+                            max_init_memory_bytes.max(parse_memory_quantity(memory)?);
+                    }
+                }
+            }
+        }
+    }
+
+    // take max of init containers and regular containers
+    cpu_millis = cpu_millis.max(max_init_cpu_millis);
+    memory_bytes = memory_bytes.max(max_init_memory_bytes);
+
     Ok(ResourceRequests {
         cpu_millis: if cpu_millis > 0 {
             Some(cpu_millis)
