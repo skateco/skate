@@ -57,3 +57,29 @@ pub fn get_node_alloc(n: &NodeState) -> (u64, u64) {
 
     (total_cpu_millis as u64, total_mem_bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::spec::node_helpers::get_node_alloc;
+    use crate::test_helpers::objects::node_state;
+
+    #[test]
+    fn should_get_node_alloc() {
+        let mut node = node_state("node1");
+        let mut si = node
+            .host_info
+            .as_mut()
+            .unwrap()
+            .system_info
+            .as_mut()
+            .unwrap()
+            .clone();
+        si.total_memory_mib = 1000;
+        si.cpu_usage = 50.0; // shouldn't affect allocatable
+        si.num_cpus = 4;
+
+        let node_alloc = get_node_alloc(&node);
+        assert_eq!(node_alloc.0, 1000); // 4 CPUs * 1000 millis each
+        assert_eq!(node_alloc.1, 1000 * 1024 * 1024); // 1000 MiB in bytes
+    }
+}

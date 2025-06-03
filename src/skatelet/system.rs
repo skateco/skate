@@ -291,6 +291,34 @@ impl SystemInfo {
     }
 
     pub fn cpu_usage_millis(&self) -> usize {
-        self.cpu_total_millis() * (self.cpu_usage / 100.0) as usize
+        let factor = self.cpu_usage / 100.0;
+        let total_millis = self.cpu_total_millis();
+
+        let result = total_millis as f32 * factor;
+        result as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn should_get_cpu_total_millis() {
+        use super::*;
+        let si = SystemInfo {
+            num_cpus: 4,
+            ..Default::default()
+        };
+        assert_eq!(si.cpu_total_millis(), 4000);
+    }
+
+    #[test]
+    fn should_get_cpu_usage_millis() {
+        use super::*;
+        let si = SystemInfo {
+            num_cpus: 4,
+            cpu_usage: 50.0,
+            ..Default::default()
+        };
+        assert_eq!(si.cpu_usage_millis(), 2000);
     }
 }
