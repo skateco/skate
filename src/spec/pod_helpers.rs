@@ -208,23 +208,72 @@ mod tests {
     fn should_get_requests() -> Result<(), super::Error> {
         use super::*;
         let pod_spec = PodSpec {
+            containers: vec![
+                k8s_openapi::api::core::v1::Container {
+                    name: "test-container".to_string(),
+                    resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                        requests: Some(std::collections::BTreeMap::from([
+                            ("cpu".to_string(), Quantity("200m".to_string())),
+                            ("memory".to_string(), Quantity("200Mi".to_string())),
+                        ])),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                k8s_openapi::api::core::v1::Container {
+                    name: "test-container-2".to_string(),
+                    resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                        requests: Some(std::collections::BTreeMap::from([
+                            ("cpu".to_string(), Quantity("100m".to_string())),
+                            ("memory".to_string(), Quantity("50Mi".to_string())),
+                        ])),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let requests = get_requests(&pod_spec)?;
+        assert_eq!(requests.cpu_millis, Some(300));
+        assert_eq!(requests.memory_bytes, Some(250 * 1024 * 1024));
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_get_requests_with_init_containers() -> Result<(), super::Error> {
+        use super::*;
+        let pod_spec = PodSpec {
             containers: vec![k8s_openapi::api::core::v1::Container {
                 name: "test-container".to_string(),
                 resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
                     requests: Some(std::collections::BTreeMap::from([
-                        ("cpu".to_string(), Quantity("200m".to_string())),
-                        ("memory".to_string(), Quantity("200Mi".to_string())),
+                        ("cpu".to_string(), Quantity("50m".to_string())),
+                        ("memory".to_string(), Quantity("50Mi".to_string())),
                     ])),
                     ..Default::default()
                 }),
                 ..Default::default()
             }],
+            init_containers: Some(vec![k8s_openapi::api::core::v1::Container {
+                name: "init-container".to_string(),
+                resources: Some(k8s_openapi::api::core::v1::ResourceRequirements {
+                    requests: Some(std::collections::BTreeMap::from([
+                        ("cpu".to_string(), Quantity("100m".to_string())),
+                        ("memory".to_string(), Quantity("150Mi".to_string())),
+                    ])),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]),
             ..Default::default()
         };
 
         let requests = get_requests(&pod_spec)?;
-        assert_eq!(requests.cpu_millis, Some(200));
-        assert_eq!(requests.memory_bytes, Some(200 * 1024 * 1024));
+        assert_eq!(requests.cpu_millis, Some(100));
+        assert_eq!(requests.memory_bytes, Some(150 * 1024 * 1024));
 
         Ok(())
     }
