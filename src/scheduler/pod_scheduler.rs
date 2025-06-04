@@ -4,6 +4,7 @@ use crate::scheduler::node_name::NodeNameFilter;
 use crate::scheduler::node_resources_fit::NodeResourcesFit;
 use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 use crate::scheduler::priority_sort::PrioritySort;
+use crate::scheduler::resource_allocation::ResourceAllocationScorer;
 use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::scheduler::{NodeSelection, RejectedNode};
 use crate::state::state::NodeState;
@@ -32,7 +33,10 @@ impl PodScheduler {
                 Box::new(UnschedulableFilter {}),
                 Box::new(NodeResourcesFit {}),
             ],
-            scorers: vec![Box::new(LeastPods {}), Box::new(NodeResourcesFit {})],
+            scorers: vec![
+                Box::new(LeastPods {}),
+                Box::new(ResourceAllocationScorer {}),
+            ],
         }
     }
     pub fn choose_node(&self, nodes: &[NodeState], pod: &Pod) -> NodeSelection {

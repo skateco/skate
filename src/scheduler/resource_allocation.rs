@@ -9,17 +9,15 @@ use std::error::Error;
 
 // strum error enum
 
-struct ResourceAllocationScorer {
-    name: String,
-    resources: ResourceRequests,
-}
+pub(crate) struct ResourceAllocationScorer {}
 
 impl Plugin for ResourceAllocationScorer {
     fn name(&self) -> &str {
-        self.name.as_str()
+        "ResourceAllocationScorer"
     }
 }
 
+#[derive(Debug)]
 pub struct NodeResourceAllocVsReq {
     pub allocatable_cpu_millis: u64,
     pub allocatable_mem_bytes: u64,
@@ -72,6 +70,13 @@ impl Score for ResourceAllocationScorer {
 
         let requests = requests_or_default(spec)?;
         let alloc_v_req = self.calc_node_resource_alloc_req(node, requests);
+
+        log::trace!(
+            "Scoring node {} for pod {:?} with alloc vs req: {:?}",
+            node.node_name,
+            pod.metadata.name,
+            alloc_v_req
+        );
 
         // cpu
         let cpu_weight = 1;

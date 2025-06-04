@@ -80,11 +80,3 @@ impl Filter for NodeResourcesFit {
         Ok(())
     }
 }
-
-impl Score for NodeResourcesFit {
-    // see https://github.com/kubernetes/kubernetes/blob/master/pkg/scheduler/framework/plugins/noderesources/resource_allocation.go#L48
-    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u64, ScoreError> {
-        let scorer = LeastPods {};
-        scorer.score(pod, node)
-    }
-}
