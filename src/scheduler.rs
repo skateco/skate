@@ -111,6 +111,7 @@ pub struct ApplyPlan {
     pub actions: HashMap<NamespacedName, Vec<ScheduledOperation>>,
 }
 
+#[derive(Debug)]
 pub struct RejectedNode {
     pub node_name: String,
     pub reason: String,

@@ -40,7 +40,7 @@ pub struct RestartArgs {
     #[arg(long, long_help = "Will not affect the cluster if set to true")]
     pub dry_run: bool,
     pub resource: ResourceArg,
-    #[arg(long, short, long_help = "Namespace of the resource.", default_value_t = String::from("default"))]
+    #[arg(long, short, global = true, long_help = "Namespace of the resource.", default_value_t = String::from("default"))]
     namespace: String,
     #[arg(long, short, long_help = "Answer yes to confirmation")]
     pub yes: bool,

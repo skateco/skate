@@ -62,6 +62,14 @@ impl PodScheduler {
             // if all filters pass, return the node
             Either::Left(n)
         });
+        log::debug!(
+            "filtered nodes: {:?}",
+            filtered_nodes
+                .iter()
+                .map(|n| n.node_name.clone())
+                .collect::<Vec<_>>()
+        );
+        log::debug!("rejected nodes: {:?}", rejected_nodes);
 
         if filtered_nodes.is_empty() {
             return NodeSelection {
@@ -86,6 +94,13 @@ impl PodScheduler {
                         }
                     }
                     Ok(score) => {
+                        log::debug!(
+                            "{} Scored node {} with {} for pod {}",
+                            scorer.name(),
+                            node.node_name,
+                            score,
+                            pod.metadata.name.as_deref().unwrap_or("unknown")
+                        );
                         scored_nodes.insert(node.node_name.clone(), score);
                     }
                 };

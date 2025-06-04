@@ -8,7 +8,7 @@ use crate::filestore::Store;
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
-    #[arg(long, short, long_help = "Namespace of the resource.", default_value_t = String::from("default")
+    #[arg(long, short, global = true, long_help = "Namespace of the resource.", default_value_t = String::from("default")
     )]
     namespace: String,
     #[command(subcommand)]
