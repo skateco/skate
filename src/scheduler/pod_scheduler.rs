@@ -85,13 +85,20 @@ impl PodScheduler {
             for node in &filtered_nodes {
                 match scorer.score(pod, node) {
                     Err(e) => {
+                        log::error!(
+                            "{} failed to score node {} for pod {}: {}",
+                            scorer.name(),
+                            node.node_name,
+                            pod.metadata.name.as_deref().unwrap_or("unknown"),
+                            e
+                        );
                         return NodeSelection {
                             selected: None,
                             rejected: vec![RejectedNode {
                                 node_name: node.node_name.clone(),
                                 reason: e.to_string(),
                             }],
-                        }
+                        };
                     }
                     Ok(score) => {
                         log::debug!(
@@ -120,6 +127,14 @@ impl PodScheduler {
                 *total_score += score;
             }
         }
+
+        log::info!(
+            "Node scores: {:?}",
+            node_score_total
+                .iter()
+                .map(|(k, v)| (k.clone(), *v))
+                .collect::<Vec<_>>()
+        );
 
         // Find the node with the highest score
         let (feasible_node, _) = node_score_total
