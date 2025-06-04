@@ -19,6 +19,7 @@ use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
+use env_logger::{Builder, Env};
 use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection};
 use std::fmt::{Display, Formatter};
@@ -31,6 +32,14 @@ use strum_macros::Display;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+    #[arg(
+        long,
+        short = 'v',
+        action = clap::ArgAction::Count,
+        global = true,
+        long_help = "Increase verbosity. Use multiple times, up to a max of -vvv for more verbosity. Levels are 'info', 'debug', and 'trace'. Default is 'off'.",
+    )]
+    verbose: u8,
 }
 
 #[derive(Debug, Subcommand)]
@@ -70,10 +79,11 @@ pub struct ConfigFileArgs {
     #[arg(
         long,
         long_help = "Configuration for skate.",
+        global = true,
         default_value = "~/.skate/config.yaml"
     )]
     pub skateconfig: String,
-    #[arg(long, long_help = "Name of the context to use.")]
+    #[arg(long, long_help = "Name of the context to use.", global = true)]
     pub context: Option<String>,
 }
 
@@ -174,7 +184,22 @@ async fn skate_with_args<D: AllDeps>(deps: D, args: Cli) -> Result<(), SkateErro
 
 pub async fn skate<D: AllDeps>(deps: D) -> Result<(), SkateError> {
     let args = Cli::parse();
+
+    env_logger::builder()
+        .filter_module("skate", count_to_log_level(args.verbose))
+        .format_target(false)
+        .format_timestamp(None)
+        .init();
     skate_with_args(deps, args).await
+}
+
+fn count_to_log_level(count: u8) -> log::LevelFilter {
+    match count {
+        0 => log::LevelFilter::Off,
+        1 => log::LevelFilter::Info,
+        2 => log::LevelFilter::Debug,
+        _ => log::LevelFilter::Trace,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -277,6 +302,7 @@ mod tests {
         skate_with_args(
             deps,
             Cli {
+                verbose: 0,
                 command: Refresh(RefreshArgs {
                     json: false,
                     config: ConfigFileArgs {

@@ -40,7 +40,7 @@ pub struct CreateJobArgs {
     config: ConfigFileArgs,
     #[command(flatten)]
     args: JobArgs,
-    #[arg(long, short, long_help = "Namespace of the resource.", default_value_t = String::from("default"))]
+    #[arg(long, short, global = true, long_help = "Namespace of the resource.", default_value_t = String::from("default"))]
     namespace: String,
 }
 

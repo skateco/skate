@@ -1,3 +1,4 @@
+use crate::spec::pod_helpers;
 use crate::state::state::NodeState;
 use itertools::Itertools;
 use k8s_openapi::api::core::v1::Pod;
@@ -32,10 +33,10 @@ use std::ops::DerefMut;
 // 		},
 // 	}
 
-const MAX_NODE_SCORE: u32 = 100;
+pub(crate) const MAX_NODE_SCORE: u64 = 100;
 
 pub(crate) trait Plugin {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 }
 //*
 // NOTE: the plugin system is inspired by the Kubernetes scheduler plugin system.
@@ -71,18 +72,25 @@ pub trait PreFilter {
 pub trait Filter: Plugin {
     fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String>;
 }
+#[derive(thiserror::Error, Debug)]
+pub enum ScoreError {
+    #[error("pod spec is empty")]
+    PodSpecEmpty,
+    #[error("{0}")]
+    PodHelper(#[from] pod_helpers::Error),
+}
 
 /// These plugins are used to rank nodes that have passed the filtering phase. The scheduler will
 /// call each scoring plugin for each node. There will be a well defined range of integers
 /// representing the minimum and maximum scores. After the NormalizeScore phase, the scheduler will
 /// combine node scores from all plugins according to the configured plugin weights.
 pub trait Score: Plugin {
-    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u32, Box<dyn Error>>;
+    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u64, ScoreError>;
 
     /// These plugins are used to modify node scores before the scheduler computes a final ranking of Nodes.
     /// A plugin that registers for this extension point will be called with the Score results from the
     /// same plugin.
-    fn normalize_scores(&self, scores: &mut BTreeMap<String, u32>) -> Result<(), Box<dyn Error>> {
+    fn normalize_scores(&self, scores: &mut BTreeMap<String, u64>) -> Result<(), ScoreError> {
         if scores.is_empty() {
             return Ok(());
         }
@@ -103,8 +111,8 @@ pub trait Score: Plugin {
 }
 
 pub(crate) fn inverted_normalize_scores(
-    scores: &mut BTreeMap<String, u32>,
-) -> Result<(), Box<dyn Error>> {
+    scores: &mut BTreeMap<String, u64>,
+) -> Result<(), ScoreError> {
     if scores.is_empty() {
         return Ok(());
     }
@@ -134,7 +142,7 @@ pub trait PostBind: Plugin {
 }
 
 mod tests {
-    use crate::scheduler::plugins::Plugin;
+    use crate::scheduler::plugins::{Plugin, ScoreError};
     use std::collections::BTreeMap;
     use std::error::Error;
 
@@ -151,14 +159,14 @@ mod tests {
             &self,
             _pod: &k8s_openapi::api::core::v1::Pod,
             _node: &super::NodeState,
-        ) -> Result<u32, Box<dyn Error>> {
+        ) -> Result<u64, ScoreError> {
             Ok(0)
         }
     }
     #[test]
     fn test_normalize_scores() {
         use super::*;
-        let mut scores: BTreeMap<String, u32> = BTreeMap::new();
+        let mut scores: BTreeMap<String, u64> = BTreeMap::new();
         scores.insert("node1".to_string(), 10);
         scores.insert("node2".to_string(), 50);
         scores.insert("node3".to_string(), 75);
