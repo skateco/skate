@@ -9,13 +9,7 @@ use std::error::Error;
 
 // strum error enum
 
-pub(crate) struct ResourceAllocationScorer {}
-
-impl Plugin for ResourceAllocationScorer {
-    fn name(&self) -> &str {
-        "ResourceAllocationScorer"
-    }
-}
+pub(crate) struct LeastAllocated {}
 
 #[derive(Debug)]
 pub struct NodeResourceAllocVsReq {
@@ -24,7 +18,7 @@ pub struct NodeResourceAllocVsReq {
     pub req_cpu_millis: u64,
     pub req_mem_bytes: u64,
 }
-impl ResourceAllocationScorer {
+impl LeastAllocated {
     pub fn calc_node_resource_alloc_req(
         &self,
         node_state: &NodeState,
@@ -57,11 +51,11 @@ impl ResourceAllocationScorer {
     }
 }
 
-impl Score for ResourceAllocationScorer {
+impl LeastAllocated {
     /// Score does a Least Allocated strategy
     /// TODO - add Most Allocated and Requested to Capacity strategies
     /// TODO - allow weights
-    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u64, ScoreError> {
+    pub(crate) fn score(&self, pod: &Pod, node: &NodeState) -> Result<u64, ScoreError> {
         let spec = if let Some(spec) = pod.spec.as_ref() {
             spec
         } else {

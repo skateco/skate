@@ -1,6 +1,7 @@
 use crate::scheduler::least_pods::LeastPods;
 use crate::scheduler::plugins::{Filter, Plugin, PreFilter, Score, ScoreError};
 use crate::scheduler::pod_scheduler::{DEFAULT_MEMORY_REQUEST, DEFAULT_MILLI_CPU_REQUEST};
+use crate::scheduler::resource_allocation::LeastAllocated;
 use crate::skatelet::database::resource::get_resource;
 use crate::spec::pod_helpers;
 use crate::spec::pod_helpers::{get_requests, ResourceRequests};
@@ -8,7 +9,9 @@ use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use std::error::Error;
 
-pub(crate) struct NodeResourcesFit {}
+pub(crate) struct NodeResourcesFit {
+    strategy: Strategy,
+}
 
 pub(crate) fn requests_or_default(p: &PodSpec) -> Result<(u64, u64), pod_helpers::Error> {
     let r = get_requests(p)?;
@@ -17,7 +20,16 @@ pub(crate) fn requests_or_default(p: &PodSpec) -> Result<(u64, u64), pod_helpers
     Ok((cpu, memory))
 }
 
-impl NodeResourcesFit {}
+pub enum Strategy {
+    LeastAllocated,
+    // MostAllocated,
+    // RequestToCapacityRatio,
+}
+impl NodeResourcesFit {
+    pub fn new(strategy: Strategy) -> Self {
+        Self { strategy }
+    }
+}
 
 impl Plugin for NodeResourcesFit {
     fn name(&self) -> &'static str {
@@ -78,5 +90,16 @@ impl Filter for NodeResourcesFit {
         }
 
         Ok(())
+    }
+}
+
+impl Score for NodeResourcesFit {
+    fn score(&self, pod: &Pod, node: &NodeState) -> Result<u64, ScoreError> {
+        match self.strategy {
+            Strategy::LeastAllocated => {
+                let la = LeastAllocated {};
+                la.score(pod, node)
+            }
+        }
     }
 }

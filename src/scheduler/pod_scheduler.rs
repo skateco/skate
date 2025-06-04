@@ -1,10 +1,10 @@
 use crate::scheduler::filter::NodeSelectorFilter;
 use crate::scheduler::least_pods::LeastPods;
 use crate::scheduler::node_name::NodeNameFilter;
-use crate::scheduler::node_resources_fit::NodeResourcesFit;
+use crate::scheduler::node_resources_fit::{NodeResourcesFit, Strategy};
 use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 use crate::scheduler::priority_sort::PrioritySort;
-use crate::scheduler::resource_allocation::ResourceAllocationScorer;
+use crate::scheduler::resource_allocation::LeastAllocated;
 use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::scheduler::{NodeSelection, RejectedNode};
 use crate::state::state::NodeState;
@@ -27,16 +27,16 @@ impl PodScheduler {
     pub fn new() -> Self {
         Self {
             sorter: Box::new(PrioritySort {}),
-            pre_filters: vec![Box::new(NodeResourcesFit {})],
+            pre_filters: vec![Box::new(NodeResourcesFit::new(Strategy::LeastAllocated))],
             filters: vec![
                 Box::new(NodeNameFilter {}),
                 Box::new(NodeSelectorFilter {}),
                 Box::new(UnschedulableFilter {}),
-                Box::new(NodeResourcesFit {}),
+                Box::new(NodeResourcesFit::new(Strategy::LeastAllocated)),
             ],
             scorers: vec![
                 Box::new(LeastPods {}),
-                Box::new(ResourceAllocationScorer {}),
+                Box::new(NodeResourcesFit::new(Strategy::LeastAllocated)),
             ],
         }
     }
