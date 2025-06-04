@@ -10,6 +10,7 @@ use crate::scheduler::{NodeSelection, RejectedNode};
 use crate::state::state::NodeState;
 use itertools::{Either, Itertools};
 use k8s_openapi::api::core::v1::Pod;
+use rand::seq::IteratorRandom;
 use std::collections::BTreeMap;
 
 pub const DEFAULT_MILLI_CPU_REQUEST: u64 = 100; // 0.1 CPU in milliCPU
@@ -105,13 +106,6 @@ impl PodScheduler {
                         };
                     }
                     Ok(score) => {
-                        log::debug!(
-                            "{} Scored node {} with {} for pod {}",
-                            scorer.name(),
-                            node.node_name,
-                            score,
-                            pod.metadata.name.as_deref().unwrap_or("unknown")
-                        );
                         scored_nodes.insert(node.node_name.clone(), score);
                     }
                 };
@@ -127,30 +121,61 @@ impl PodScheduler {
             }
 
             for (node_name, score) in scored_nodes {
+                log::debug!(
+                    "scorer {} scored node {} with {}",
+                    scorer.name(),
+                    node_name,
+                    score
+                );
                 let total_score = node_score_total.entry(node_name).or_insert(0);
                 *total_score += score;
             }
         }
 
         log::info!(
-            "Node scores: {:?}",
+            "Node scores:\n{}",
             node_score_total
                 .iter()
-                .map(|(k, v)| (k.clone(), *v))
-                .collect::<Vec<_>>()
+                .sorted_by(|a, b| b.1.cmp(a.1))
+                .map(|(k, v)| format!("    | {} | {} |", &k, v))
+                .join("\n")
         );
 
-        // Find the node with the highest score
-        let (feasible_node, _) = node_score_total
-            .iter()
-            .max_by(|(_, score1), (_, score2)| score1.cmp(score2))
-            .unwrap();
+        let mut winners = vec![];
+        let mut max_score = 0;
+        for (node_name, score) in &node_score_total {
+            if *score > max_score {
+                winners.clear();
+                max_score = *score;
+            }
+            if *score == max_score {
+                winners.push(node_name.clone());
+            }
+        }
+
+        let winner = if winners.len() > 1 {
+            log::debug!("multiple nodes with max score, performing tie-breaker");
+
+            // do a tie-breaker by random choice
+            winners.iter().choose(&mut rand::rng()).unwrap()
+        } else if winners.len() == 1 {
+            winners.first().unwrap()
+        } else {
+            eprintln!("no nodes with max score found, this should not happen");
+            return NodeSelection {
+                selected: None,
+                rejected: vec![RejectedNode {
+                    node_name: "*".to_string(),
+                    reason: "No nodes with max score found".to_string(),
+                }],
+            };
+        };
 
         NodeSelection {
             selected: Some(
                 nodes
                     .iter()
-                    .find(|n| n.node_name == *feasible_node)
+                    .find(|n| n.node_name == *winner)
                     .unwrap()
                     .clone(),
             ),
