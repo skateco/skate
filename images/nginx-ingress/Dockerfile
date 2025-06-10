@@ -3,6 +3,7 @@ FROM openresty/openresty:1.25.3.2-0-bookworm-fat
 MAINTAINER Donal Byrne <byrnedo@tcd.ie>
 
 ENV RESTY_ROOT=/usr/local/openresty
+ENV LUAROCKS_VERSION=3.12.0
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt-get update -qq && \
@@ -17,10 +18,10 @@ RUN DEBIAN_FRONTEND=noninteractive \
     python3 \
     bsdmainutils && \
     rm -rf /var/lib/apt/lists/* && \
-    curl -L https://luarocks.org/releases/luarocks-3.11.1.tar.gz --output /tmp/luarocks-3.11.1.tar.gz && \
+    curl -L https://luarocks.org/releases/luarocks-${LUAROCKS_VERSION}.tar.gz --output /tmp/luarocks-${LUAROCKS_VERSION}.tar.gz && \
         cd /tmp && \
-        tar -xzvf luarocks-3.11.1.tar.gz && \
-        cd luarocks-3.11.1/ && \
+        tar -xzvf luarocks-${LUAROCKS_VERSION}.tar.gz && \
+        cd luarocks-${LUAROCKS_VERSION}/ && \
         ./configure --prefix=/usr/local/openresty/luajit \
             --with-lua=/usr/local/openresty/luajit/ \
             --lua-suffix=jit \
@@ -34,7 +35,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     chown nobody /etc/resty-auto-ssl && \
     curl -L https://raw.githubusercontent.com/slomkowski/nginx-config-formatter/master/nginxfmt.py > /usr/local/bin/nginxfmt && \
     chmod +x /usr/local/bin/nginxfmt && \
-    curl -L https://raw.githubusercontent.com/dehydrated-io/dehydrated/v0.7.1/dehydrated > /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated && \
+    curl -L https://raw.githubusercontent.com/dehydrated-io/dehydrated/v0.7.2/dehydrated > /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated && \
     chmod +x /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated
 
 COPY docker_entrypoint.sh /docker_entrypoint.sh
