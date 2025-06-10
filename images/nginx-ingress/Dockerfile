@@ -36,7 +36,9 @@ RUN DEBIAN_FRONTEND=noninteractive \
     curl -L https://raw.githubusercontent.com/slomkowski/nginx-config-formatter/master/nginxfmt.py > /usr/local/bin/nginxfmt && \
     chmod +x /usr/local/bin/nginxfmt && \
     curl -L https://raw.githubusercontent.com/dehydrated-io/dehydrated/v0.7.2/dehydrated > /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated && \
-    chmod +x /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated
+    chmod +x /usr/local/openresty/luajit/bin/resty-auto-ssl/dehydrated && \
+    mkdir -p /etc/dehydrated && \
+    echo "OCSP_MUST_STAPLE=\"no\"" > /etc/dehydrated/config
 
 COPY docker_entrypoint.sh /docker_entrypoint.sh
 
