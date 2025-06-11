@@ -23,11 +23,16 @@ pub struct CreateArgs {
     skatelet_binary_path: Option<String>,
     #[arg(long, long_help = "Container image to use", default_value_t = String::from("ghcr.io/skateco/sind"))]
     image: String,
+    #[arg(
+        long,
+        long_help = "Number of nodes in the cluster",
+        default_value_t = 2
+    )]
+    nodes: usize,
 }
 
 pub trait CreateDeps: With<dyn ShellExec> {}
 
-pub const NUM_NODES: usize = 2;
 pub const CONTAINER_LABEL: &str = "io.github.skateco.sind=true";
 
 pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
@@ -36,7 +41,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         .map_err(|_| format!("Failed to read public key from {}", public_key))?;
     let private_key = ensure_file(&main_args.ssh_private_key)?;
 
-    let tuples = (1..=NUM_NODES)
+    let tuples = (1..=main_args.nodes)
         .map(|f| (f, format!("sind-node-{}", f)))
         .collect::<Vec<_>>();
 
@@ -61,6 +66,8 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
 
     println!("Creating new nodes");
     for (index, name) in &tuples {
+        let http_port = 8880 + index;
+        let ssh_port = 2220 + index;
         shell_exec.exec_stdout(
             "docker",
             &[
@@ -68,9 +75,9 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "-d",
                 "--privileged",
                 "-p",
-                &format!("127.0.0.1:222{index}:22",),
+                &format!("127.0.0.1:{ssh_port}:22",),
                 "-p",
-                &format!("127.0.0.1:888{index}:80",),
+                &format!("127.0.0.1:{http_port}:80",),
                 "--dns",
                 "127.0.0.1",
                 "--cgroupns",
@@ -151,6 +158,8 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
     // peer_host=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' node-$f)
 
     for (index, name) in tuples {
+        let ssh_port = 2220 + index;
+
         let peer_host = shell_exec.exec(
             "docker",
             &[
@@ -182,15 +191,11 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
         }
 
         // wait for port to open
-        let ssh_port = &format!("222{index}");
-        let ssh_port_u32 = ssh_port
-            .parse::<u32>()
-            .map_err(|e| SkateError::String(e.to_string()))?;
 
         let mut result: Result<_, _> = Err("never ran".into());
         for _ in 0..10 {
             println!("Attempting to connect to node...");
-            result = resolvable("127.0.0.1".into(), ssh_port_u32, 5).await;
+            result = resolvable("127.0.0.1".into(), ssh_port as u32, 5).await;
             if result.is_ok() {
                 break;
             }
@@ -221,7 +226,7 @@ pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(),
                 "--peer-host",
                 &peer_host,
                 "--port",
-                ssh_port,
+                &ssh_port.to_string(),
                 "--subnet-cidr",
                 &format!("20.{index}.0.0/16"),
                 "--key",
