@@ -10,7 +10,7 @@ shadow-rs = "0.35.2"
 
 [dependencies]
 anyhow = "1.0.98"
-async-ssh2-tokio = { version = "0.8.12", features = ["openssl"] }
+async-ssh2-tokio = { version = "0.8.15", features = ["openssl"] }
 async-trait = "0.1.88"
 clap = { version = "4.5.40", features = ["derive", "env", "string"] }
 futures = "0.3.31"
