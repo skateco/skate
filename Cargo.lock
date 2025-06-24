@@ -164,10 +164,11 @@ dependencies = [
 
 [[package]]
 name = "async-ssh2-tokio"
-version = "0.8.14"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8a622cb76944fb1c007326bf5b7889b7b5a8d5f904fb460e813135c42546cb0"
+checksum = "f75e7574464f542312eb470eebbd6394744d590252b92b71a29c85fa493854b7"
 dependencies = [
+ "base64ct",
  "russh",
  "russh-sftp",
  "thiserror 2.0.12",
