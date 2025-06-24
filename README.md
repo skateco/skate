@@ -23,6 +23,7 @@ Skate runs as a CLI on your machine and talks to a small binary on each host ove
 Leverages [podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html) to run pod manifests.
 
 Supported server linux distros: Ubuntu 24.04 (x86_64, aarch64), Fedora 43 (x86_64, aarch64)
+
 Supported client os: macOs (aarch64), Linux (x86_64, aarch64)
 
 You can deploy:
