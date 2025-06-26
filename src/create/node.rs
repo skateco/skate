@@ -252,12 +252,21 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         true,
     )
     .await?;
-    conn.execute_stdout(
-        "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
-        true,
-        true,
-    )
-    .await?;
+    match conn
+        .execute_stdout(
+            "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
+            true,
+            true,
+        )
+        .await
+    {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("failed to change ownership of rsyslog config, this could mean rsyslogd is configured to run as root: {}", e);
+            eprintln!("continuing...")
+        }
+    }
+
     conn.execute_stdout(
         "sudo touch /var/log/skate.log && sudo chown syslog:adm /var/log/skate.log",
         true,
@@ -372,6 +381,12 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     // uses fanout plugin
 
     // replace forward list in coredns config with that of other hosts
+    let gathersrv_list = config
+        .nodes
+        .iter()
+        .map(|n| format!("{}.skate", n.name))
+        .join("\n");
+
     let fanout_list = config
         .nodes
         .iter()
