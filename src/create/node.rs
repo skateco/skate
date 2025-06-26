@@ -267,12 +267,12 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         }
     }
 
-    conn.execute_stdout(
-        "sudo touch /var/log/skate.log && sudo chown syslog:adm /var/log/skate.log",
-        true,
-        true,
-    )
-    .await?;
+    conn.execute_stdout("sudo touch /var/log/skate.log", true, true)
+        .await?;
+
+    let _ = conn
+        .execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
+        .await;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
