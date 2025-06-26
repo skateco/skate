@@ -1,0 +1,29 @@
+cluster.skate:5553 {
+    bind lo 0.0.0.0
+}
+
+svc.cluster.skate:53 {
+
+        bind lo
+}
+
+pod.cluster.skate:53 {
+    debug
+
+    bind lo
+
+    gathersrv pod.cluster.skate. {
+        pod.cluster.skate. a-
+        pod.cluster.skate. b-
+    }
+
+    forward pod.cluster.skate. 192.168.0.62
+    forward pod.cluster.skate. 192.168.0.71
+
+    loadbalance round_robin
+
+}
+.:53 {
+    bind lo 0.0.0.0
+    forward . 8.8.8.8
+}

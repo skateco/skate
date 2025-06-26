@@ -48,9 +48,10 @@ spec:
             
                 bind lo
             
-                fanout . %%fanout_list%% {
-                    wait-all
+                gathersrv pod.cluster.skate. {
+                  %%gather_srv_list%%
                 }
+                %%forward_list%%
             
                 loadbalance round_robin
             
