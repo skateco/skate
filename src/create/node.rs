@@ -252,27 +252,27 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         true,
     )
     .await?;
-    match conn
-        .execute_stdout(
-            "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
-            true,
-            true,
-        )
-        .await
-    {
-        Ok(_) => (),
-        Err(e) => {
-            eprintln!("failed to change ownership of rsyslog config, this could mean rsyslogd is configured to run as root: {}", e);
-            eprintln!("continuing...")
-        }
-    }
+
+    // ensure syslog user exists
+    conn.execute_stdout(
+        "sudo useradd syslog -g adm || echo \"syslog user already exists\"",
+        true,
+        true,
+    )
+    .await?;
+
+    conn.execute_stdout(
+        "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
+        true,
+        true,
+    )
+    .await?;
 
     conn.execute_stdout("sudo touch /var/log/skate.log", true, true)
         .await?;
 
-    let _ = conn
-        .execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
-        .await;
+    conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
+        .await?;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
@@ -532,25 +532,33 @@ async fn setup_networking(
     let cmd = provisioner.remove_apparmor();
     _ = conn.execute_stdout(&cmd, true, true).await;
 
-    // disable dns services if exists
-    for dns_service in ["dnsmasq", "systemd-resolved"] {
-        let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
+    let cmd = "sudo systemctl list-unit-files systemd-resolved.service";
+    let resolvd_exists = conn.execute_stdout(cmd, true, true).await;
+    // add DNS=127.0.0.1:5053#cluster.skate to /etc/systemd/resolved.conf
+    if resolvd_exists.is_ok() {
+        let cmd = "sudo bash -c 'echo \"DNS=127.0.0.1:5053#cluster.skate\" >> /etc/systemd/resolved.conf'";
+        conn.execute_stdout(&cmd, true, true).await?;
     }
+
+    // disable dns services if exists
+    // for dns_service in ["dnsmasq", "systemd-resolved"] {
+    //     let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
+    // }
 
     // changed /etc/resolv.conf to be 127.0.0.1
     // neeed to use a symlink so that it's respected and not overridden by systemd
-    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
-    conn.execute_stdout(cmd, true, true).await?;
-    let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    match conn.execute_stdout(cmd, true, true).await {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!(
-                "failed to change resolv.conf, we're probably inside a container: {}",
-                e
-            );
-        }
-    }
+    // let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
+    // conn.execute_stdout(cmd, true, true).await?;
+    // let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
+    // match conn.execute_stdout(cmd, true, true).await {
+    //     Ok(_) => {}
+    //     Err(e) => {
+    //         eprintln!(
+    //             "failed to change resolv.conf, we're probably inside a container: {}",
+    //             e
+    //         );
+    //     }
+    // }
 
     Ok(())
 }

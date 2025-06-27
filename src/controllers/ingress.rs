@@ -5,6 +5,7 @@ use crate::skatelet::database::resource::{
 };
 use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
+use crate::util::linux::get_resolv_conf_dns;
 use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
 use anyhow::anyhow;
 use itertools::Itertools;
@@ -12,6 +13,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
 use sqlx::SqlitePool;
 use std::error::Error;
+use std::fs::read;
 use std::io::Write;
 use std::process::Stdio;
 use std::{fs, process};
@@ -218,7 +220,11 @@ impl IngressController {
             endpoint
         };
 
+        // get resolver from /etc/resolv.conf -> nameserver [ip]
+        let resolver = get_resolv_conf_dns().unwrap_or("127.0.0.1".to_string());
+
         let main_template_data = json!({
+            "resolver": resolver,
             "letsEncrypt": {
                 "endpoint": endpoint, //
                 "email": email,
