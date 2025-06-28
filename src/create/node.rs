@@ -536,7 +536,8 @@ async fn setup_networking(
     let resolvd_exists = conn.execute_stdout(cmd, true, true).await;
     // add DNS=127.0.0.1:5053#cluster.skate to /etc/systemd/resolved.conf
     if resolvd_exists.is_ok() {
-        let cmd = "sudo bash -c 'echo \"DNS=127.0.0.1:5053#cluster.skate\" >> /etc/systemd/resolved.conf'";
+        let cmd =
+            "sudo bash -c 'echo \"DNS=127.0.0.1:53#cluster.skate\" >> /etc/systemd/resolved.conf'";
         conn.execute_stdout(&cmd, true, true).await?;
     }
 
