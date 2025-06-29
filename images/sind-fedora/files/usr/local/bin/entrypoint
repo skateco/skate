@@ -444,11 +444,6 @@ enable_rsyslog() {
   (sleep 5; systemctl start rsyslog) &
 }
 
-forward_dns() {
-  # coredns is running at 5053, but --dns option will only define 127.0.0.1
-  iptables -t nat -A PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 5053
-}
-
 fix_machine_id
 
 chmod 640 /etc/shadow
