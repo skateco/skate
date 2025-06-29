@@ -543,7 +543,7 @@ async fn setup_networking(
 
     conn.execute_stdout(
         &transfer_file_cmd(
-            "DNS=127.0.0.1:5053#cluster.skate\n",
+            "[Resolve]\nDNS=127.0.0.1:5053#cluster.skate\n",
             "/etc/systemd/resolved.conf.d/skate.conf",
         ),
         true,
