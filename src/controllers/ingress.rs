@@ -221,7 +221,10 @@ impl IngressController {
         };
 
         // get resolver from /etc/resolv.conf -> nameserver [ip]
-        let resolver = get_resolv_conf_dns().unwrap_or("127.0.0.1".to_string());
+        let resolver = get_resolv_conf_dns().unwrap_or_else(|e| {
+            log::warn!("failed to get resolver from /etc/resolv.conf");
+            "".to_string()
+        });
 
         let main_template_data = json!({
             "resolver": resolver,
