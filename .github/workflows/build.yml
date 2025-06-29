@@ -143,13 +143,13 @@ jobs:
       - name: Get syslogs on failure
         if: always()
         run: |
-          mkdir -p evidence
-          docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
-          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate.log || true
-          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./evidence/sind-node-1-addnhosts || true
-          docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
-          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate.log || true
-          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./evidence/sind-node-2-addnhosts || true
+          mkdir -p e2e-evidence
+          docker cp sind-node-1:/var/log/syslog ./e2e-evidence/sind-node-1-syslog
+          docker cp sind-node-1:/var/log/skate.log ./e2e-evidence/sind-node-1-skate.log || true
+          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-1-addnhosts || true
+          docker cp sind-node-2:/var/log/syslog ./e2e-evidence/sind-node-2-syslog
+          docker cp sind-node-2:/var/log/skate.log ./e2e-evidence/sind-node-2-skate.log || true
+          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-2-addnhosts || true
       - name: upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -181,20 +181,20 @@ jobs:
       - name: Get syslogs on failure
         if: always()
         run: |
-          mkdir -p evidence
-          docker cp sind-node-1:/var/log/syslog ./evidence/sind-node-1-syslog
-          docker cp sind-node-1:/var/log/skate.log ./evidence/sind-node-1-skate.log || true
-          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./evidence/sind-node-1-addnhosts || true
-          docker cp sind-node-2:/var/log/syslog ./evidence/sind-node-2-syslog
-          docker cp sind-node-2:/var/log/skate.log ./evidence/sind-node-2-skate.log || true
-          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./evidence/sind-node-2-addnhosts || true
+          mkdir -p e2e-evidence
+          docker cp sind-node-1:/var/log/syslog ./e2e-evidence/sind-node-1-syslog
+          docker cp sind-node-1:/var/log/skate.log ./e2e-evidence/sind-node-1-skate.log || true
+          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-1-addnhosts || true
+          docker cp sind-node-2:/var/log/syslog ./e2e-evidence/sind-node-2-syslog
+          docker cp sind-node-2:/var/log/skate.log ./e2e-evidence/sind-node-2-skate.log || true
+          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-2-addnhosts || true
       - name: upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-fedora-evidence
           path: |
-            evidence/
+            e2e-evidence/
 
   build:
     strategy:

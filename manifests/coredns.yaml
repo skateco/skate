@@ -12,6 +12,8 @@ spec:
       app: coredns
   template:
     metadata:
+      annotations:
+        bind-mount-options: /var/lib/skate/dns:Z
       labels:
         app: coredns
     spec:
@@ -36,7 +38,7 @@ spec:
                 hosts /var/lib/skate/dns/addnhosts
             }
             
-            svc.cluster.skate:53 {
+            svc.cluster.skate:5053 {
                 
                     bind lo
                 
@@ -44,7 +46,7 @@ spec:
                 
             }
             
-            pod.cluster.skate:53 {
+            pod.cluster.skate:5053 {
             
                 bind lo
             
@@ -55,7 +57,7 @@ spec:
                 loadbalance round_robin
             
             }
-            .:53 {
+            .:5053 {
                 bind lo 0.0.0.0
                 forward . 8.8.8.8
             }

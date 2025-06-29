@@ -1,3 +1,5 @@
+pub(crate) mod linux;
+
 use crate::exec::ShellExec;
 use crate::supported_resources::SupportedResources;
 use anyhow::anyhow;
