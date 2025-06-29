@@ -534,8 +534,12 @@ async fn setup_networking(
     _ = conn.execute_stdout(&cmd, true, true).await;
 
     // create dropin dir for resolved
-    conn.execute_stdout("sudo mkdir -p  /etc/systemd/resolved.conf.d/", true, true)
-        .await?;
+    conn.execute_stdout(
+        "sudo mkdir -p  /etc/systemd/resolved.conf.d/ /etc/dnsmasq.d/",
+        true,
+        true,
+    )
+    .await?;
 
     conn.execute_stdout(
         &transfer_file_cmd(
@@ -547,9 +551,11 @@ async fn setup_networking(
     )
     .await?;
 
+    // no-resolv here is to ensure it respects our localhost upstream, otherwise it'll see localhost
+    // in /etc/resolv.conf and ignore ours
     conn.execute_stdout(
         &transfer_file_cmd(
-            "server=/cluster.skate/127.0.0.1#5053\n",
+            "server=/cluster.skate/127.0.0.1#5053\nno-resolv\n",
             "/etc/dnsmasq.d/skate.conf",
         ),
         true,
