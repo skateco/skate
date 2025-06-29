@@ -555,7 +555,7 @@ async fn setup_networking(
     // in /etc/resolv.conf and ignore ours
     conn.execute_stdout(
         &transfer_file_cmd(
-            "server=/cluster.skate/127.0.0.1#5053\nno-resolv\n",
+            "server=/cluster.skate/127.0.0.1#5053\nno-resolv\ncache-size=0\n",
             "/etc/dnsmasq.d/skate.conf",
         ),
         true,
