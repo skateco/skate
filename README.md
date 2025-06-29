@@ -9,6 +9,8 @@ Docs -> [skateco.github.io](https://skateco.github.io)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![](https://img.shields.io/github/v/release/skateco/skate)](https://github.com/skateco/skate/releases)
+[![Discord](https://img.shields.io/discord/1388748939884236902)](https://discord.gg/Tg3hZeZVFb)
+
 
 - Service discovery - DNS based service discovery.
 - Multi-host network - Designed to run on several nodes.
