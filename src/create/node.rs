@@ -60,7 +60,9 @@ trait CommandVariant {
     fn system_update(&self) -> String;
     fn install_podman(&self) -> String;
     fn install_keepalived(&self) -> String;
-    fn remove_apparmor(&self) -> String;
+    fn remove_kernel_security(&self) -> String;
+
+    fn configure_etc_containers_registries(&self) -> String;
 }
 
 struct UbuntuProvisioner {}
@@ -78,8 +80,11 @@ impl CommandVariant for UbuntuProvisioner {
         "sudo apt-get install -y keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
+    fn remove_kernel_security(&self) -> String {
         "sudo aa-teardown && sudo apt purge -y apparmor".into()
+    }
+    fn configure_etc_containers_registries(&self) -> String {
+        "".into()
     }
 }
 
@@ -96,8 +101,13 @@ impl CommandVariant for FedoraProvisioner {
         "sudo dnf -y install keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
-        "".into()
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
     }
 }
 
@@ -508,6 +518,11 @@ async fn setup_networking(
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
     conn.execute_stdout(cmd, true, true).await?;
 
+    let cmd = provisioner.configure_etc_containers_registries();
+    if !cmd.is_empty() {
+        conn.execute_stdout(&cmd, true, true).await?
+    }
+
     for conn in &all_conns.clients {
         create_replace_routes_file(conn, cluster_conf).await?;
     }
@@ -530,7 +545,7 @@ async fn setup_networking(
             .await?;
     }
 
-    let cmd = provisioner.remove_apparmor();
+    let cmd = provisioner.remove_kernel_security();
     _ = conn.execute_stdout(&cmd, true, true).await;
 
     // create dropin dir for resolved
