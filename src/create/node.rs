@@ -63,6 +63,8 @@ trait CommandVariant {
     fn remove_kernel_security(&self) -> String;
 
     fn configure_etc_containers_registries(&self) -> String;
+
+    fn configure_firewall(&self) -> String;
 }
 
 struct UbuntuProvisioner {}
@@ -84,6 +86,10 @@ impl CommandVariant for UbuntuProvisioner {
         "sudo aa-teardown && sudo apt purge -y apparmor".into()
     }
     fn configure_etc_containers_registries(&self) -> String {
+        "".into()
+    }
+
+    fn configure_firewall(&self) -> String {
         "".into()
     }
 }
@@ -108,6 +114,10 @@ impl CommandVariant for FedoraProvisioner {
 
     fn configure_etc_containers_registries(&self) -> String {
         r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
     }
 }
 
@@ -546,6 +556,8 @@ async fn setup_networking(
     }
 
     let cmd = provisioner.remove_kernel_security();
+    _ = conn.execute_stdout(&cmd, true, true).await;
+    let cmd = provisioner.configure_firewall();
     _ = conn.execute_stdout(&cmd, true, true).await;
 
     // create dropin dir for resolved
