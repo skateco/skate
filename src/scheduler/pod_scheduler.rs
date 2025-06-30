@@ -4,7 +4,6 @@ use crate::scheduler::node_name::NodeNameFilter;
 use crate::scheduler::node_resources_fit::{NodeResourcesFit, Strategy};
 use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 use crate::scheduler::priority_sort::PrioritySort;
-use crate::scheduler::resource_allocation::LeastAllocated;
 use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::scheduler::{NodeSelection, RejectedNode};
 use crate::state::state::NodeState;

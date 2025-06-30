@@ -13,7 +13,6 @@ use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
 use sqlx::SqlitePool;
 use std::error::Error;
-use std::fs::read;
 use std::io::Write;
 use std::process::Stdio;
 use std::{fs, process};

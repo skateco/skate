@@ -4,7 +4,6 @@ use itertools::Itertools;
 use k8s_openapi::api::core::v1::Pod;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::ops::DerefMut;
 
 ///
 /// func getDefaultPlugins() *v1.Plugins {
@@ -143,8 +142,6 @@ pub trait PostBind: Plugin {
 
 mod tests {
     use crate::scheduler::plugins::{Plugin, ScoreError};
-    use std::collections::BTreeMap;
-    use std::error::Error;
 
     struct TestScore {}
 
