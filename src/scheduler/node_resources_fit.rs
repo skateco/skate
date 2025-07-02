@@ -1,10 +1,8 @@
-use crate::scheduler::least_pods::LeastPods;
 use crate::scheduler::plugins::{Filter, Plugin, PreFilter, Score, ScoreError};
 use crate::scheduler::pod_scheduler::{DEFAULT_MEMORY_REQUEST, DEFAULT_MILLI_CPU_REQUEST};
 use crate::scheduler::resource_allocation::LeastAllocated;
-use crate::skatelet::database::resource::get_resource;
 use crate::spec::pod_helpers;
-use crate::spec::pod_helpers::{get_requests, ResourceRequests};
+use crate::spec::pod_helpers::get_requests;
 use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use std::error::Error;

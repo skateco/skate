@@ -1,11 +1,9 @@
 use crate::scheduler::node_resources_fit::requests_or_default;
-use crate::scheduler::plugins::{Plugin, Score, ScoreError, MAX_NODE_SCORE};
+use crate::scheduler::plugins::{Plugin, ScoreError, MAX_NODE_SCORE};
 use crate::scheduler::pod_scheduler::{DEFAULT_MEMORY_REQUEST, DEFAULT_MILLI_CPU_REQUEST};
 use crate::spec::node_helpers::{get_node_alloc, get_node_requests};
-use crate::spec::pod_helpers::ResourceRequests;
 use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::Pod;
-use std::error::Error;
 
 // strum error enum
 
