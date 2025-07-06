@@ -12,7 +12,7 @@ use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
-    RE_IP,
+    RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
 };
 use crate::{oci, util};
 use anyhow::anyhow;
@@ -32,8 +32,10 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
+    #[validate(regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"), length(min=1, max=128))]
     #[arg(long, long_help = "Name of the node.")]
     name: String,
+    #[validate(length(max = 253))]
     #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
     #[validate(regex(path = *RE_IP, message = "peer-host must be a valid ipv4 address"))]
