@@ -1,3 +1,5 @@
+pub(crate) mod linux;
+
 use crate::exec::ShellExec;
 use crate::supported_resources::SupportedResources;
 use anyhow::anyhow;
@@ -357,6 +359,10 @@ pub fn transfer_file_cmd(contents: &str, remote_path: &str) -> String {
 pub static RE_CIDR: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
 pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
+pub static RE_HOST_SEGMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9a-z\-_]+$").unwrap());
+pub static RE_HOSTNAME: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$").unwrap()
+});
 
 pub enum ImageTagFormat {
     None,

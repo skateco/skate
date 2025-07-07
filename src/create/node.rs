@@ -11,7 +11,8 @@ use crate::ssh::{SshClient, SshClients};
 use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
-    split_container_image, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP,
+    split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
+    RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
 };
 use crate::{oci, util};
 use anyhow::anyhow;
@@ -31,8 +32,10 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
+    #[validate(regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"), length(min=1, max=128))]
     #[arg(long, long_help = "Name of the node.")]
     name: String,
+    #[validate(length(max = 253))]
     #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
     #[validate(regex(path = *RE_IP, message = "peer-host must be a valid ipv4 address"))]
@@ -59,7 +62,11 @@ trait CommandVariant {
     fn system_update(&self) -> String;
     fn install_podman(&self) -> String;
     fn install_keepalived(&self) -> String;
-    fn remove_apparmor(&self) -> String;
+    fn remove_kernel_security(&self) -> String;
+
+    fn configure_etc_containers_registries(&self) -> String;
+
+    fn configure_firewall(&self) -> String;
 }
 
 struct UbuntuProvisioner {}
@@ -77,8 +84,15 @@ impl CommandVariant for UbuntuProvisioner {
         "sudo apt-get install -y keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
+    fn remove_kernel_security(&self) -> String {
         "sudo aa-teardown && sudo apt purge -y apparmor".into()
+    }
+    fn configure_etc_containers_registries(&self) -> String {
+        "".into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "".into()
     }
 }
 
@@ -95,8 +109,17 @@ impl CommandVariant for FedoraProvisioner {
         "sudo dnf -y install keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
-        "".into()
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
     }
 }
 
@@ -252,18 +275,27 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         true,
     )
     .await?;
+
+    // ensure syslog user exists
+    conn.execute_stdout(
+        "sudo useradd syslog -g adm || echo \"syslog user already exists\"",
+        true,
+        true,
+    )
+    .await?;
+
     conn.execute_stdout(
         "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
         true,
         true,
     )
     .await?;
-    conn.execute_stdout(
-        "sudo touch /var/log/skate.log && sudo chown syslog:adm /var/log/skate.log",
-        true,
-        true,
-    )
-    .await?;
+
+    conn.execute_stdout("sudo touch /var/log/skate.log", true, true)
+        .await?;
+
+    conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
+        .await?;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
@@ -372,6 +404,12 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     // uses fanout plugin
 
     // replace forward list in coredns config with that of other hosts
+    let gathersrv_list = config
+        .nodes
+        .iter()
+        .map(|n| format!("{}.skate", n.name))
+        .join("\n");
+
     let fanout_list = config
         .nodes
         .iter()
@@ -492,6 +530,11 @@ async fn setup_networking(
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
     conn.execute_stdout(cmd, true, true).await?;
 
+    let cmd = provisioner.configure_etc_containers_registries();
+    if !cmd.is_empty() {
+        conn.execute_stdout(&cmd, true, true).await?
+    }
+
     for conn in &all_conns.clients {
         create_replace_routes_file(conn, cluster_conf).await?;
     }
@@ -514,27 +557,45 @@ async fn setup_networking(
             .await?;
     }
 
-    let cmd = provisioner.remove_apparmor();
+    let cmd = provisioner.remove_kernel_security();
+    _ = conn.execute_stdout(&cmd, true, true).await;
+    let cmd = provisioner.configure_firewall();
     _ = conn.execute_stdout(&cmd, true, true).await;
 
-    // disable dns services if exists
-    for dns_service in ["dnsmasq", "systemd-resolved"] {
-        let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
-    }
+    // create dropin dir for resolved
+    conn.execute_stdout(
+        "sudo mkdir -p  /etc/systemd/resolved.conf.d/ /etc/dnsmasq.d/",
+        true,
+        true,
+    )
+    .await?;
 
-    // changed /etc/resolv.conf to be 127.0.0.1
-    // neeed to use a symlink so that it's respected and not overridden by systemd
-    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
-    conn.execute_stdout(cmd, true, true).await?;
-    let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    match conn.execute_stdout(cmd, true, true).await {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!(
-                "failed to change resolv.conf, we're probably inside a container: {}",
-                e
-            );
-        }
+    conn.execute_stdout(
+        &transfer_file_cmd(
+            "[Resolve]\nDNS=127.0.0.1:5053#cluster.skate\n",
+            "/etc/systemd/resolved.conf.d/skate.conf",
+        ),
+        true,
+        true,
+    )
+    .await?;
+
+    // no-resolv here is to ensure it respects our localhost upstream, otherwise it'll see localhost
+    // in /etc/resolv.conf and ignore ours
+    conn.execute_stdout(
+        &transfer_file_cmd(
+            "server=/cluster.skate/127.0.0.1#5053\nno-resolv\ncache-size=0\n",
+            "/etc/dnsmasq.d/skate.conf",
+        ),
+        true,
+        true,
+    )
+    .await?;
+
+    for dns_service in ["dnsmasq", "systemd-resolved"] {
+        let _ = conn
+            .execute_stdout(&format!("sudo systemctl restart {dns_service}"), true, true)
+            .await;
     }
 
     Ok(())
