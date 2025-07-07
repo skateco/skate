@@ -1,0 +1,3 @@
+192.168.0.1 foo.svc.cluster.skate
+10.0.0.1 bar.pod.n-node-1.skate
+10.0.0.2 foo.pod.n-node-1.skate

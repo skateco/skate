@@ -1,0 +1,9 @@
+services:
+  coredns:
+    build: ../
+    ports:
+      - 5053:5053/udp
+      - 5553:5553/udp
+    volumes:
+      - ./Corefile:/Corefile:ro
+      - ./var_lib_skate_dns/:/var/lib/skate/dns

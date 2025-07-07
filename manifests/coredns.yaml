@@ -29,7 +29,7 @@ spec:
         env:
         - name: CORE_FILE
           value: |
-            cluster.skate:5553 {
+            n-%%node%%.skate:5553 {
             
                 bind lo 0.0.0.0
             
@@ -49,8 +49,10 @@ spec:
                 bind lo
             
                 gathersrv pod.cluster.skate. {
+                  # n-node-1.skate. a-
                   %%gather_srv_list%%
                 }
+                #forward n-node-1.skate. 10.8.0.1:53
                 %%forward_list%%
             
                 loadbalance round_robin
