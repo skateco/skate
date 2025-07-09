@@ -32,7 +32,10 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
-    #[validate(regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"), length(min=1, max=128))]
+    #[validate(
+        regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"),
+        length(min = 1, max = 128)
+    )]
     #[arg(long, long_help = "Name of the node.")]
     name: String,
     #[validate(length(max = 253))]
@@ -405,46 +408,50 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
 
     let noop_dns_server = "127.0.0.1:6053";
 
-    // the gathersrv stanza needs a list of upstreams to forward to
-    let (gathersrv_list, forward_list): (Vec<_>, Vec<_>) = config
-        .nodes
-        .iter()
-        .enumerate()
-        .map(|(i, n)| {
-            let domain = format!("pod.n-{}.skate.", n.name);
-            let peer_host = &n.peer_host;
+    for node in &(config.nodes) {
+        // the gathersrv stanza needs a list of upstreams to forward to
+        let (gathersrv_list, forward_list): (Vec<_>, Vec<_>) = config
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let domain = format!("pod.n-{}.skate.", n.name);
+                let peer_host = &n.peer_host;
 
-            let gathersrv = format!("{domain} {i}");
+                let gathersrv = format!("{domain} {i}");
 
-            let forward = format!(
-                r#"
+                let forward = format!(
+                    r#"
                 forward {domain} {peer_host}:5553 {noop_dns_server} {{
                    policy sequential
                    health_check 0.5s
                 }}"#,
-            );
-            (gathersrv, forward)
-        })
-        .unzip();
+                );
+                (gathersrv, forward)
+            })
+            .unzip();
+        let node_name = &node.name;
 
-    let coredns_yaml = COREDNS_MANIFEST
-        .replace("%%forward_list%%", &forward_list.join("\n"))
-        .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
+        let coredns_yaml = COREDNS_MANIFEST
+            .replace("%%node%%", node_name)
+            .replace("%%forward_list%%", &forward_list.join("\n"))
+            .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
 
-    let coredns_yaml_path = "/tmp/skate-coredns.yaml".to_string();
-    let mut file = File::create(&coredns_yaml_path)?;
-    file.write_all(coredns_yaml.as_bytes())?;
+        let coredns_yaml_path = format!("/tmp/skate-coredns-{node_name}.yaml");
+        let mut file = File::create(&coredns_yaml_path)?;
+        file.write_all(coredns_yaml.as_bytes())?;
 
-    Apply::<D>::apply(
-        deps,
-        ApplyArgs {
-            filename: vec![coredns_yaml_path],
-            grace_period: 0,
-            config: args.clone(),
-            dry_run: false,
-        },
-    )
-    .await?;
+        Apply::<D>::apply(
+            deps,
+            ApplyArgs {
+                filename: vec![coredns_yaml_path],
+                grace_period: 0,
+                config: args.clone(),
+                dry_run: false,
+            },
+        )
+        .await?;
+    }
 
     // nginx ingress
 
