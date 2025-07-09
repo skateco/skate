@@ -417,10 +417,11 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
             let gathersrv = format!("{domain} {i}");
 
             let forward = format!(
-                r#"forward {domain}. {peer_host}:5553 {noop_dns_server} {{
-    policy sequential
-    health_check 0.5s
-}}"#,
+                r#"
+                forward {domain}. {peer_host}:5553 {noop_dns_server} {{
+                   policy sequential
+                   health_check 0.5s
+                }}"#,
             );
             (gathersrv, forward)
         })
