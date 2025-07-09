@@ -401,22 +401,34 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     // COREDNS
     // coredns listens on port 53 and 5533
     // port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
-    // uses fanout plugin
+    // uses gathersrv plugin
 
-    // replace forward list in coredns config with that of other hosts
-    let gathersrv_list = config
+    let noop_dns_server = "127.0.0.1:6053";
+
+    // the gathersrv stanza needs a list of upstreams to forward to
+    let (gathersrv_list, forward_list): (Vec<_>, Vec<_>) = config
         .nodes
         .iter()
-        .map(|n| format!("{}.skate", n.name))
-        .join("\n");
+        .enumerate()
+        .map(|(i, n)| {
+            let domain = format!("pod.n-{}.skate.", n.name);
+            let peer_host = &n.peer_host;
 
-    let fanout_list = config
-        .nodes
-        .iter()
-        .map(|n| n.peer_host.clone() + ":5553")
-        .join(" ");
+            let gathersrv = format!("{domain} {i}");
 
-    let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
+            let forward = format!(
+                r#"forward {domain}. {peer_host}:5553 {noop_dns_server} {{
+    policy sequential
+    health_check 0.5s
+}}"#,
+            );
+            (gathersrv, forward)
+        })
+        .unzip();
+
+    let coredns_yaml = COREDNS_MANIFEST
+        .replace("%%forward_list%%", &forward_list.join("\n"))
+        .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
 
     let coredns_yaml_path = "/tmp/skate-coredns.yaml".to_string();
     let mut file = File::create(&coredns_yaml_path)?;
