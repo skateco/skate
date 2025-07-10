@@ -348,8 +348,8 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let result = self
             .client
             .execute(&format!(
-                "echo '{}'| base64 --decode|sudo skatelet apply -",
-                base64_manifest
+                "echo '{}'| base64 --decode|sudo skatelet apply --node-name {} -",
+                base64_manifest, self.node_name
             ))
             .await?;
         match result.exit_status {

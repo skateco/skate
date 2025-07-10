@@ -2,7 +2,7 @@ use crate::exec::ShellExec;
 use crate::supported_resources::SupportedResources;
 use crate::util::apply_play;
 use anyhow::anyhow;
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{EnvVar, Pod};
 use std::error::Error;
 
 pub struct PodController {
@@ -14,8 +14,21 @@ impl PodController {
         PodController { execer }
     }
 
-    pub fn apply(&self, pod: &Pod) -> Result<(), Box<dyn Error>> {
-        apply_play(&self.execer, &SupportedResources::Pod(pod.clone()))
+    pub fn apply(&self, node_name: &str, pod: &Pod) -> Result<(), Box<dyn Error>> {
+        let mut pod = pod.clone();
+        // add SKATE_NODE_NAME to each container
+        if let Some(spec) = &mut pod.spec {
+            spec.containers.iter_mut().for_each(|c| {
+                if let Some(envs) = &mut c.env {
+                    envs.push(EnvVar {
+                        name: "SKATE_NODE_NAME".to_string(),
+                        value: Some(node_name.to_string()),
+                        value_from: None,
+                    })
+                }
+            })
+        }
+        apply_play(&self.execer, &SupportedResources::Pod(pod))
     }
 
     pub fn delete(&self, pod: &Pod, grace_period: Option<usize>) -> Result<(), Box<dyn Error>> {

@@ -20,6 +20,8 @@ use std::io::Read;
 
 #[derive(Debug, Args)]
 pub struct ApplyArgs {
+    #[arg(short, long, help = "The name the node is referred to by")]
+    node_name: String,
     #[arg(
         short,
         long,
@@ -51,11 +53,12 @@ pub async fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), S
 
     let object: SupportedResources =
         serde_yaml::from_str(&manifest).expect("failed to deserialize manifest");
-    apply_supported_resource(deps, &object).await
+    apply_supported_resource(deps, &apply_args.node_name, &object).await
 }
 
 async fn apply_supported_resource<D: ApplyDeps>(
     deps: D,
+    node_name: &str,
     object: &SupportedResources,
 ) -> Result<(), SkateError> {
     let execer = With::<dyn ShellExec>::get;
@@ -74,7 +77,7 @@ async fn apply_supported_resource<D: ApplyDeps>(
         }
         SupportedResources::Pod(pod) => {
             let ctrl = PodController::new(execer(&deps));
-            ctrl.apply(pod)?;
+            ctrl.apply(node_name, pod)?;
         }
         SupportedResources::Secret(secret) => {
             let ctrl = SecretController::new(execer(&deps));
