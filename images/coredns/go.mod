@@ -142,6 +142,7 @@ require (
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	github.com/ziollek/gathersrv v1.0.2 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.0 // indirect
 	go.etcd.io/etcd/client/v3 v3.6.0 // indirect

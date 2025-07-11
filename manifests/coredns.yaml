@@ -22,15 +22,28 @@ spec:
           path: /var/lib/skate/dns
       containers:
       - name: coredns
-        image: ghcr.io/skateco/coredns:1.1.0
+        image: ghcr.io/skateco/coredns:2.0.0-rc1
         volumeMounts:
         - mountPath: /var/lib/skate/dns
           name: cni
         env:
         - name: CORE_FILE
           value: |
-            cluster.skate:5553 {
             
+            # What's going on here you might ask? This is to provide at least 2 upstreams to the forward plugin in
+            # order for it to keep doing healthchecks. It doesnt if there's only 1 upstream.
+            .:6053 {
+
+            }
+            # serve dns for this node
+            .:5553 {
+            
+                # rewrite name suffix .n-node-1.skate. .cluster.skate.
+                # rewrite name suffix .n-node-2.skate. .cluster.skate.
+                #...
+                %%rewrite_list%%
+            
+                # public since other nodes need to reach this
                 bind lo 0.0.0.0
             
                 hosts /var/lib/skate/dns/addnhosts
@@ -48,8 +61,20 @@ spec:
             
                 bind lo
             
-                fanout . %%fanout_list%% {
-                    wait-all
+                gathersrv pod.cluster.skate. {
+                  # n-node-1.skate. 1-
+                  %%gathersrv_list%%
+                }
+            
+                #forward pod.n-node-1.skate. 127.0.0.1:5553 127.0.0.1:6053 {
+                #  policy sequential
+                #  prefer_udp
+                #  health_check 0.1s
+                #}
+                %%forward_list%%
+            
+                cache {
+                    disable success
                 }
             
                 loadbalance round_robin
