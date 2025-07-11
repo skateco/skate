@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: coredns-%%node%%
+  name: coredns
   namespace: skate
   labels:
     app: coredns
