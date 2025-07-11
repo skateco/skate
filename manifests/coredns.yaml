@@ -73,6 +73,10 @@ spec:
                 #}
                 %%forward_list%%
             
+                cache {
+                    disable success
+                }
+            
                 loadbalance round_robin
             
             }

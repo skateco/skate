@@ -909,6 +909,10 @@ pod.cluster.skate:5053 {
        health_check 0.5s
    }
 
+    cache {
+        disable success
+    }
+
     loadbalance round_robin
 
 }
