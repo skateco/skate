@@ -863,7 +863,7 @@ mod tests {
 
 }
 # serve dns for this node
-.:5053 {
+.:5553 {
 
     # rewrite name suffix .n-node-1.skate. .cluster.skate.
     # rewrite name suffix .n-node-2.skate. .cluster.skate.
