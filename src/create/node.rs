@@ -405,24 +405,23 @@ fn template_coredns_manifest(config: &Cluster) -> String {
     let padding = " ".repeat(15); // get past the yaml indentation
 
     // the gathersrv stanza needs a list of upstreams to forward to
-    config
-        .nodes
-        .iter()
-        .enumerate()
-        .for_each(|(i, n)| {
-            let node_name = &n.name;
-            let domain = format!("pod.n-{node_name}.skate.", );
-            let peer_host = &n.peer_host;
+    config.nodes.iter().enumerate().for_each(|(i, n)| {
+        let node_name = &n.name;
+        let domain = format!("pod.n-{node_name}.skate.",);
+        let peer_host = &n.peer_host;
 
-            gathersrv_list.push(format!("{padding}{domain} {i}"));
+        gathersrv_list.push(format!("{padding}{domain} {i}"));
 
-            forward_list.push(format!(
-                "{padding}forward {domain} {peer_host}:5553 {noop_dns_server} {{ policy sequential health_check 0.5s }}",
-            ));
-            rewrite_list.push(format!(
-                "{padding}rewrite name suffix .n-{node_name}.skate. .cluster.skate."
-            ))
-        });
+        forward_list.push(format!(
+            r#"{padding}forward {domain} {peer_host}:5553 {noop_dns_server} {{
+{padding}    policy sequential
+{padding}    health_check 0.5s
+{padding}}}"#,
+        ));
+        rewrite_list.push(format!(
+            "{padding}rewrite name suffix .n-{node_name}.skate. .cluster.skate."
+        ))
+    });
 
     let coredns_yaml = COREDNS_MANIFEST
         .replace("%%rewrite_list%%", &rewrite_list.join("\n"))
@@ -901,8 +900,14 @@ pod.cluster.skate:5053 {
     #  prefer_udp
     #  health_check 0.1s
     #}
-                   forward pod.n-node-1.skate. 10.0.0.1:5553 127.0.0.1:6053 { policy sequential health_check 0.5s }
-   forward pod.n-node-2.skate. 10.0.0.2:5553 127.0.0.1:6053 { policy sequential health_check 0.5s }
+                   forward pod.n-node-1.skate. 10.0.0.1:5553 127.0.0.1:6053 {
+       policy sequential
+       health_check 0.5s
+   }
+   forward pod.n-node-2.skate. 10.0.0.2:5553 127.0.0.1:6053 {
+       policy sequential
+       health_check 0.5s
+   }
 
     loadbalance round_robin
 
