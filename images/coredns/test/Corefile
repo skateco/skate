@@ -1,4 +1,11 @@
-pod.n-node-1.skate:5553 {
+.:6053 {
+
+}
+
+.:5553 {
+    rewrite name suffix .n-node-1.skate. .cluster.skate.
+    rewrite name suffix .n-node-2.skate. .cluster.skate.
+    rewrite name suffix .n-node-3.skate. .cluster.skate.
 
     bind lo 0.0.0.0
 
@@ -10,12 +17,8 @@ svc.cluster.skate:5053 {
         bind lo
 
         hosts /var/lib/skate/dns/addnhosts
-
 }
 
-.:6053 {
-
-}
 
 pod.cluster.skate:5053 {
 

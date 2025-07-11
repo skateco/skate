@@ -24,7 +24,7 @@ pub struct Cluster {
 fn default_string() -> String {
     "".to_string()
 }
-#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, Default)]
 pub struct Node {
     pub name: String,
     pub host: String,

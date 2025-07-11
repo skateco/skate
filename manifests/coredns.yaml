@@ -15,8 +15,6 @@ spec:
       labels:
         app: coredns
     spec:
-      nodeSelector:
-        nodename: %%node%%
       hostNetwork: true
       volumes:
       - name: cni
@@ -38,7 +36,12 @@ spec:
 
             }
             # serve dns for this node
-            pod.n-%%node%%.skate:5053 {
+            .:5053 {
+            
+                # rewrite name suffix .n-node-1.skate. .cluster.skate.
+                # rewrite name suffix .n-node-2.skate. .cluster.skate.
+                #...
+                %%rewrite_list%%
             
                 # public since other nodes need to reach this
                 bind lo 0.0.0.0

@@ -395,6 +395,43 @@ async fn propagate_static_resources(
     Ok(())
 }
 
+fn template_coredns_manifest(config: &Cluster) -> String {
+    let noop_dns_server = "127.0.0.1:6053";
+
+    let mut gathersrv_list = vec![];
+    let mut forward_list = vec![];
+    let mut rewrite_list = vec![];
+
+    let padding = " ".repeat(15); // get past the yaml indentation
+
+    // the gathersrv stanza needs a list of upstreams to forward to
+    config
+        .nodes
+        .iter()
+        .enumerate()
+        .for_each(|(i, n)| {
+            let node_name = &n.name;
+            let domain = format!("pod.n-{node_name}.skate.", );
+            let peer_host = &n.peer_host;
+
+            gathersrv_list.push(format!("{padding}{domain} {i}"));
+
+            forward_list.push(format!(
+                "{padding}forward {domain} {peer_host}:5553 {noop_dns_server} {{ policy sequential health_check 0.5s }}",
+            ));
+            rewrite_list.push(format!(
+                "{padding}rewrite name suffix .n-{node_name}.skate. .cluster.skate."
+            ))
+        });
+
+    let coredns_yaml = COREDNS_MANIFEST
+        .replace("%%rewrite_list%%", &rewrite_list.join("\n"))
+        .replace("%%forward_list%%", &forward_list.join("\n"))
+        .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
+
+    coredns_yaml
+}
+
 pub async fn install_cluster_manifests<D: CreateDeps>(
     deps: &D,
     args: &ConfigFileArgs,
@@ -405,53 +442,22 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     // coredns listens on port 53 and 5533
     // port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
     // uses gathersrv plugin
+    let coredns_yaml = template_coredns_manifest(config);
 
-    let noop_dns_server = "127.0.0.1:6053";
+    let coredns_yaml_path = format!("/tmp/skate-coredns.yaml");
+    let mut file = File::create(&coredns_yaml_path)?;
+    file.write_all(coredns_yaml.as_bytes())?;
 
-    for node in &(config.nodes) {
-        // the gathersrv stanza needs a list of upstreams to forward to
-        let (gathersrv_list, forward_list): (Vec<_>, Vec<_>) = config
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                let domain = format!("pod.n-{}.skate.", n.name);
-                let peer_host = &n.peer_host;
-
-                let gathersrv = format!("{domain} {i}");
-
-                let forward = format!(
-                    r#"
-                forward {domain} {peer_host}:5553 {noop_dns_server} {{
-                   policy sequential
-                   health_check 0.5s
-                }}"#,
-                );
-                (gathersrv, forward)
-            })
-            .unzip();
-        let node_name = &node.name;
-
-        let coredns_yaml = COREDNS_MANIFEST
-            .replace("%%node%%", node_name)
-            .replace("%%forward_list%%", &forward_list.join("\n"))
-            .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
-
-        let coredns_yaml_path = format!("/tmp/skate-coredns-{node_name}.yaml");
-        let mut file = File::create(&coredns_yaml_path)?;
-        file.write_all(coredns_yaml.as_bytes())?;
-
-        Apply::<D>::apply(
-            deps,
-            ApplyArgs {
-                filename: vec![coredns_yaml_path],
-                grace_period: 0,
-                config: args.clone(),
-                dry_run: false,
-            },
-        )
-        .await?;
-    }
+    Apply::<D>::apply(
+        deps,
+        ApplyArgs {
+            filename: vec![coredns_yaml_path],
+            grace_period: 0,
+            config: args.clone(),
+            dry_run: false,
+        },
+    )
+    .await?;
 
     // nginx ingress
 
@@ -800,4 +806,112 @@ async fn create_replace_routes_file(
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::{Cluster, Node};
+    use crate::create::node::template_coredns_manifest;
+    use k8s_openapi::api::apps::v1::DaemonSet;
+    use std::default;
+
+    #[test]
+    fn test_should_template_coredns_manifest() {
+        let cluster = Cluster {
+            name: "".to_string(),
+            default_user: None,
+            default_key: None,
+            nodes: vec![
+                Node {
+                    name: "node-1".to_string(),
+                    host: "".to_string(),
+                    peer_host: "10.0.0.1".to_string(),
+                    ..Default::default()
+                },
+                Node {
+                    name: "node-2".to_string(),
+                    host: "".to_string(),
+                    peer_host: "10.0.0.2".to_string(),
+                    ..Default::default()
+                },
+            ],
+        };
+
+        let manifest = template_coredns_manifest(&cluster);
+
+        println!("{manifest}");
+
+        let daemonset: DaemonSet = serde_yaml::from_str(&manifest).unwrap();
+
+        let envs = daemonset
+            .spec
+            .unwrap_or_default()
+            .template
+            .spec
+            .unwrap_or_default()
+            .containers[0]
+            .env
+            .clone()
+            .unwrap_or_default();
+        let core_file_env = envs.into_iter().find(|e| e.name == "CORE_FILE");
+        assert!(core_file_env.is_some());
+        let core_file = core_file_env.unwrap();
+
+        let expect = r#"
+# What's going on here you might ask? This is to provide at least 2 upstreams to the forward plugin in
+# order for it to keep doing healthchecks. It doesnt if there's only 1 upstream.
+.:6053 {
+
+}
+# serve dns for this node
+.:5053 {
+
+    # rewrite name suffix .n-node-1.skate. .cluster.skate.
+    # rewrite name suffix .n-node-2.skate. .cluster.skate.
+    #...
+                   rewrite name suffix .n-node-1.skate. .cluster.skate.
+   rewrite name suffix .n-node-2.skate. .cluster.skate.
+
+    # public since other nodes need to reach this
+    bind lo 0.0.0.0
+
+    hosts /var/lib/skate/dns/addnhosts
+}
+
+svc.cluster.skate:5053 {
+    
+        bind lo
+    
+        hosts /var/lib/skate/dns/addnhosts
+    
+}
+
+pod.cluster.skate:5053 {
+
+    bind lo
+
+    gathersrv pod.cluster.skate. {
+      # n-node-1.skate. 1-
+                     pod.n-node-1.skate. 0
+   pod.n-node-2.skate. 1
+    }
+
+    #forward pod.n-node-1.skate. 127.0.0.1:5553 127.0.0.1:6053 {
+    #  policy sequential
+    #  prefer_udp
+    #  health_check 0.1s
+    #}
+                   forward pod.n-node-1.skate. 10.0.0.1:5553 127.0.0.1:6053 { policy sequential health_check 0.5s }
+   forward pod.n-node-2.skate. 10.0.0.2:5553 127.0.0.1:6053 { policy sequential health_check 0.5s }
+
+    loadbalance round_robin
+
+}
+.:5053 {
+    bind lo 0.0.0.0
+    forward . 8.8.8.8
+}
+"#;
+        assert_eq!(core_file.value.clone().unwrap().as_str(), expect);
+    }
 }
