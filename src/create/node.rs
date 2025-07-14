@@ -244,6 +244,9 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         }
     }
 
+    // enable the restart service
+    conn.execute_stdout("sudo systemctl enable podman-restart.service && sudo systemctl start podman-restart.service", true, true).await?;
+
     // seems to be missing when using kube play
     // TODO - might not need this anymore
     let cmd =
