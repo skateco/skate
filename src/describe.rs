@@ -15,20 +15,13 @@ pub struct DescribeArgs {
     commands: DescribeCommands,
 }
 
-#[derive(Debug, Clone, Subcommand)]
-pub enum IdCommand {
-    #[clap(external_subcommand)]
-    Id(Vec<String>),
-}
-
 #[derive(Clone, Debug, Args)]
 pub struct DescribeObjectArgs {
     #[command(flatten)]
     config: ConfigFileArgs,
     #[arg(long, short, long_help = "Filter by resource namespace")]
     namespace: Option<String>,
-    #[command(subcommand)]
-    id: Option<IdCommand>,
+    id: String,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -50,20 +43,10 @@ struct NodeDescriber {}
 
 impl Describer<NodeState> for NodeDescriber {
     fn find(&self, filters: &DescribeObjectArgs, state: &ClusterState) -> Option<NodeState> {
-        let id = filters.id.as_ref().and_then(|cmd| match cmd {
-            IdCommand::Id(ids) => ids.first().map(|id| (*id).clone()),
-        });
-        let id = match id {
-            Some(id) => id,
-            None => {
-                return None;
-            }
-        };
-
         state
             .nodes
             .iter()
-            .find(|n| *id == n.node_name.clone())
+            .find(|n| filters.id == n.node_name)
             .cloned()
     }
 
