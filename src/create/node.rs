@@ -75,6 +75,8 @@ trait CommandVariant {
 struct UbuntuProvisioner {}
 struct FedoraProvisioner {}
 
+struct FedoraCoreosProvisioner {}
+
 impl CommandVariant for UbuntuProvisioner {
     fn system_update(&self) -> String {
         "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade".into()
@@ -100,6 +102,33 @@ impl CommandVariant for UbuntuProvisioner {
 }
 
 impl CommandVariant for FedoraProvisioner {
+    fn system_update(&self) -> String {
+        "sudo dnf -y update && sudo dnf -y upgrade".into()
+    }
+
+    fn install_podman(&self) -> String {
+        "sudo dnf -y install podman".into()
+    }
+
+    fn install_keepalived(&self) -> String {
+        "sudo dnf -y install keepalived".into()
+    }
+
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
+    }
+}
+
+impl CommandVariant for FedoraCoreosProvisioner {
     fn system_update(&self) -> String {
         "sudo dnf -y update && sudo dnf -y upgrade".into()
     }

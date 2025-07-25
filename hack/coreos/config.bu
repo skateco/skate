@@ -1,0 +1,8 @@
+variant: fcos
+version: 1.6.0
+passwd:
+  users:
+    - name: skate
+      password_hash: $y$j9T$yyfoawqpb78wkG/QZ4XH80$Ut2ruJ8HCLPE4fjVET5ZAA9ZHPBN4gbtYfkngg3PUCD
+      ssh_authorized_keys:
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAkrFK1UTIDw5ELc2lvc1jlR7o4Pq+eWdo4a6hsa/9jd Mac

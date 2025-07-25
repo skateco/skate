@@ -1,0 +1,16 @@
+{
+  "ignition": {
+    "version": "3.5.0"
+  },
+  "passwd": {
+    "users": [
+      {
+        "name": "skate",
+        "passwordHash": "$y$j9T$yyfoawqpb78wkG/QZ4XH80$Ut2ruJ8HCLPE4fjVET5ZAA9ZHPBN4gbtYfkngg3PUCD",
+        "sshAuthorizedKeys": [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAkrFK1UTIDw5ELc2lvc1jlR7o4Pq+eWdo4a6hsa/9jd ILP Mac"
+        ]
+      }
+    ]
+  }
+}
