@@ -10,12 +10,30 @@ butane(){
               quay.io/coreos/butane:release $@
     }
 
+password_hash=$(docker run -i -q --rm quay.io/coreos/mkpasswd -s --method=yescrypt <<< skate)
 
-BUTANE_CONFIG="./config.bu"
+cat <<EOF > ./config.bu
+variant: fcos
+version: 1.6.0
+passwd:
+  users:
+    - name: skate
+      password_hash: "$password_hash"
+      ssh_authorized_keys:
+        - $SSH_PUBLIC_KEY
+storage:
+  files:
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: |
+          skatebox
+EOF
+
 
 IGNITION_CONFIG="./config.ign"
 
-butane --pretty --strict $BUTANE_CONFIG > $IGNITION_CONFIG
+butane --pretty --strict ./config.bu > $IGNITION_CONFIG
 
 vfkit --cpus 2 --memory 2048 \
   --bootloader efi,variable-store=efi-variable-store,create \
