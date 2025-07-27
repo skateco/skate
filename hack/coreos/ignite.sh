@@ -6,7 +6,7 @@ butane(){
               # shellcheck disable=SC2068
   docker run --rm --interactive         \
               --security-opt label=disable          \
-              --volume "${PWD}:/pwd" --workdir /pwd \
+              --volume "${PWD}:/pwd:ro" --workdir /pwd \
               quay.io/coreos/butane:release $@
     }
 
