@@ -234,7 +234,6 @@ impl SshClient for RealSsh {
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
-cat /etc/os-release > /tmp/os-release-$$ &
 skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
@@ -245,7 +244,7 @@ wait;
 echo hostname="$(cat /tmp/hostname-$$)";
 echo arch="$(cat /tmp/arch-$$)";
 echo os="$(cat /tmp/os-$$)";
-echo osrelease="$(cat /tmp/distro-$$)";
+echo osrelease="$(cat /etc/os-release)";
 echo skatelet="$(cat /tmp/skatelet-$$)";
 echo podman="$(cat /tmp/podman-$$)";
 echo sys="$(cat /tmp/sys-$$)";
