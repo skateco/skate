@@ -130,15 +130,15 @@ impl CommandVariant for FedoraProvisioner {
 
 impl CommandVariant for FedoraCoreosProvisioner {
     fn system_update(&self) -> String {
-        "sudo dnf -y update && sudo dnf -y upgrade".into()
+        "".into()
     }
 
     fn install_podman(&self) -> String {
-        "sudo dnf -y install podman".into()
+        "sudo rpm-ostree -y install podman".into()
     }
 
     fn install_keepalived(&self) -> String {
-        "sudo dnf -y install keepalived".into()
+        "sudo rpm-ostree -y install keepalived".into()
     }
 
     fn remove_kernel_security(&self) -> String {
@@ -151,7 +151,7 @@ impl CommandVariant for FedoraCoreosProvisioner {
     }
 
     fn configure_firewall(&self) -> String {
-        "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
+        "".into()
     }
 }
 
