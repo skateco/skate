@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": " SELECT id as \"id!: i64\", node_name as \"node_name!: String\", ip_address as \"ip_address!: String\",  created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\"\n            FROM peers\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "node_name!: String",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "ip_address!: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Local>",
+        "ordinal": 3,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at!: DateTime<Local>",
+        "ordinal": 4,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "7022d7ea27779116026c7ec6e3d9b01c5fae11fe243c1e96f5b817c5e6509dc7"
+}
