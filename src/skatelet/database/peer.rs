@@ -1,4 +1,4 @@
-use crate::skatelet::database::resource::Resource;
+use crate::skatelet::database::resource::{Resource, ResourceType};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteExecutor;
@@ -30,4 +30,17 @@ pub async fn upsert_peer(db: impl SqliteExecutor<'_>, peer: &Peer) -> super::Res
     .execute(db)
     .await?;
     Ok(())
+}
+
+pub async fn list_peers(db: impl SqliteExecutor<'_>) -> super::Result<Vec<Peer>> {
+    let peers = sqlx::query_as!(
+        Peer,
+        r#" SELECT id as "id!: i64", node_name as "name!: String",  created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>",
+            FROM peers
+        "#,
+    )
+        .fetch_all(db)
+        .await?;
+
+    Ok(peers)
 }
