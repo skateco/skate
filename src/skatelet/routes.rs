@@ -2,6 +2,7 @@ use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
 use crate::skatelet::database::peer::list_peers;
+use clap::Args;
 use std::net::ToSocketAddrs;
 
 pub trait RoutesDeps: With<dyn ShellExec> + WithDB {}
@@ -10,8 +11,11 @@ pub struct Routes<D: RoutesDeps> {
     pub deps: D,
 }
 
+#[derive(Clone, Debug, Args)]
+pub struct RoutesArgs {}
+
 impl<D: RoutesDeps> Routes<D> {
-    pub async fn routes(&self) -> Result<(), SkateError> {
+    pub async fn routes(&self, _args: RoutesArgs) -> Result<(), SkateError> {
         // list all peers
         let db = self.deps.get_db();
         let peers = list_peers(&db).await?;

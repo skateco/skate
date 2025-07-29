@@ -8,6 +8,7 @@ use crate::skatelet::deps::SkateletDeps;
 use crate::skatelet::dns::{Dns, DnsArgs, DnsDeps};
 use crate::skatelet::ipvs::{IPVSDeps, IpvsArgs, IPVS};
 use crate::skatelet::oci::{oci, OciArgs};
+use crate::skatelet::routes::{Routes, RoutesArgs, RoutesDeps};
 use crate::skatelet::system::{system, SystemArgs, SystemDeps};
 use crate::skatelet::template::{template, TemplateArgs};
 use crate::util;
@@ -49,6 +50,7 @@ enum Commands {
     Create(CreateArgs),
     Cordon(CordonArgs),
     Uncordon(UncordonArgs),
+    Routes(RoutesArgs),
 }
 
 pub fn log_panic(info: &PanicHookInfo) {
@@ -88,6 +90,7 @@ impl CreateDeps for SkateletDeps {}
 impl DeleteDeps for SkateletDeps {}
 impl DnsDeps for SkateletDeps {}
 impl IPVSDeps for SkateletDeps {}
+impl RoutesDeps for SkateletDeps {}
 
 pub async fn skatelet() -> Result<(), SkateError> {
     let args = Cli::parse();
@@ -142,7 +145,10 @@ pub async fn skatelet() -> Result<(), SkateError> {
         Commands::Create(args) => create(deps, args).await,
         Commands::Cordon(args) => cordon(args),
         Commands::Uncordon(args) => uncordon(args),
-        // _ => Ok(())
+        Commands::Routes(args) => {
+            let routes = Routes { deps };
+            routes.routes(args).await
+        } // _ => Ok(())
     };
     match result {
         Ok(_) => Ok(()),
