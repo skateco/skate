@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": " SELECT id as \"id!: i64\", node_name as \"node_name!: String\", ip_address as \"ip_address!: String\",  created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\"\n            FROM peers\n        ",
+  "query": " SELECT id as \"id!: i64\", node_name as \"node_name!: String\", host as \"host!: String\", subnet_cidr as \"subnet_cidr!: String\",  created_at as \"created_at!: DateTime<Local>\", updated_at as \"updated_at!: DateTime<Local>\"\n            FROM peers\n        ",
   "describe": {
     "columns": [
       {
@@ -14,18 +14,23 @@
         "type_info": "Text"
       },
       {
-        "name": "ip_address!: String",
+        "name": "host!: String",
         "ordinal": 2,
         "type_info": "Text"
       },
       {
-        "name": "created_at!: DateTime<Local>",
+        "name": "subnet_cidr!: String",
         "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Local>",
+        "ordinal": 4,
         "type_info": "Datetime"
       },
       {
         "name": "updated_at!: DateTime<Local>",
-        "ordinal": 4,
+        "ordinal": 5,
         "type_info": "Datetime"
       }
     ],
@@ -36,9 +41,10 @@
       false,
       false,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "7022d7ea27779116026c7ec6e3d9b01c5fae11fe243c1e96f5b817c5e6509dc7"
+  "hash": "2edb44f2fc8632420df265cb751b3694314d85bb1cd4a32236a5efb47885d784"
 }
