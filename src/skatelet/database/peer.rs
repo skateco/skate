@@ -1,13 +1,21 @@
 use crate::skatelet::database::resource::{Resource, ResourceType};
+use crate::util::{RE_CIDR, RE_HOST_SEGMENT, RE_IP};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use sqlx::SqliteExecutor;
+use validator::Validate;
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, Validate)]
 pub struct Peer {
     pub id: i64,
+    #[validate(
+        regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"),
+        length(min = 1, max = 128)
+    )]
     pub node_name: String,
+    #[validate(regex(path = *RE_IP, message = "host must be a valid ipv4 address"))]
     pub host: String,
+    #[validate(regex(path = *RE_CIDR, message = "host must be a valid ipv4 address"))]
     pub subnet_cidr: String,
     pub created_at: DateTime<Local>,
     pub updated_at: DateTime<Local>,
