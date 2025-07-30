@@ -13,6 +13,7 @@ pub(crate) mod services;
 pub(crate) mod system;
 mod template;
 
+mod peers;
 mod routes;
 
 pub use create::JobArgs;
