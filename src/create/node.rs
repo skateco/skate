@@ -739,9 +739,11 @@ async fn sync_peers(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let cmd = format!("sudo skatelet peers set {peers_args}");
-
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(&format!("sudo skatelet peers set {peers_args}"), true, true)
+        .await?;
+    // TODO - this should be done as part of peers set in order to reliably remove routes
+    conn.execute_stdout("sudo skatelet routes", true, true)
+        .await?;
 
     // Create systemd unit file to call the skate routes file on startup after internet
     // TODO - only add if different
