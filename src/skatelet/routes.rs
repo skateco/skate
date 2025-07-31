@@ -66,6 +66,7 @@ impl<D: RoutesDeps> Routes<D> {
     }
 
     fn exec_or_log_err(exec: &Box<dyn ShellExec>, cmd: &str, args: &[&str]) {
+        log::info!("{:?} {:?}", cmd, args);
         match exec.exec_stdout(cmd, args, None) {
             Ok(_) => (),
             Err(e) => log::error!("{:?}", e),
