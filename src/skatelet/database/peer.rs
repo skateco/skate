@@ -21,6 +21,11 @@ pub struct Peer {
     pub updated_at: DateTime<Local>,
 }
 
+pub async fn delete_peers(db: impl SqliteExecutor<'_>) -> super::Result<()> {
+    let _ = sqlx::query!("DELETE FROM peers").execute(db).await?;
+    Ok(())
+}
+
 pub async fn upsert_peer(db: impl SqliteExecutor<'_>, peer: &Peer) -> super::Result<()> {
     let _ = sqlx::query!(
         r#"
