@@ -1,3 +1,4 @@
+pub(crate) mod peer;
 pub(crate) mod resource;
 
 #[derive(thiserror::Error, Debug)]

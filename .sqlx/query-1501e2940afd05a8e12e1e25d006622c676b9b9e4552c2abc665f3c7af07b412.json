@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO peers (\n                node_name,\n                host,\n                subnet_cidr\n            ) VALUES ($1, $2, $3)\n            ON CONFLICT (node_name)\n            DO UPDATE SET \n                host = $2,\n                subnet_cidr = $3,\n                updated_at = CURRENT_TIMESTAMP\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "1501e2940afd05a8e12e1e25d006622c676b9b9e4552c2abc665f3c7af07b412"
+}
