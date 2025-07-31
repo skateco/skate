@@ -739,7 +739,7 @@ async fn sync_peers(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let cmd = format!("sudo skatelet peers {peers_args}");
+    let cmd = format!("sudo skatelet peers set {peers_args}");
 
     conn.execute_stdout(&cmd, true, true).await?;
 
