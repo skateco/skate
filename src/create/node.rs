@@ -730,7 +730,7 @@ async fn sync_peers(
     let peers = cluster_conf
         .nodes
         .iter()
-        .filter(|n| n.name != cluster_conf.name)
+        .filter(|n| n.name != conn.node_name())
         .collect::<Vec<_>>();
 
     let peers_args = peers
