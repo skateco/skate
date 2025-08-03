@@ -219,7 +219,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             Box::new(UbuntuProvisioner {})
         }
         Distribution::Fedora => Box::new(FedoraProvisioner {}),
-        _ => {
+        Distribution::FedoraCoreOs => Box::new(FedoraCoreosProvisioner {}),
+        Distribution::Unknown => {
             return Err(anyhow!("unknown distribution").into());
         }
     };
