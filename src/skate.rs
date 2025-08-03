@@ -254,6 +254,7 @@ impl From<&str> for Distribution {
 }
 impl Distribution {
     pub fn from_dist_variant(dist_name: &str, variant_id: &str) -> Self {
+        println!("dist_name: {}, variant_id: {}", dist_name, variant_id);
         let d = Distribution::from(dist_name);
         match d {
             Fedora => {
