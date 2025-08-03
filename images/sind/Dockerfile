@@ -30,7 +30,6 @@ DEBIAN_FRONTEND=noninteractive clean-install \
      vim \
      openssh-server \
      systemd \
-     dbus \
      dnsmasq \
      wget \
      dnsutils \
@@ -77,8 +76,6 @@ ADD https://raw.githubusercontent.com/containers/storage/main/storage.conf /etc/
 
 # chmod containers.conf and adjust storage.conf to enable Fuse storage.
 RUN mkdir -p /etc/containers && \
-    cp /usr/share/containers/containers.conf /etc/containers/ && \
-    chmod 644 /etc/containers/containers.conf && \
     echo "server=1.1.1.1" >> /etc/dnsmasq.conf && \
     echo "server=8.8.8.8" >> /etc/dnsmasq.conf && \
     sed -i -e \
@@ -90,7 +87,7 @@ RUN mkdir -p /etc/containers && \
         's|^[\#]\?cgroups\s\?=.*|cgroups="disabled"|g' -e \
         's|^[\#]\?cgroup_manager\s\?=.*|cgroup_manager="cgroupfs"|g' -e \
         's|^[\#]\?events_logger\s\?=.*|events_logger="file"|g' \
-        /etc/containers/containers.conf && \
+        /usr/share/containers/containers.conf && \
     sed -i -e 's|^#mount_program|mount_program|g' -e \
         '/additionalimage.*/a "/var/lib/shared",' -e \
         's|^mountopt[[:space:]]*=.*$|mountopt = "nodev,fsync=0"|g' \
