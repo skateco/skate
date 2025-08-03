@@ -30,6 +30,7 @@ DEBIAN_FRONTEND=noninteractive clean-install \
      vim \
      openssh-server \
      systemd \
+     dbus \
      dnsmasq \
      wget \
      dnsutils \
