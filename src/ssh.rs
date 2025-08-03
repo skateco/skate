@@ -244,7 +244,7 @@ wait;
 echo hostname="$(cat /tmp/hostname-$$)";
 echo arch="$(cat /tmp/arch-$$)";
 echo os="$(cat /tmp/os-$$)";
-echo osrelease="$(cat /etc/os-release)";
+echo osrelease="$(cat /etc/os-release|base64 -w0)";
 echo skatelet="$(cat /tmp/skatelet-$$)";
 echo podman="$(cat /tmp/podman-$$)";
 echo sys="$(cat /tmp/sys-$$)";
@@ -277,8 +277,8 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     "hostname" => host_info.hostname = v.to_string(),
                     "arch" => arch = Some(v.to_string()),
                     "osrelease" => {
-                        println!("osrelease: {}", v);
-                        let os_release = OsRelease::from_str(v);
+                        let v = general_purpose::STANDARD.decode(v)?;
+                        let os_release = OsRelease::from_str(String::from_utf8_lossy(&v).as_ref());
                         host_info.platform.distribution = Distribution::from_dist_variant(
                             &os_release.name,
                             &os_release.variant_id,
