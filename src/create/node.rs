@@ -653,12 +653,8 @@ async fn setup_networking(
 }
 
 async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout(
-        "sudo mkdir -p /usr/share/containers/oci/hooks.d",
-        true,
-        true,
-    )
-    .await?;
+    conn.execute_stdout("sudo mkdir -p /etc/containers/oci/hooks.d", true, true)
+        .await?;
 
     let oci_poststart_hook = oci::HookConfig {
         version: "1.0.0".to_string(),
@@ -680,9 +676,9 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         },
         stages: vec![oci::Stage::PostStart],
     };
-    // serialize to /usr/share/containers/oci/hooks.d/skatelet-poststart.json
+    // serialize to /etc/containers/oci/hooks.d/skatelet-poststart.json
     let serialized = serde_json::to_string(&oci_poststart_hook).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststart.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
@@ -711,7 +707,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         stages: vec![oci::Stage::PostStop],
     };
     let serialized = serde_json::to_string(&oci_poststop).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststop.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
