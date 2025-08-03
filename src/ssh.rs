@@ -277,6 +277,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     "hostname" => host_info.hostname = v.to_string(),
                     "arch" => arch = Some(v.to_string()),
                     "osrelease" => {
+                        println!("osrelease: {}", v);
                         let os_release = OsRelease::from_str(v);
                         host_info.platform.distribution = Distribution::from_dist_variant(
                             &os_release.name,
