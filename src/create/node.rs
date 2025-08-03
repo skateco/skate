@@ -549,6 +549,8 @@ async fn setup_networking(
     let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
     conn.execute_stdout(&cmd, true, true).await?;
 
+    conn.execute_stdout("sudo sed -i 's&#hooks_dir[ =].*&hooks_dir = [ \"/etc/containers/oci/hooks.d\" ]&' /etc/containers/containers.conf"  , true, true).await?;
+
     let current_backend = conn
         .execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'")
         .await?;
