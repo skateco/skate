@@ -14,12 +14,13 @@ use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
     RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
 };
-use crate::{oci, util};
+use crate::{oci, template, util};
 use anyhow::anyhow;
 use clap::Args;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use semver::{Version, VersionReq};
+use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -29,6 +30,8 @@ use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
 const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
+
+const CONTAINERS_CONF: &str = include_str!("../resources/containers.conf");
 
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
@@ -532,24 +535,25 @@ async fn setup_networking(
     conn.execute_stdout("sudo systemctl start keepalived", true, true)
         .await?;
 
-    if conn
-        .execute_stdout("test -f /etc/containers/containers.conf", true, true)
-        .await
-        .is_err()
-    {
-        let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-        conn.execute_stdout(cmd, true, true).await?;
-    } else {
-        println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
-    }
+    let mut handlebars = template::new();
+    handlebars
+        .register_template_string("containers", CONTAINERS_CONF)
+        .map_err(|e| anyhow!(e).context("failed to load containers conf template"))?;
 
-    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-    conn.execute_stdout(&cmd, true, true).await?;
+    let containers_conf = handlebars.render(
+        "containers",
+        &json!({
+            "default_subnet": node.subnet_cidr,
+            "network_backend": network_backend,
+        }),
+    )?;
 
-    let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-    conn.execute_stdout(&cmd, true, true).await?;
-
-    conn.execute_stdout("sudo sed -i 's&#hooks_dir[ =].*&hooks_dir = [ \"/etc/containers/oci/hooks.d\" ]&' /etc/containers/containers.conf"  , true, true).await?;
+    conn.execute_stdout(
+        &transfer_file_cmd(&containers_conf, "/etc/containers/containers.conf"),
+        true,
+        true,
+    )
+    .await?;
 
     let current_backend = conn
         .execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'")
