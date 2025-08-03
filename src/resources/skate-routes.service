@@ -6,7 +6,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/etc/skate/routes.sh
+ExecStart=/usr/local/bin/skatelet routes
 User=root
 Group=root
 

@@ -8,7 +8,7 @@ use crate::skate::{ConfigFileArgs, Distribution};
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
 use crate::ssh::{SshClient, SshClients};
-use crate::state::state::ClusterState;
+use crate::state::state::{ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
 use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
@@ -279,12 +279,11 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
     let all_conns = &all_conns.unwrap_or(SshClients { clients: vec![] });
 
-    let skate_dirs = [
+    let skate_dirs: [&str; 4] = [
         &format!("{VAR_PATH}/ingress"),
         &format!("{VAR_PATH}/ingress/letsencrypt_storage"),
         &format!("{VAR_PATH}/dns"),
         &format!("{VAR_PATH}/keepalived"),
-        "/etc/skate",
     ];
 
     conn.execute_stdout(
@@ -587,7 +586,8 @@ async fn setup_networking(
     }
 
     for conn in &all_conns.clients {
-        create_replace_routes_file(conn, cluster_conf).await?;
+        // sync peers
+        sync_peers(&conn, cluster_conf).await?
     }
 
     let coredns_tag = coredns_tag.to_suffix();
@@ -752,68 +752,26 @@ async fn setup_netavark(
     Ok(())
 }
 
-async fn create_replace_routes_file(
+async fn sync_peers(
     conn: &Box<dyn SshClient>,
     cluster_conf: &Cluster,
 ) -> Result<(), Box<dyn Error>> {
-    let cmd = "sudo mkdir -p /etc/skate";
-    conn.execute_stdout(cmd, true, true).await?;
-
-    let other_nodes: Vec<_> = cluster_conf
+    let peers = cluster_conf
         .nodes
         .iter()
         .filter(|n| n.name != conn.node_name())
-        .collect();
+        .collect::<Vec<_>>();
 
-    let mut route_file = "#!/bin/bash
-"
-    .to_string();
+    let peers_args = peers
+        .iter()
+        .map(|p| format!("--peer {}:{}:{}", p.name, p.peer_host, p.subnet_cidr))
+        .collect::<Vec<_>>()
+        .join(" ");
 
-    for other_node in &other_nodes {
-        let ip = format!("{}:22", other_node.peer_host)
-            .to_socket_addrs()
-            .unwrap()
-            .next()
-            .unwrap()
-            .ip()
-            .to_string();
-        route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
-    }
-
-    // load kernel modules
-    route_file +=
-        "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
-
-    route_file += "sysctl -w net.ipv4.ip_forward=1\n";
-    route_file += "sysctl fs.inotify.max_user_instances=1280\n";
-    route_file += "sysctl fs.inotify.max_user_watches=655360\n";
-
-    // Virtual Server stuff
-    // taken from https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/proxier.go#L295
-    route_file += "sysctl -w net.ipv4.vs.conntrack=1\n";
-    // since we're using conntrac we need to increase the max so we dont exhaust it
-    route_file += "sysctl net.nf_conntrack_max=512000\n";
-    route_file += "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
-    route_file += "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
-    route_file += "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
-    // configurable in kube-proxy
-    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_ignore=1\n";
-    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_announce=2\n";
-
-    route_file += "sysctl -p\n";
-
-    conn.execute_stdout(
-        &util::transfer_file_cmd(&route_file, "/etc/skate/routes.sh"),
-        true,
-        true,
-    )
-    .await?;
-    conn.execute_stdout(
-        "sudo chmod +x /etc/skate/routes.sh; sudo /etc/skate/routes.sh",
-        true,
-        true,
-    )
-    .await?;
+    conn.execute_stdout(&format!("sudo skatelet peers set {peers_args}"), true, true)
+        .await?;
+    conn.execute_stdout("sudo skatelet routes", true, true)
+        .await?;
 
     // Create systemd unit file to call the skate routes file on startup after internet
     // TODO - only add if different
