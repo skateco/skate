@@ -233,7 +233,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     match info.podman_version.as_ref() {
         Some(version) => {
-            let min_podman_ver = ">=3.0.0";
+            let min_podman_ver = ">=3.0.0-0";
             let req = VersionReq::parse(min_podman_ver).unwrap();
             let version = Version::parse(version).unwrap();
 
