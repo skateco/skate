@@ -239,7 +239,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
             if !req.matches(&version) {
                 return Err(anyhow!(
-                    "podman version {} is too old, must be {}, see https://podman.io/docs/installation",
+                    "podman version {} does not match constraint {}, see https://podman.io/docs/installation",
                     version,
                     min_podman_ver
                 )
