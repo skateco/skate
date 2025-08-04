@@ -33,6 +33,8 @@ const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
 const CONTAINERS_CONF: &str = include_str!("../resources/containers.conf");
 
+const PODMAN_VERSION_SEMVER_REQUEST: &str = ">=3.0.0";
+
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
     #[validate(
@@ -233,18 +235,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     match info.podman_version.as_ref() {
         Some(version) => {
-            let min_podman_ver = ">=3.0.0-0";
-            let req = VersionReq::parse(min_podman_ver).unwrap();
-            let version = Version::parse(version).unwrap();
+            validate_podman_version(version)?;
 
-            if !req.matches(&version) {
-                return Err(anyhow!(
-                    "podman version {} does not match constraint {}, see https://podman.io/docs/installation",
-                    version,
-                    min_podman_ver
-                )
-                .into());
-            }
             println!(
                 "podman version {} already installed {} ",
                 version, CHECKBOX_EMOJI
@@ -359,6 +351,26 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     propagate_static_resources(&config, all_conns, &node, &state).await?;
 
+    Ok(())
+}
+
+fn validate_podman_version(version: &str) -> Result<(), Box<dyn Error>> {
+    // HACK since I can't get the request to make semver accept the rc
+    // TODO - check later if the request can be formulated to do this
+    let version = version.split('-').collect_vec();
+    let version = version.get(0).unwrap();
+
+    let req = VersionReq::parse(PODMAN_VERSION_SEMVER_REQUEST).unwrap();
+    let version = Version::parse(version).unwrap();
+
+    if !req.matches(&version) {
+        return Err(anyhow!(
+                    "podman version {} does not match constraint {}, see https://podman.io/docs/installation",
+                    version,
+                    PODMAN_VERSION_SEMVER_REQUEST
+                )
+            .into());
+    }
     Ok(())
 }
 
@@ -798,7 +810,7 @@ async fn sync_peers(
 #[cfg(test)]
 mod tests {
     use crate::config::{Cluster, Node};
-    use crate::create::node::template_coredns_manifest;
+    use crate::create::node::{template_coredns_manifest, validate_podman_version};
     use k8s_openapi::api::apps::v1::DaemonSet;
     use std::default;
 
@@ -910,5 +922,22 @@ pod.cluster.skate:5053 {
 }
 "#;
         assert_eq!(core_file.value.clone().unwrap().as_str(), expect);
+    }
+
+    #[test]
+    fn test_validate_podman_version() {
+        let table = [
+            ("2.9.9", false),
+            ("3.0.0", true),
+            ("4.0.0", true),
+            ("5.0.0", true),
+            ("5.0.0-rc99", true),
+        ];
+
+        for (input, expected) in table {
+            let got = validate_podman_version(input);
+            let got = got.is_ok();
+            assert_eq!(got, expected, "input: {}", input);
+        }
     }
 }
