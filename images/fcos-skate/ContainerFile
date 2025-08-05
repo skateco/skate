@@ -1,15 +1,11 @@
 FROM quay.io/fedora/fedora-coreos:stable
 
 
-RUN mkdir -p /
+RUN mkdir -p \
     rpm-ostree install \
     rsyslog \
+    wget \
     keepalived && \
-    # set selinux to permissive
-    setenforce 0 && \
-    sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config && \
     # set registry short name mode to permissive
     sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf && \
     ostree container commit
-
-COPY ./etc_rsyslog.d_10-skate.conf /etc/rsyslog.d/10-skate.conf

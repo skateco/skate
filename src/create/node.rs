@@ -139,16 +139,15 @@ impl CommandVariant for FedoraCoreosProvisioner {
     }
 
     fn install_podman(&self) -> String {
-        "sudo rpm-ostree -y install podman".into()
+        "".into()
     }
 
     fn install_keepalived(&self) -> String {
-        "sudo rpm-ostree -y install keepalived".into()
+        "".into()
     }
 
     fn remove_kernel_security(&self) -> String {
-        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
-            .into()
+        "".into()
     }
 
     fn configure_etc_containers_registries(&self) -> String {
@@ -320,6 +319,9 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         .await?;
 
     conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
+        .await?;
+    // particularly important for fedora
+    conn.execute_stdout("sudo chown syslog:adm /var/lib/rsyslog", true, true)
         .await?;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
