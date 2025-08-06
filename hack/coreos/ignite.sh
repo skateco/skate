@@ -30,14 +30,6 @@ storage:
       contents:
         inline: |
           skatebox
-    - path: /etc/ssh/sshd_config.d/20-enable-passwords.conf
-      mode: 0644
-      contents:
-        inline: |
-          # Fedora CoreOS disables SSH password login by default.
-          # Enable it.
-          # This file must sort before 40-disable-passwords.conf.
-          PasswordAuthentication yes
 EOF
 
 

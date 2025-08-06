@@ -1,9 +1,8 @@
 FROM quay.io/fedora/fedora-coreos:stable
 
 
-RUN mkdir -p \
-    rpm-ostree install \
-    rsyslog \
+RUN rpm-ostree install \
+    rsyslog  \
     wget \
     keepalived && \
     # set registry short name mode to permissive

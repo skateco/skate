@@ -147,7 +147,8 @@ impl CommandVariant for FedoraCoreosProvisioner {
     }
 
     fn remove_kernel_security(&self) -> String {
-        "".into()
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
     }
 
     fn configure_etc_containers_registries(&self) -> String {
@@ -321,8 +322,12 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
         .await?;
     // particularly important for fedora
-    conn.execute_stdout("sudo chown syslog:adm /var/lib/rsyslog", true, true)
-        .await?;
+    conn.execute_stdout(
+        "sudo mkdir -p /var/lib/rsyslog && sudo chown syslog:adm /var/lib/rsyslog",
+        true,
+        true,
+    )
+    .await?;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
