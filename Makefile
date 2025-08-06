@@ -43,8 +43,8 @@ run-e2e-tests:
     # the ignored tests are the e2e tests. This is not optimal.
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
-.PHONY: run-e2e-tests-docker
-run-e2e-tests-docker:
+.PHONY: run-e2e-tests-docker-ubuntu
+run-e2e-tests-docker-ubuntu:
 	SIND_IMAGE=ghcr.io/skateco/sind make run-e2e-tests-docker
 
 .PHONY: run-e2e-tests-docker-fedora
