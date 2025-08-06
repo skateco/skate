@@ -295,7 +295,7 @@ jobs:
             target/${{matrix.TARGET}}/release/skatelet
             target/${{matrix.TARGET}}/release/sind
   create-release:
-    needs: [build, e2e-test]
+    needs: [build, e2e-test-ubuntu, e2e-test-fedora, e2e-test-fedora-coreos]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     steps:
