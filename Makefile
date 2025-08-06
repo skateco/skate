@@ -44,19 +44,17 @@ run-e2e-tests:
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
 .PHONY: run-e2e-tests-docker
-run-e2e-tests-docker-fedora: SIND_IMAGE=ghcr.io/skateco/sind
 run-e2e-tests-docker:
-	make run-e2e-tests-docker
+	SIND_IMAGE=ghcr.io/skateco/sind make run-e2e-tests-docker
 
 .PHONY: run-e2e-tests-docker-fedora
-run-e2e-tests-docker-fedora: SIND_IMAGE=ghcr.io/skateco/sind:fedora
 run-e2e-tests-docker-fedora:
-	make run-e2e-tests-docker
+run-e2e-tests-docker-fedora:
+	SIND_IMAGE=ghcr.io/skateco/sind:fedora make run-e2e-tests-docker
 
 .PHONY: run-e2e-tests-docker-fedora-coreos
-run-e2e-tests-docker-fedora: SIND_IMAGE=ghcr.io/skateco/sind:fedora-coreos
 run-e2e-tests-docker-fedora-coreos:
-	make run-e2e-tests-docker
+	SIND_IMAGE=ghcr.io/skateco/sind:fedora-coreos make run-e2e-tests-docker
 
 run-e2e-tests-docker: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
 run-e2e-tests-docker: SSH_PUBLIC_KEY=/tmp/skate-e2e-key.pub
