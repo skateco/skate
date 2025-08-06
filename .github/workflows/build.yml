@@ -195,6 +195,45 @@ jobs:
           path: |
             e2e-evidence/
 
+  e2e-test-fedora-coreos:
+    runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+      - name: Build binaries
+        run: cargo build --locked --release
+      - name: E2E Tests in Sind (Fedora)
+        run: make run-e2e-tests-docker-fedora-coreos
+      - name: Get syslogs on failure
+        if: always()
+        run: |
+          mkdir -p e2e-evidence
+          docker cp sind-node-1:/var/log/messages ./e2e-evidence/sind-node-1-messages
+          docker cp sind-node-1:/var/log/skate.log ./e2e-evidence/sind-node-1-skate.log || true
+          docker cp sind-node-1:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-1-addnhosts || true
+          docker cp sind-node-2:/var/log/messages ./e2e-evidence/sind-node-2-messages
+          docker cp sind-node-2:/var/log/skate.log ./e2e-evidence/sind-node-2-skate.log || true
+          docker cp sind-node-2:/var/lib/skate/dns/addnhosts ./e2e-evidence/sind-node-2-addnhosts || true
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-fedora-coreos-evidence
+          path: |
+            e2e-evidence/
+
   build:
     strategy:
       matrix:
