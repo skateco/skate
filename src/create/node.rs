@@ -14,12 +14,13 @@ use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
     RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
 };
-use crate::{oci, util};
+use crate::{oci, template, util};
 use anyhow::anyhow;
 use clap::Args;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use semver::{Version, VersionReq};
+use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -29,6 +30,10 @@ use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
 const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
+
+const CONTAINERS_CONF: &str = include_str!("../resources/containers.conf");
+
+const PODMAN_VERSION_SEMVER_REQUEST: &str = ">=3.0.0";
 
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
@@ -74,6 +79,8 @@ trait CommandVariant {
 
 struct UbuntuProvisioner {}
 struct FedoraProvisioner {}
+
+struct FedoraCoreosProvisioner {}
 
 impl CommandVariant for UbuntuProvisioner {
     fn system_update(&self) -> String {
@@ -123,6 +130,33 @@ impl CommandVariant for FedoraProvisioner {
 
     fn configure_firewall(&self) -> String {
         "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
+    }
+}
+
+impl CommandVariant for FedoraCoreosProvisioner {
+    fn system_update(&self) -> String {
+        "".into()
+    }
+
+    fn install_podman(&self) -> String {
+        "".into()
+    }
+
+    fn install_keepalived(&self) -> String {
+        "".into()
+    }
+
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "".into()
     }
 }
 
@@ -190,7 +224,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             Box::new(UbuntuProvisioner {})
         }
         Distribution::Fedora => Box::new(FedoraProvisioner {}),
-        _ => {
+        Distribution::FedoraCoreOs => Box::new(FedoraCoreosProvisioner {}),
+        Distribution::Unknown => {
             return Err(anyhow!("unknown distribution").into());
         }
     };
@@ -200,17 +235,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     match info.podman_version.as_ref() {
         Some(version) => {
-            let min_podman_ver = ">=3.0.0";
-            let req = VersionReq::parse(min_podman_ver).unwrap();
-            let version = Version::parse(version).unwrap();
+            validate_podman_version(version)?;
 
-            if !req.matches(&version) {
-                return Err(anyhow!(
-                    "podman version too old, must be {}, see https://podman.io/docs/installation",
-                    min_podman_ver
-                )
-                .into());
-            }
             println!(
                 "podman version {} already installed {} ",
                 version, CHECKBOX_EMOJI
@@ -295,6 +321,13 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
         .await?;
+    // particularly important for fedora
+    conn.execute_stdout(
+        "sudo mkdir -p /var/lib/rsyslog && sudo chown syslog:adm /var/lib/rsyslog",
+        true,
+        true,
+    )
+    .await?;
     // restart rsyslog
     conn.execute_stdout("sudo systemctl restart rsyslog", true, true)
         .await?;
@@ -325,6 +358,26 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     propagate_static_resources(&config, all_conns, &node, &state).await?;
 
+    Ok(())
+}
+
+fn validate_podman_version(version: &str) -> Result<(), Box<dyn Error>> {
+    // HACK since I can't get the request to make semver accept the rc
+    // TODO - check later if the request can be formulated to do this
+    let version = version.split('-').collect_vec();
+    let version = version.get(0).unwrap();
+
+    let req = VersionReq::parse(PODMAN_VERSION_SEMVER_REQUEST).unwrap();
+    let version = Version::parse(version).unwrap();
+
+    if !req.matches(&version) {
+        return Err(anyhow!(
+                    "podman version {} does not match constraint {}, see https://podman.io/docs/installation",
+                    version,
+                    PODMAN_VERSION_SEMVER_REQUEST
+                )
+            .into());
+    }
     Ok(())
 }
 
@@ -502,22 +555,25 @@ async fn setup_networking(
     conn.execute_stdout("sudo systemctl start keepalived", true, true)
         .await?;
 
-    if conn
-        .execute_stdout("test -f /etc/containers/containers.conf", true, true)
-        .await
-        .is_err()
-    {
-        let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-        conn.execute_stdout(cmd, true, true).await?;
-    } else {
-        println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
-    }
+    let mut handlebars = template::new();
+    handlebars
+        .register_template_string("containers", CONTAINERS_CONF)
+        .map_err(|e| anyhow!(e).context("failed to load containers conf template"))?;
 
-    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-    conn.execute_stdout(&cmd, true, true).await?;
+    let containers_conf = handlebars.render(
+        "containers",
+        &json!({
+            "default_subnet": node.subnet_cidr,
+            "network_backend": network_backend,
+        }),
+    )?;
 
-    let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(
+        &transfer_file_cmd(&containers_conf, "/etc/containers/containers.conf"),
+        true,
+        true,
+    )
+    .await?;
 
     let current_backend = conn
         .execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'")
@@ -624,12 +680,8 @@ async fn setup_networking(
 }
 
 async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout(
-        "sudo mkdir -p /usr/share/containers/oci/hooks.d",
-        true,
-        true,
-    )
-    .await?;
+    conn.execute_stdout("sudo mkdir -p /etc/containers/oci/hooks.d", true, true)
+        .await?;
 
     let oci_poststart_hook = oci::HookConfig {
         version: "1.0.0".to_string(),
@@ -651,9 +703,9 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         },
         stages: vec![oci::Stage::PostStart],
     };
-    // serialize to /usr/share/containers/oci/hooks.d/skatelet-poststart.json
+    // serialize to /etc/containers/oci/hooks.d/skatelet-poststart.json
     let serialized = serde_json::to_string(&oci_poststart_hook).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststart.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
@@ -682,7 +734,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         stages: vec![oci::Stage::PostStop],
     };
     let serialized = serde_json::to_string(&oci_poststop).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststop.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
@@ -765,7 +817,7 @@ async fn sync_peers(
 #[cfg(test)]
 mod tests {
     use crate::config::{Cluster, Node};
-    use crate::create::node::template_coredns_manifest;
+    use crate::create::node::{template_coredns_manifest, validate_podman_version};
     use k8s_openapi::api::apps::v1::DaemonSet;
     use std::default;
 
@@ -877,5 +929,22 @@ pod.cluster.skate:5053 {
 }
 "#;
         assert_eq!(core_file.value.clone().unwrap().as_str(), expect);
+    }
+
+    #[test]
+    fn test_validate_podman_version() {
+        let table = [
+            ("2.9.9", false),
+            ("3.0.0", true),
+            ("4.0.0", true),
+            ("5.0.0", true),
+            ("5.0.0-rc99", true),
+        ];
+
+        for (input, expected) in table {
+            let got = validate_podman_version(input);
+            let got = got.is_ok();
+            assert_eq!(got, expected, "input: {}", input);
+        }
     }
 }

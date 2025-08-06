@@ -167,6 +167,28 @@ impl RealSsh {
     }
 }
 
+struct OsRelease {
+    name: String,
+    variant_id: String,
+}
+
+impl OsRelease {
+    fn from_str(s: &str) -> OsRelease {
+        let mut name = "".to_string();
+        let mut variant_id = "".to_string();
+        for line in s.lines() {
+            if let Some((k, v)) = line.split_once('=') {
+                match k {
+                    "NAME" => name = v.to_string(),
+                    "VARIANT_ID" => variant_id = v.to_string(),
+                    _ => {}
+                }
+            }
+        }
+        OsRelease { name, variant_id }
+    }
+}
+
 #[async_trait]
 impl SshClient for RealSsh {
     fn node_name(&self) -> String {
@@ -212,7 +234,6 @@ impl SshClient for RealSsh {
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
-{ { grep -e "^NAME=" /etc/os-release|head -1|awk '{print substr($0,index($0,"=")+1)}'; }  || echo '' ; } > /tmp/distro-$$ &
 skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
@@ -223,7 +244,7 @@ wait;
 echo hostname="$(cat /tmp/hostname-$$)";
 echo arch="$(cat /tmp/arch-$$)";
 echo os="$(cat /tmp/os-$$)";
-echo distro="$(cat /tmp/distro-$$)";
+echo osrelease="$(cat /etc/os-release|base64 -w0)";
 echo skatelet="$(cat /tmp/skatelet-$$)";
 echo podman="$(cat /tmp/podman-$$)";
 echo sys="$(cat /tmp/sys-$$)";
@@ -255,7 +276,14 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 match k {
                     "hostname" => host_info.hostname = v.to_string(),
                     "arch" => arch = Some(v.to_string()),
-                    "distro" => host_info.platform.distribution = Distribution::from(v),
+                    "osrelease" => {
+                        let v = general_purpose::STANDARD.decode(v)?;
+                        let os_release = OsRelease::from_str(String::from_utf8_lossy(&v).as_ref());
+                        host_info.platform.distribution = Distribution::from_dist_variant(
+                            &os_release.name,
+                            &os_release.variant_id,
+                        );
+                    }
                     "skatelet" => {
                         host_info.skatelet_version = match v {
                             "" => None,
