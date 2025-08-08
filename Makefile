@@ -43,7 +43,19 @@ run-e2e-tests:
     # the ignored tests are the e2e tests. This is not optimal.
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
-.PHONY: run-e2e-tests-docker
+.PHONY: run-e2e-tests-docker-ubuntu
+run-e2e-tests-docker-ubuntu:
+	SIND_IMAGE=ghcr.io/skateco/sind make run-e2e-tests-docker
+
+.PHONY: run-e2e-tests-docker-fedora
+run-e2e-tests-docker-fedora:
+run-e2e-tests-docker-fedora:
+	SIND_IMAGE=ghcr.io/skateco/sind:fedora make run-e2e-tests-docker
+
+.PHONY: run-e2e-tests-docker-fedora-coreos
+run-e2e-tests-docker-fedora-coreos:
+	SIND_IMAGE=ghcr.io/skateco/sind:fedora-coreos make run-e2e-tests-docker
+
 run-e2e-tests-docker: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
 run-e2e-tests-docker: SSH_PUBLIC_KEY=/tmp/skate-e2e-key.pub
 run-e2e-tests-docker: export PATH := $(shell pwd)/target/release:${PATH}
@@ -54,22 +66,7 @@ run-e2e-tests-docker:
 	which skatelet
 	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
 	# start vms
-	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH} --image ghcr.io/skateco/sind
-	cargo run --bin skate -- config use-context sind
-	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
-
-.PHONY: run-e2e-tests-docker-fedora
-run-e2e-tests-docker-fedora: SSH_PRIVATE_KEY=/tmp/skate-e2e-key
-run-e2e-tests-docker-fedora: SSH_PUBLIC_KEY=/tmp/skate-e2e-key.pub
-run-e2e-tests-docker-fedora: export PATH := $(shell pwd)/target/release:${PATH}
-run-e2e-tests-docker-fedora: export SKATELET_PATH ?= $(shell pwd)/target/release/skatelet
-run-e2e-tests-docker-fedora:
-	set -xeuo pipefail
-	cargo build --release --locked --bin skate
-	which skatelet
-	[ -f ${SSH_PRIVATE_KEY} ] || ssh-keygen -b 2048 -t rsa -f ${SSH_PRIVATE_KEY} -q -N ""
-	# start vms
-	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH} --image ghcr.io/skateco/sind:fedora
+	cargo run --bin sind -- create --ssh-private-key ${SSH_PRIVATE_KEY} --ssh-public-key ${SSH_PUBLIC_KEY} --skatelet-binary-path ${SKATELET_PATH} --image ${SIND_IMAGE}
 	cargo run --bin skate -- config use-context sind
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
