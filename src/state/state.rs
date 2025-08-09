@@ -741,7 +741,6 @@ mod tests {
     use crate::skatelet::database::resource::ResourceType;
     use crate::skatelet::SystemInfo;
     use crate::state::state::{ClusterState, NodeState, NodeStatus};
-    use crate::util::NamespacedName;
 
     #[test]
     fn should_detect_conflicts() {
