@@ -1167,6 +1167,7 @@ mod tests {
     use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     use std::cmp::max;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_plan_deployment_clean_slate_recreate() {

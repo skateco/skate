@@ -172,7 +172,7 @@ mod tests {
         scores.insert("node2".to_string(), 50);
         scores.insert("node3".to_string(), 75);
 
-        let mut plugin = TestScore {};
+        let plugin = TestScore {};
         plugin.normalize_scores(&mut scores).unwrap();
 
         assert_eq!(scores.get("node1").unwrap(), &0);

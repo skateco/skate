@@ -821,7 +821,6 @@ mod tests {
     use crate::config::{Cluster, Node};
     use crate::create::node::{template_coredns_manifest, validate_podman_version};
     use k8s_openapi::api::apps::v1::DaemonSet;
-    use std::default;
 
     #[test]
     fn test_should_template_coredns_manifest() {
