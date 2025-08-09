@@ -1,4 +1,3 @@
-use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 mod filter;
 mod least_pods;
 mod node_name;
@@ -27,9 +26,8 @@ use k8s_openapi::api::core::v1::{Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::Metadata;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::error::Error;
-use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct ScheduleResult {

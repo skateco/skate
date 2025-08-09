@@ -13,7 +13,6 @@ use k8s_openapi::api::networking::v1::Ingress;
 use serde_json::json;
 use sqlx::SqlitePool;
 use std::error::Error;
-use std::fs::read;
 use std::io::Write;
 use std::process::Stdio;
 use std::{fs, process};
@@ -222,7 +221,7 @@ impl IngressController {
 
         // get resolver from /etc/resolv.conf -> nameserver [ip]
         let resolver = get_resolv_conf_dns().unwrap_or_else(|e| {
-            log::warn!("failed to get resolver from /etc/resolv.conf");
+            log::warn!("failed to get resolver from /etc/resolv.conf: {}", e);
             "".to_string()
         });
 

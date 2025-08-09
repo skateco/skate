@@ -1,4 +1,3 @@
-use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::supported_resources::SupportedResources;
@@ -14,9 +13,8 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::error::Error;
-use std::fs::{create_dir_all, DirEntry};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::fs::DirEntry;
+use std::path::Path;
 use std::str::FromStr;
 use tabled::Tabled;
 
