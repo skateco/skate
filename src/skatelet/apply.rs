@@ -13,7 +13,6 @@ use crate::controllers::service::ServiceController;
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::VAR_PATH;
 use crate::supported_resources::SupportedResources;
 use std::io::Read;
@@ -37,7 +36,7 @@ pub enum StdinCommand {
     Stdin {},
 }
 
-pub trait ApplyDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
+pub trait ApplyDeps: With<dyn ShellExec> + WithDB {}
 
 pub async fn apply<D: ApplyDeps>(deps: D, apply_args: ApplyArgs) -> Result<(), SkateError> {
     let manifest = match apply_args.command {
@@ -59,7 +58,6 @@ async fn apply_supported_resource<D: ApplyDeps>(
     object: &SupportedResources,
 ) -> Result<(), SkateError> {
     let execer = With::<dyn ShellExec>::get;
-    let store = With::<dyn Store>::get;
 
     match object {
         SupportedResources::Deployment(deployment) => {
@@ -85,7 +83,7 @@ async fn apply_supported_resource<D: ApplyDeps>(
             ctrl.apply(ingress).await?;
         }
         SupportedResources::CronJob(cron) => {
-            let ctrl = CronjobController::new(store(&deps), deps.get_db(), execer(&deps));
+            let ctrl = CronjobController::new(deps.get_db(), execer(&deps));
             ctrl.apply(cron).await?;
         }
         SupportedResources::Service(service) => {

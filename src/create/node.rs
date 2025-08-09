@@ -2,17 +2,17 @@ use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
 use crate::errors::SkateError;
+use crate::node_client::{NodeClient, NodeClients};
 use crate::refresh::Refresh;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
-use crate::ssh::{SshClient, SshClients};
-use crate::state::state::{ClusterState, NodeState};
+use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
-    RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
+    RE_HOST_SEGMENT, RE_IP,
 };
 use crate::{oci, template, util};
 use anyhow::anyhow;
@@ -25,7 +25,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::net::ToSocketAddrs;
 use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
@@ -247,8 +246,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             let command = provisioner.install_podman();
 
             let installed = {
-                println!("installing podman with command {}", command);
-                let result = conn.execute(&command).await;
+                println!("installing podman");
+                let result = conn.execute_stdout(&command, true, true).await;
                 match result {
                     Ok(_) => {
                         println!("podman installed successfully {} ", CHECKBOX_EMOJI);
@@ -274,7 +273,7 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     conn.execute_stdout("sudo systemctl enable podman-restart.service && sudo systemctl start podman-restart.service", true, true).await?;
 
     let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
-    let all_conns = &all_conns.unwrap_or(SshClients { clients: vec![] });
+    let all_conns = &all_conns.unwrap_or(NodeClients { clients: vec![] });
 
     let skate_dirs: [&str; 4] = [
         &format!("{VAR_PATH}/ingress"),
@@ -403,7 +402,7 @@ fn get_coredns_image() -> Result<(String, ImageTagFormat), Box<dyn Error>> {
 // could be to take only resources that are the same on all nodes, log others
 async fn propagate_static_resources(
     _conf: &Config,
-    all_conns: &SshClients,
+    all_conns: &NodeClients,
     node: &Node,
     state: &ClusterState,
 ) -> Result<(), Box<dyn Error>> {
@@ -529,8 +528,8 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
 
 // TODO don't run things unless they need to be
 async fn setup_networking(
-    conn: &Box<dyn SshClient>,
-    all_conns: &SshClients,
+    conn: &Box<dyn NodeClient>,
+    all_conns: &NodeClients,
     cluster_conf: &Cluster,
     node: &Node,
     coredns_image: String,
@@ -576,7 +575,10 @@ async fn setup_networking(
     .await?;
 
     let current_backend = conn
-        .execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'")
+        .execute(
+            "sudo podman info |grep networkBackend: | awk '{print $2}'",
+            true,
+        )
         .await?;
     if current_backend.trim() != network_backend {
         // Since we've changed the network backend we need to reset
@@ -679,7 +681,7 @@ async fn setup_networking(
     Ok(())
 }
 
-async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
+async fn install_oci_hooks(conn: &Box<dyn NodeClient>) -> Result<(), Box<dyn Error>> {
     conn.execute_stdout("sudo mkdir -p /etc/containers/oci/hooks.d", true, true)
         .await?;
 
@@ -745,7 +747,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
 }
 
 async fn setup_netavark(
-    conn: &Box<dyn SshClient>,
+    conn: &Box<dyn NodeClient>,
     gateway: String,
     subnet_cidr: String,
 ) -> Result<(), Box<dyn Error>> {
@@ -776,7 +778,7 @@ async fn setup_netavark(
 }
 
 async fn sync_peers(
-    conn: &Box<dyn SshClient>,
+    conn: &Box<dyn NodeClient>,
     cluster_conf: &Cluster,
 ) -> Result<(), Box<dyn Error>> {
     let peers = cluster_conf
@@ -819,7 +821,6 @@ mod tests {
     use crate::config::{Cluster, Node};
     use crate::create::node::{template_coredns_manifest, validate_podman_version};
     use k8s_openapi::api::apps::v1::DaemonSet;
-    use std::default;
 
     #[test]
     fn test_should_template_coredns_manifest() {

@@ -1,5 +1,5 @@
-use crate::filestore::ObjectListItem;
 use crate::get::lister::NameFilters;
+use crate::object_list_item::ObjectListItem;
 use crate::util::age;
 use k8s_openapi::api::networking::v1::Ingress;
 use serde::Serialize;

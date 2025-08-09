@@ -6,7 +6,6 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;
 use sqlx::Acquire;
-use std::net::ToSocketAddrs;
 use strum_macros::IntoStaticStr;
 use validator::Validate;
 

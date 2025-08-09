@@ -11,7 +11,7 @@ impl Plugin for UnschedulableFilter {
 }
 
 impl Filter for UnschedulableFilter {
-    fn filter(&self, pod: &Pod, node: &NodeState) -> Result<(), String> {
+    fn filter(&self, _: &Pod, node: &NodeState) -> Result<(), String> {
         if node.status != NodeStatus::Healthy {
             return Err("Node is unschedulable".to_string());
         }
