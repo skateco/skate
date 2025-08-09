@@ -1,5 +1,5 @@
+use crate::node_client::NodeClientError;
 use crate::skatelet::database;
-use crate::ssh::SshError;
 use handlebars::RenderError;
 use std::error::Error as RustError;
 use thiserror::Error;
@@ -24,7 +24,7 @@ pub enum SkateError {
     #[error("Error: {0}")]
     SerdeJson(#[from] serde_json::Error),
     #[error("Error: {0}")]
-    Ssh(#[from] SshError),
+    Ssh(#[from] NodeClientError),
     #[error("Error: {0:?}")]
     Multi(Vec<SkateError>),
     #[error("Error: {}", .0)]

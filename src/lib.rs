@@ -2,11 +2,11 @@ mod apply;
 mod config;
 mod create;
 mod delete;
+mod node_client;
 mod refresh;
 mod scheduler;
 mod skate;
 mod skatelet;
-mod ssh;
 mod util;
 
 mod get;

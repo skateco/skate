@@ -9,11 +9,11 @@ mod priority_sort;
 mod resource_allocation;
 mod unschedulable;
 
+use crate::node_client::NodeClients;
 use crate::scheduler::pod_scheduler::PodScheduler;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::SshClients;
 use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
 use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels, CROSS_EMOJI};
@@ -40,7 +40,7 @@ pub struct ScheduleResult {
 pub trait Scheduler {
     async fn schedule(
         &self,
-        conns: &SshClients,
+        conns: &NodeClients,
         state: &mut ClusterState,
         objects: Vec<SupportedResources>,
         dry_run: bool,
@@ -861,7 +861,7 @@ impl DefaultScheduler {
     }
 
     async fn remove_existing(
-        conns: &SshClients,
+        conns: &NodeClients,
         resource: ScheduledOperation,
     ) -> Result<(String, String), Box<dyn Error>> {
         let hook_result = resource
@@ -887,7 +887,7 @@ impl DefaultScheduler {
     async fn apply(
         &self,
         plan: ApplyPlan,
-        conns: &SshClients,
+        conns: &NodeClients,
         state: &mut ClusterState,
         dry_run: bool,
     ) -> Result<Vec<ScheduledOperation>, Box<dyn Error>> {
@@ -1107,7 +1107,7 @@ impl DefaultScheduler {
 
     async fn schedule_one(
         &self,
-        conns: &SshClients,
+        conns: &NodeClients,
         state: &mut ClusterState,
         object: SupportedResources,
         dry_run: bool,
@@ -1125,7 +1125,7 @@ impl DefaultScheduler {
 impl Scheduler for DefaultScheduler {
     async fn schedule(
         &self,
-        conns: &SshClients,
+        conns: &NodeClients,
         state: &mut ClusterState,
         objects: Vec<SupportedResources>,
         dry_run: bool,
