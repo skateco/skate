@@ -556,6 +556,11 @@ echo ovs="$(cat /tmp/ovs-$$)";
         Err(anyhow!("exit status {}", result.unwrap()).into())
     }
     async fn execute(self: &RealSsh, cmd: &str, print_cmd: bool) -> Result<String, Box<dyn Error>> {
+        if print_cmd {
+            cmd.lines()
+                .for_each(|l| println!("{} | > {}", self.node_name, l.green()));
+        }
+
         let result = self
             .client
             .execute(cmd)

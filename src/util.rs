@@ -179,9 +179,11 @@ impl NamespacedName {
 
 pub trait GetSkateLabels {
     fn namespaced_name(&self) -> NamespacedName;
+    #[allow(unused)]
     fn hash(&self) -> String;
 }
 
+#[allow(unused)]
 pub fn get_label_value(
     labels: &Option<std::collections::BTreeMap<String, String>>,
     key: &str,
@@ -360,9 +362,6 @@ pub static RE_CIDR: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
 pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
 pub static RE_HOST_SEGMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9a-z\-_]+$").unwrap());
-pub static RE_HOSTNAME: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$").unwrap()
-});
 
 pub enum ImageTagFormat {
     None,

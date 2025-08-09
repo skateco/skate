@@ -1,4 +1,3 @@
-use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::util::{RE_CIDR, RE_HOST_SEGMENT, RE_IP};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};

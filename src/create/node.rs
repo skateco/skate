@@ -8,11 +8,11 @@ use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
-use crate::state::state::{ClusterState, NodeState};
+use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
     split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
-    RE_HOSTNAME, RE_HOST_SEGMENT, RE_IP,
+    RE_HOST_SEGMENT, RE_IP,
 };
 use crate::{oci, template, util};
 use anyhow::anyhow;
@@ -25,7 +25,6 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::net::ToSocketAddrs;
 use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
