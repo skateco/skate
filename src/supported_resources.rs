@@ -1,5 +1,5 @@
-use crate::filestore::ObjectListItem;
 use crate::node_client::NodeClients;
+use crate::object_list_item::ObjectListItem;
 use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::state::state::NodeState;

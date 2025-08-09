@@ -20,7 +20,6 @@ use crate::controllers::service::ServiceController;
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::VAR_PATH;
 use crate::spec;
 use crate::util::SkateLabels;
@@ -61,16 +60,13 @@ pub struct DeleteArgs {
     command: DeleteResourceCommands,
 }
 
-pub trait DeleteDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
+pub trait DeleteDeps: With<dyn ShellExec> + WithDB {}
 
 pub struct Deleter<D: DeleteDeps> {
     pub deps: D,
 }
 
 impl<D: DeleteDeps> Deleter<D> {
-    fn store(&self) -> Box<dyn Store> {
-        With::<dyn Store>::get(&self.deps)
-    }
     fn execer(&self) -> Box<dyn ShellExec> {
         With::<dyn ShellExec>::get(&self.deps)
     }
@@ -274,7 +270,7 @@ impl<D: DeleteDeps> Deleter<D> {
                 ctrl.delete(ingress).await?;
             }
             SupportedResources::CronJob(cron) => {
-                let ctrl = CronjobController::new(self.store(), self.deps.get_db(), self.execer());
+                let ctrl = CronjobController::new(self.deps.get_db(), self.execer());
                 ctrl.delete(cron).await?;
             }
             SupportedResources::Secret(secret) => {

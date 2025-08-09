@@ -1,6 +1,6 @@
 use crate::config::{cache_dir, Config};
-use crate::filestore::ObjectListItem;
 use crate::get::lister::NameFilters;
+use crate::object_list_item::ObjectListItem;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
@@ -736,8 +736,8 @@ pub struct CatalogueItem<'a, 'b, 'c, 'd> {
 
 #[cfg(test)]
 mod tests {
-    use crate::filestore::ObjectListItem;
     use crate::node_client::HostInfo;
+    use crate::object_list_item::ObjectListItem;
     use crate::skatelet::database::resource::ResourceType;
     use crate::skatelet::SystemInfo;
     use crate::state::state::{ClusterState, NodeState, NodeStatus};

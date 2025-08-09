@@ -21,7 +21,6 @@ use crate::skate::ConfigFileArgs;
 
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
-use crate::filestore::ObjectListItem;
 use crate::get::cronjob::CronListItem;
 use crate::get::daemonset::DaemonsetLister;
 use crate::get::deployment::DeploymentLister;
@@ -31,6 +30,7 @@ use crate::get::node::NodeLister;
 use crate::get::pod::PodLister;
 use crate::get::secret::SecretListItem;
 use crate::get::service::ServiceListItem;
+use crate::object_list_item::ObjectListItem;
 use crate::refresh;
 use crate::skatelet::database::resource::ResourceType;
 
