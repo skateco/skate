@@ -18,10 +18,10 @@ use std::path::Path;
 use strum_macros::Display;
 use tabled::Tabled;
 
+use crate::node_client::HostInfo;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
 use crate::skatelet::SystemInfo;
-use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
 use crate::util::{metadata_name, slugify, tabled_display_option, SkateLabels};
@@ -737,9 +737,9 @@ pub struct CatalogueItem<'a, 'b, 'c, 'd> {
 #[cfg(test)]
 mod tests {
     use crate::filestore::ObjectListItem;
+    use crate::node_client::HostInfo;
     use crate::skatelet::database::resource::ResourceType;
     use crate::skatelet::SystemInfo;
-    use crate::ssh::HostInfo;
     use crate::state::state::{ClusterState, NodeState, NodeStatus};
     use crate::util::NamespacedName;
 

@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
+use crate::node_client::NodeClients;
 use crate::skate::ConfigFileArgs;
-use crate::ssh::SshClients;
 use crate::state::state::{ClusterState, NodeStatus};
 use crate::util::{CHECKBOX_EMOJI, CROSS_EMOJI};
 use anyhow::anyhow;
@@ -63,7 +63,7 @@ impl<D: RefreshDeps> Refresh<D> {
 
     pub async fn refreshed_state(
         cluster_name: &str,
-        conns: &SshClients,
+        conns: &NodeClients,
         config: &Config,
     ) -> Result<ClusterState, SkateError> {
         let host_infos = conns.get_nodes_system_info().await;

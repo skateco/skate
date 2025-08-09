@@ -1,7 +1,7 @@
 use crate::filestore::ObjectListItem;
+use crate::node_client::NodeClients;
 use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::SshClients;
 use crate::state::state::NodeState;
 use crate::util::{metadata_name, NamespacedName, SkateLabels};
 use anyhow::anyhow;
@@ -128,7 +128,7 @@ impl SupportedResources {
     pub async fn pre_remove_hook(
         &self,
         node: &NodeState,
-        conns: &SshClients,
+        conns: &NodeClients,
     ) -> Result<(), Box<dyn Error>> {
         match self {
             SupportedResources::Pod(pod) => {
@@ -137,10 +137,13 @@ impl SupportedResources {
                 let ips: Vec<_> = match conns
                     .find(&node.node_name)
                     .unwrap()
-                    .execute(&format!(
-                        "sudo skatelet dns remove --pod-id {}",
-                        &pod.metadata.name.clone().unwrap()
-                    ))
+                    .execute(
+                        &format!(
+                            "sudo skatelet dns remove --pod-id {}",
+                            &pod.metadata.name.clone().unwrap()
+                        ),
+                        false,
+                    )
                     .await
                 {
                     Ok(ips) => {

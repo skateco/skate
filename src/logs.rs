@@ -1,10 +1,10 @@
 use crate::config::Config;
 use crate::deps::{SshManager, With};
 use crate::errors::SkateError;
+use crate::node_client;
+use crate::node_client::NodeClients;
 use crate::skate::ConfigFileArgs;
 use crate::skatelet::database::resource::ResourceType;
-use crate::ssh;
-use crate::ssh::SshClients;
 use anyhow::anyhow;
 use clap::Args;
 use futures::stream::FuturesUnordered;
@@ -120,7 +120,7 @@ impl<D: LogsDeps> Logs<D> {
 
     pub async fn log_pod(
         &self,
-        conns: &ssh::SshClients,
+        conns: &node_client::NodeClients,
         name: &str,
         _ns: String,
         args: &LogArgs,
@@ -161,7 +161,7 @@ impl<D: LogsDeps> Logs<D> {
 
     pub async fn log_child_pods(
         &self,
-        conns: &SshClients,
+        conns: &NodeClients,
         resource_type: ResourceType,
         name: &str,
         ns: String,
@@ -208,7 +208,7 @@ impl<D: LogsDeps> Logs<D> {
     }
     pub async fn log_journalctl(
         &self,
-        conns: &SshClients,
+        conns: &NodeClients,
         resource_type: ResourceType,
         name: &str,
         ns: String,
