@@ -1,7 +1,6 @@
 use crate::cron::cron_to_systemd;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::get_resource;
 use crate::template;
@@ -17,14 +16,13 @@ use std::io::Write;
 
 pub struct CronjobController {
     // TODO - get the pod spec from the db
-    store: Box<dyn Store>,
     db: SqlitePool,
     execer: Box<dyn ShellExec>,
 }
 
 impl CronjobController {
-    pub fn new(store: Box<dyn Store>, db: SqlitePool, execer: Box<dyn ShellExec>) -> Self {
-        CronjobController { store, db, execer }
+    pub fn new(db: SqlitePool, execer: Box<dyn ShellExec>) -> Self {
+        CronjobController { db, execer }
     }
 
     pub async fn apply(&self, cron_job: &CronJob) -> Result<(), Box<dyn Error>> {
@@ -153,9 +151,6 @@ impl CronjobController {
         let _ = self.execer.exec("systemctl", &["daemon-reload"], None)?;
         // systemctl reset-failed
         let _ = self.execer.exec("systemctl", &["reset-failed"], None)?;
-
-        // TODO - don't use file store for this
-        let _ = self.store.remove_object("cronjob", &ns_name.to_string())?;
 
         resource::delete_resource(
             &self.db,

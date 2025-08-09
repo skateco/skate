@@ -4,7 +4,6 @@ use crate::controllers::cronjob::CronjobController;
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateArgs {
@@ -31,7 +30,7 @@ pub enum CreateCommand {
     Job(JobArgs),
 }
 
-pub trait CreateDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
+pub trait CreateDeps: With<dyn ShellExec> + WithDB {}
 
 pub async fn create<D: CreateDeps>(deps: D, main_args: CreateArgs) -> Result<(), SkateError> {
     match main_args.command.clone() {
@@ -62,9 +61,8 @@ pub async fn create_job_cronjob<D: CreateDeps>(
     // the pod.yaml is already in the store, so we can just run that
 
     let execer = With::<dyn ShellExec>::get(&deps);
-    let store = With::<dyn Store>::get(&deps);
 
-    let ctrl = CronjobController::new(store, deps.get_db(), execer);
+    let ctrl = CronjobController::new(deps.get_db(), execer);
 
     ctrl.run(from_name, &create_args.namespace, args.wait)
         .await?;
