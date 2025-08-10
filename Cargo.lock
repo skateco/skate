@@ -164,11 +164,10 @@ dependencies = [
 
 [[package]]
 name = "async-ssh2-tokio"
-version = "0.8.15"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f75e7574464f542312eb470eebbd6394744d590252b92b71a29c85fa493854b7"
+checksum = "eabbae1a4a50fd6467e6754a527e2b2358917ced0d7a32c1481a7eecd7c70b99"
 dependencies = [
- "base64ct",
  "russh",
  "russh-sftp",
  "thiserror 2.0.12",
@@ -317,9 +316,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.9.0"
+version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "325918d6fe32f23b19878fe4b34794ae41fc19ddbe53b10571a4874d44ffd39b"
+checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
 
 [[package]]
 name = "cbc"
@@ -2765,9 +2764,9 @@ dependencies = [
 
 [[package]]
 name = "russh"
-version = "0.51.1"
+version = "0.52.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4816b748109d26daa30e72d231a3a6e42f9e2fffe6c08cbfed63113db0ce884"
+checksum = "bcc2b4e549ed83a4e36517807367b538c6d00b603ce138637f50a2218222e23f"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2829,9 +2828,9 @@ dependencies = [
 
 [[package]]
 name = "russh-cryptovec"
-version = "0.51.1"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b722480e7117893a8a14ba22298dca3387b24fa1c40eb06f3105b82875c7497"
+checksum = "4fb0ed583ff0f6b4aa44c7867dd7108df01b30571ee9423e250b4cc939f8c6cf"
 dependencies = [
  "libc",
  "log",
@@ -2842,11 +2841,10 @@ dependencies = [
 
 [[package]]
 name = "russh-sftp"
-version = "2.0.8"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7dd6efe9f8893ee1fe557c8e60fd1db7765b344e7fcdad8ab2dd1de425d5bd3"
+checksum = "3bb94393cafad0530145b8f626d8687f1ee1dedb93d7ba7740d6ae81868b13b5"
 dependencies = [
- "async-trait",
  "bitflags",
  "bytes",
  "chrono",
@@ -2860,9 +2858,9 @@ dependencies = [
 
 [[package]]
 name = "russh-util"
-version = "0.51.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0c3f1ba8f8ccbe1af83c1a5dc325ecb0b6e176d1444c241c1d684ab216d1b24"
+checksum = "668424a5dde0bcb45b55ba7de8476b93831b4aa2fa6947e145f3b053e22c60b6"
 dependencies = [
  "chrono",
  "tokio",
