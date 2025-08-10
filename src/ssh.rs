@@ -196,12 +196,15 @@ impl SshClient for RealSsh {
     }
 
     async fn connect(node: &Node) -> Result<Self, SshError> {
-        let default_key = "";
-        let key = node.key.clone().unwrap_or(default_key.to_string());
-        let key = shellexpand::tilde(&key).to_string();
+        let auth_method = match &node.key {
+            Some(key) => {
+                let key = shellexpand::tilde(key).to_string();
+                AuthMethod::with_key_file(&key, None)
+            }
+            None => AuthMethod::with_agent(),
+        };
         let timeout = Duration::from_secs(5);
 
-        let auth_method = AuthMethod::with_key_file(&key, None);
         let result = tokio::time::timeout(
             timeout,
             Client::connect(
