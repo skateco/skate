@@ -28,7 +28,7 @@ use tokio::sync::mpsc;
 const FALLBACK_SKATELET_VERSION: &str = "v0.1.55";
 
 #[async_trait]
-pub trait SshClient: Send + Sync {
+pub trait NodeClient: Send + Sync {
     async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>>;
     async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>>;
     async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>>;
@@ -53,12 +53,9 @@ pub trait SshClient: Send + Sync {
         cmd: &str,
         sender: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn Error>>;
-    // TODO-merge this into execute_stdout
-    async fn execute_noisy(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
-    async fn execute(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
+    async fn execute(&self, cmd: &str, print_cmd: bool) -> Result<String, Box<dyn Error>>;
     fn node_name(&self) -> String;
-
-    async fn connect(n: &Node) -> Result<Self, SshError>
+    async fn connect(n: &Node) -> Result<Self, NodeClientError>
     where
         Self: Sized;
 }
@@ -77,8 +74,8 @@ impl Debug for RealSsh {
     }
 }
 
-pub struct SshClients {
-    pub clients: Vec<Box<dyn SshClient>>,
+pub struct NodeClients {
+    pub clients: Vec<Box<dyn NodeClient>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -190,12 +187,12 @@ impl OsRelease {
 }
 
 #[async_trait]
-impl SshClient for RealSsh {
+impl NodeClient for RealSsh {
     fn node_name(&self) -> String {
         self.node_name.clone()
     }
 
-    async fn connect(node: &Node) -> Result<Self, SshError> {
+    async fn connect(node: &Node) -> Result<Self, NodeClientError> {
         let key = node.key.as_ref().and_then(|k| {
             let key = k.trim();
             if key.is_empty() {
@@ -228,7 +225,7 @@ impl SshClient for RealSsh {
             _ => Err(anyhow!("timeout").into()),
         };
 
-        let ssh_client = result.map_err(|e| SshError {
+        let ssh_client = result.map_err(|e| NodeClientError {
             node_name: node.name.clone(),
             error: e.to_string(),
         })?;
@@ -558,13 +555,12 @@ echo ovs="$(cat /tmp/ovs-$$)";
         }
         Err(anyhow!("exit status {}", result.unwrap()).into())
     }
-    // TODO-merge this into execute_stdout
-    async fn execute_noisy(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
-        cmd.lines()
-            .for_each(|l| println!("{} | > {}", self.node_name, l.green()));
-        self.execute(cmd).await
-    }
-    async fn execute(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
+    async fn execute(self: &RealSsh, cmd: &str, print_cmd: bool) -> Result<String, Box<dyn Error>> {
+        if print_cmd {
+            cmd.lines()
+                .for_each(|l| println!("{} | > {}", self.node_name, l.green()));
+        }
+
         let result = self
             .client
             .execute(cmd)
@@ -583,25 +579,25 @@ echo ovs="$(cat /tmp/ovs-$$)";
 }
 
 #[derive(Error, Debug)]
-pub struct SshError {
+pub struct NodeClientError {
     pub node_name: String,
     pub error: String,
 }
 
-impl fmt::Display for SshError {
+impl fmt::Display for NodeClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {}", self.node_name, self.error)
     }
 }
 
 #[derive(Debug)]
-pub struct SshErrors {
-    pub errors: Vec<SshError>,
+pub struct NodeClientErrors {
+    pub errors: Vec<NodeClientError>,
 }
 
-impl Error for SshErrors {}
+impl Error for NodeClientErrors {}
 
-impl fmt::Display for SshErrors {
+impl fmt::Display for NodeClientErrors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let strs: Vec<String> = self.errors.iter().map(|ce| format!("{}", ce)).collect();
         write!(f, "{}", strs.join("\n"))
@@ -622,68 +618,16 @@ impl Node {
     }
 }
 
-// pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<RealSsh, SshError> {
-//     let node = node.with_cluster_defaults(cluster);
-//     match connect_node(&node).await {
-//         Ok(c) => Ok(c),
-//         Err(err) => {
-//             Err(SshError { node_name: node.name.clone(), error: err })
-//         }
-//     }
-// }
-//
-// pub async fn cluster_connections(cluster: &Cluster) -> (Option<RealSshClients>, Option<SshErrors>) {
-//     let fut: FuturesUnordered<_> = cluster.nodes.iter().map(|n| node_connection(cluster, n)).collect();
-//
-//
-//     let results: Vec<_> = fut.collect().await;
-//     let (clients, errs): (Vec<RealSsh>, Vec<SshError>) = results.into_iter().partition_map(|r| match r {
-//         Ok(client) => Either::Left(client),
-//         Err(err) => Either::Right(err)
-//     });
-//
-//
-//     (
-//         match clients.len() {
-//             0 => None,
-//             _ => Some(RealSshClients { clients })
-//         },
-//         match errs.len() {
-//             0 => None,
-//             _ => Some(SshErrors { errors: errs })
-//         }
-//     )
-// }
-
-impl SshClients {
-    pub fn find(&self, node_name: &str) -> Option<&Box<dyn SshClient>> {
+impl NodeClients {
+    pub fn find(&self, node_name: &str) -> Option<&Box<dyn NodeClient>> {
         self.clients.iter().find(|c| c.node_name() == node_name)
     }
 
     pub async fn execute(&self, command: &str) -> Vec<(String, Result<String, Box<dyn Error>>)> {
-        let fut: FuturesUnordered<_> = self.clients.iter().map(|c| c.execute(command)).collect();
-        let result: Vec<Result<_, _>> = fut.collect().await;
-
-        result
-            .into_iter()
-            .enumerate()
-            .map(|(i, r)| {
-                let node_name = self.clients[i].node_name().clone();
-                (node_name, r)
-            })
-            .collect()
-    }
-
-    pub async fn execute_noisy(
-        &self,
-        command: &str,
-        args: &[&str],
-    ) -> Vec<(String, Result<String, Box<dyn Error>>)> {
-        let concat_command = &format!("{} {}", &command, args.join(" "));
         let fut: FuturesUnordered<_> = self
             .clients
             .iter()
-            .map(|c| c.execute_noisy(concat_command))
+            .map(|c| c.execute(command, true))
             .collect();
         let result: Vec<Result<_, _>> = fut.collect().await;
 
@@ -696,6 +640,7 @@ impl SshClients {
             })
             .collect()
     }
+
     pub async fn get_nodes_system_info(&self) -> Vec<Result<HostInfo, Box<dyn Error>>> {
         let fut: FuturesUnordered<_> = self
             .clients

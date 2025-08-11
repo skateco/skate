@@ -10,7 +10,7 @@ use clap::{Args, Subcommand};
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::ObjectListItem;
+use crate::object_list_item::ObjectListItem;
 use crate::skate::{Distribution, Platform};
 use crate::skatelet::cordon::is_cordoned;
 use crate::skatelet::database::resource::{list_resources, ResourceType};

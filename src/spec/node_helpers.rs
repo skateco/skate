@@ -1,5 +1,5 @@
 use crate::spec::pod_helpers;
-use crate::spec::pod_helpers::{get_requests, ResourceRequests};
+use crate::spec::pod_helpers::get_requests;
 use crate::state::state::NodeState;
 use k8s_openapi::api::core::v1::{Pod, PodSpec};
 
