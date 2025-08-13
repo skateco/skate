@@ -7,8 +7,8 @@ use crate::skate::ConfigFileArgs;
 use crate::skatelet::database::resource::ResourceType;
 use anyhow::anyhow;
 use clap::Args;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help(true))]
@@ -169,7 +169,13 @@ impl<D: LogsDeps> Logs<D> {
     ) -> Result<(), SkateError> {
         let log_cmd = args.to_podman_log_args().join(" ");
 
-        let cmd = format!("for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;", resource_type.to_string().to_lowercase(), name, ns, log_cmd);
+        let cmd = format!(
+            "for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;",
+            resource_type.to_string().to_lowercase(),
+            name,
+            ns,
+            log_cmd
+        );
 
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 

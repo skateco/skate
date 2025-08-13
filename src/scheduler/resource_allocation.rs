@@ -1,5 +1,5 @@
 use crate::scheduler::node_resources_fit::requests_or_default;
-use crate::scheduler::plugins::{ScoreError, MAX_NODE_SCORE};
+use crate::scheduler::plugins::{MAX_NODE_SCORE, ScoreError};
 use crate::scheduler::pod_scheduler::{DEFAULT_MEMORY_REQUEST, DEFAULT_MILLI_CPU_REQUEST};
 use crate::spec::node_helpers::{get_node_alloc, get_node_requests};
 use crate::state::state::NodeState;

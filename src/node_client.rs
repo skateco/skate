@@ -1,18 +1,18 @@
 use crate::config::{Cluster, Node};
 use crate::github;
 use crate::skate::{Distribution, Platform};
-use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
+use crate::skatelet::database::resource::ResourceType;
 use crate::state::state::{NodeState, NodeStatus};
 use anyhow::anyhow;
 use async_ssh2_tokio::client::Client;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
 use async_trait::async_trait;
-use base64::engine::general_purpose;
 use base64::Engine;
+use base64::engine::general_purpose;
 use colored::Colorize;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 use russh::{ChannelMsg, CryptoVec};
 use semver::Version;
@@ -367,13 +367,18 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 eprintln!("ERROR: falling back to blind url download");
 
                 let (dl_arch, dl_os, dl_gnu) = platform.arch_as_linux_target_triple();
-                format!("https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz")
+                format!(
+                    "https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz"
+                )
             }
         };
 
         println!("installing skatelet version {}", version);
 
-        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && chmod +x skatelet && sudo mv skatelet /usr/local/bin", download_url);
+        let cmd = format!(
+            "cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && chmod +x skatelet && sudo mv skatelet /usr/local/bin",
+            download_url
+        );
         self.execute_stdout(&cmd, true, true).await?;
 
         Ok(())

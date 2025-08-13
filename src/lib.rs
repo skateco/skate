@@ -35,8 +35,8 @@ pub(crate) mod supported_resources;
 mod test_helpers;
 mod upgrade;
 
-pub use skate::skate;
 pub use skate::AllDeps;
+pub use skate::skate;
 pub use skatelet::skatelet;
 
 use shadow_rs::shadow;

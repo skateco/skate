@@ -1,8 +1,8 @@
 use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::sind::create::CONTAINER_LABEL;
 use crate::sind::GlobalArgs;
+use crate::sind::create::CONTAINER_LABEL;
 use clap::Args;
 
 #[derive(Debug, Args, Clone)]

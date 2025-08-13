@@ -1,6 +1,6 @@
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::util::{lock_file, spawn_orphan_process, SkateLabels};
+use crate::util::{SkateLabels, lock_file, spawn_orphan_process};
 use anyhow::anyhow;
 use log::{debug, error, info, warn};
 use serde_json::Value;

@@ -1,14 +1,14 @@
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::supported_resources::SupportedResources;
-use crate::util::{get_skate_label_value, metadata_name, NamespacedName, SkateLabels};
+use crate::util::{NamespacedName, SkateLabels, get_skate_label_value, metadata_name};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::{kind, Metadata};
+use k8s_openapi::{Metadata, kind};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;

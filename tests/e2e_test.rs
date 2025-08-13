@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use colored::Colorize;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use serde_json::Value;
 use std::env;
 use std::error::Error;

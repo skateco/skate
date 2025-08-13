@@ -3,14 +3,14 @@ use crate::object_list_item::ObjectListItem;
 use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
 use crate::state::state::NodeState;
-use crate::util::{metadata_name, NamespacedName, SkateLabels};
+use crate::util::{NamespacedName, SkateLabels, metadata_name};
 use anyhow::anyhow;
+use k8s_openapi::Resource;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::Resource;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -184,11 +184,12 @@ impl SupportedResources {
                 });
 
                 if !errs.is_empty() {
-                    return Err(anyhow!(errs
-                        .iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(". "))
+                    return Err(anyhow!(
+                        errs.iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<String>>()
+                            .join(". ")
+                    )
                     .context("failed to run pre-remove hook")
                     .into());
                 }

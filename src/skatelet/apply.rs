@@ -22,7 +22,8 @@ pub struct ApplyArgs {
     #[arg(
         short,
         long,
-        long_help("Delete previously applied objects that are not in the set passed to the current invocation."
+        long_help(
+            "Delete previously applied objects that are not in the set passed to the current invocation."
         )
     )]
     prune: bool,

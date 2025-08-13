@@ -1,4 +1,4 @@
-use crate::config::{cache_dir, Config};
+use crate::config::{Config, cache_dir};
 use crate::get::lister::NameFilters;
 use crate::object_list_item::ObjectListItem;
 use anyhow::anyhow;
@@ -19,12 +19,12 @@ use strum_macros::Display;
 use tabled::Tabled;
 
 use crate::node_client::HostInfo;
+use crate::skatelet::SystemInfo;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
-use crate::skatelet::SystemInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
-use crate::util::{metadata_name, slugify, tabled_display_option, SkateLabels};
+use crate::util::{SkateLabels, metadata_name, slugify, tabled_display_option};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
@@ -738,8 +738,8 @@ pub struct CatalogueItem<'a, 'b, 'c, 'd> {
 mod tests {
     use crate::node_client::HostInfo;
     use crate::object_list_item::ObjectListItem;
-    use crate::skatelet::database::resource::ResourceType;
     use crate::skatelet::SystemInfo;
+    use crate::skatelet::database::resource::ResourceType;
     use crate::state::state::{ClusterState, NodeState, NodeStatus};
 
     #[test]

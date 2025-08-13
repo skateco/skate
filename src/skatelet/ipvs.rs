@@ -1,7 +1,7 @@
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::skatelet::database::resource::{get_resource, ResourceType};
+use crate::skatelet::database::resource::{ResourceType, get_resource};
 use crate::util::NamespacedName;
 use anyhow::anyhow;
 use clap::{Args, Subcommand};

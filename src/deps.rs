@@ -2,8 +2,8 @@ use crate::config::{Cluster, Node};
 use crate::exec::{RealExec, ShellExec};
 use crate::node_client::{NodeClient, NodeClientError, NodeClientErrors, NodeClients, RealSsh};
 use async_trait::async_trait;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use sqlx::SqlitePool;
 

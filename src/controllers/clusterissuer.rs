@@ -1,9 +1,9 @@
 use crate::controllers::ingress::IngressController;
 use crate::skatelet::database::resource::{
-    delete_resource, upsert_resource, Resource, ResourceType,
+    Resource, ResourceType, delete_resource, upsert_resource,
 };
 use crate::spec::cert::ClusterIssuer;
-use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
+use crate::util::{SkateLabels, get_skate_label_value, metadata_name};
 use sqlx::SqlitePool;
 use std::error::Error;
 
