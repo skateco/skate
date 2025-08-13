@@ -1,4 +1,4 @@
-use crate::scheduler::plugins::{inverted_normalize_scores, Plugin, Score, ScoreError};
+use crate::scheduler::plugins::{Plugin, Score, ScoreError, inverted_normalize_scores};
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::state::state::NodeState;
 use std::collections::BTreeMap;
@@ -47,7 +47,7 @@ impl Score for LeastPods {
 mod tests {
     use crate::scheduler::least_pods::LeastPods;
     use crate::scheduler::plugins::Score;
-    use crate::test_helpers::objects::{node_state, WithPod};
+    use crate::test_helpers::objects::{WithPod, node_state};
     use k8s_openapi::api::core::v1::Pod;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 

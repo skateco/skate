@@ -6,13 +6,13 @@ use crate::node_client::{NodeClient, NodeClients};
 use crate::refresh::Refresh;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
-use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
+use crate::skatelet::database::resource::ResourceType;
 use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
-    split_container_image, transfer_file_cmd, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR,
-    RE_HOST_SEGMENT, RE_IP,
+    CHECKBOX_EMOJI, CROSS_EMOJI, ImageTagFormat, RE_CIDR, RE_HOST_SEGMENT, RE_IP,
+    split_container_image, transfer_file_cmd,
 };
 use crate::{oci, template, util};
 use anyhow::anyhow;
@@ -107,7 +107,8 @@ impl CommandVariant for UbuntuProvisioner {
 
 impl CommandVariant for FedoraProvisioner {
     fn system_update(&self) -> String {
-        "sudo dnf -y update && sudo dnf -y upgrade".into()
+        // fedora seems to be dodgy here so we don't error if it fails
+        "sudo dnf -y check-update; sudo dnf -y upgrade || exit 0".into()
     }
 
     fn install_podman(&self) -> String {
@@ -426,12 +427,14 @@ async fn propagate_static_resources(
     println!("propagating {} resources", all_manifests.len());
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = vec![state
-        .nodes
-        .iter()
-        .find(|n| n.node_name == node.name)
-        .cloned()
-        .unwrap()];
+    filtered_state.nodes = vec![
+        state
+            .nodes
+            .iter()
+            .find(|n| n.node_name == node.name)
+            .cloned()
+            .unwrap(),
+    ];
 
     let scheduler = DefaultScheduler::new();
 
@@ -621,7 +624,9 @@ async fn setup_networking(
 
     let coredns_tag = coredns_tag.to_suffix();
 
-    let cmd = format!("sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}");
+    let cmd = format!(
+        "sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}"
+    );
     conn.execute_stdout(&cmd, true, true).await?;
 
     // In ubuntu 24.04 there's an issue with apparmor and podman

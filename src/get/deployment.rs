@@ -1,9 +1,9 @@
-use crate::get::lister::{Lister, NameFilters};
 use crate::get::GetObjectArgs;
+use crate::get::lister::{Lister, NameFilters};
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodParent, PodmanPodInfo, PodmanPodStatus};
 use crate::state::state::ClusterState;
-use crate::util::{age, get_skate_label_value, NamespacedName, SkateLabels};
+use crate::util::{NamespacedName, SkateLabels, age, get_skate_label_value};
 use chrono::Local;
 use serde::Serialize;
 use std::collections::HashMap;

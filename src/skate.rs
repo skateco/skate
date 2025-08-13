@@ -284,10 +284,10 @@ mod tests {
     use crate::rollout::RolloutDeps;
     use crate::skate::Commands::Refresh;
     use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
-    use crate::skate::{skate_with_args, Cli, ConfigFileArgs, Distribution, Platform};
+    use crate::skate::{Cli, ConfigFileArgs, Distribution, Platform, skate_with_args};
     use crate::test_helpers::ssh_mocks::MockSshManager;
     use crate::upgrade::UpgradeDeps;
-    use crate::{skate, AllDeps};
+    use crate::{AllDeps, skate};
 
     struct TestDeps {}
 

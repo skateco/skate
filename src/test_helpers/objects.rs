@@ -1,7 +1,7 @@
 use crate::node_client::HostInfo;
 use crate::skate::{Distribution, Platform};
-use crate::skatelet::system::DiskInfo;
 use crate::skatelet::SystemInfo;
+use crate::skatelet::system::DiskInfo;
 use crate::state::state::NodeState;
 use crate::state::state::NodeStatus::Healthy;
 use crate::util::{NamespacedName, SkateLabels};

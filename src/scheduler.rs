@@ -15,16 +15,16 @@ use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::spec::cert::ClusterIssuer;
 use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
-use crate::util::{hash_k8s_resource, metadata_name, NamespacedName, SkateLabels, CROSS_EMOJI};
+use crate::util::{CROSS_EMOJI, NamespacedName, SkateLabels, hash_k8s_resource, metadata_name};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use colored::Colorize;
 use itertools::Itertools;
+use k8s_openapi::Metadata;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, RollingUpdateDeployment};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
-use k8s_openapi::Metadata;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::error::Error;
@@ -263,7 +263,7 @@ impl DefaultScheduler {
                     "unrecognised strategy {}",
                     strategy.type_.unwrap_or_default()
                 )
-                .into())
+                .into());
             }
         };
 
@@ -1147,8 +1147,10 @@ impl Scheduler for DefaultScheduler {
                     );
                     results.placements = [
                         results.placements,
-                        vec![ScheduledOperation::new(OpType::Info, object.clone())
-                            .error(err.to_string())],
+                        vec![
+                            ScheduledOperation::new(OpType::Info, object.clone())
+                                .error(err.to_string()),
+                        ],
                     ]
                     .concat();
                 }
@@ -1212,9 +1214,11 @@ mod tests {
             .filter(|o| matches!(o.resource, SupportedResources::Pod(_)))
             .collect_vec();
         assert_eq!(2, pod_ops.len());
-        assert!(pod_ops
-            .iter()
-            .all(|o| o.operation == OpType::Create && o.node.is_none()));
+        assert!(
+            pod_ops
+                .iter()
+                .all(|o| o.operation == OpType::Create && o.node.is_none())
+        );
 
         println!(
             "{:?}",

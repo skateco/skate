@@ -19,7 +19,7 @@ FROM $BASE_IMAGE AS base
 
 #COPY --chmod=0644 files/etc/systemd/system/* /etc/systemd/system/
 
-RUN sudo dnf -y install \
+RUN sudo check-update; sudo dnf -y update; dnf -y install \
      iproute \
      awk \
      podman \
@@ -30,6 +30,7 @@ RUN sudo dnf -y install \
      vim \
      openssh-server \
      systemd \
+     dbus \
      dnsmasq \
      wget \
      dnsutils \

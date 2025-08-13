@@ -1,7 +1,7 @@
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::skatelet::database::peer::{delete_peers, list_peers, upsert_peer, Peer};
+use crate::skatelet::database::peer::{Peer, delete_peers, list_peers, upsert_peer};
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use itertools::Itertools;

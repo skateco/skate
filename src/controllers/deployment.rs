@@ -1,8 +1,8 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
-use crate::skatelet::database::resource::{delete_resource, upsert_resource, ResourceType};
-use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
+use crate::skatelet::database::resource::{ResourceType, delete_resource, upsert_resource};
+use crate::util::{SkateLabels, get_skate_label_value, metadata_name};
 use k8s_openapi::api::apps::v1::Deployment;
 use sqlx::SqlitePool;
 use std::error::Error;
