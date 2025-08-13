@@ -77,7 +77,7 @@ run-e2e-tests-docker-fedora:
 		--ssh-private-key ${SSH_PRIVATE_KEY} \
 		--ssh-public-key ${SSH_PUBLIC_KEY} \
 		--skatelet-binary-path ${SKATELET_PATH} \
-		--image ghcr.io/skateco/sind:0.1.0-fedora
+		--image ghcr.io/skateco/sind:0.1.1-fedora
 	cargo run --bin skate -- config use-context sind
 	SKATE_E2E=1 cargo test --test '*' -v -- --show-output --nocapture
 
