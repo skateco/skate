@@ -32,7 +32,7 @@ pub enum DeleteCommands {
 }
 
 #[derive(Debug, Args)]
-pub struct DeleteResourceArgs {
+pub struct DeleteNamespaceArgs {
     name: String,
     #[command(flatten)]
     config: ConfigFileArgs,
@@ -89,7 +89,17 @@ impl<D: DeleteDeps> Delete<D> {
                     .await?
             }
             DeleteCommands::Cluster(args) => self.delete_cluster(args).await?,
-            DeleteCommands::Namespace(args) => self.delete_namespace(args).await?,
+            DeleteCommands::Namespace(args) => {
+                self.delete_resource(
+                    ResourceType::Namespace,
+                    DeleteResourceArgs {
+                        name: args.name.clone(),
+                        namespace: args.name,
+                        config: args.config,
+                    },
+                )
+                .await?
+            }
         }
         Ok(())
     }
@@ -192,52 +202,5 @@ impl<D: DeleteDeps> Delete<D> {
         }
         config.delete_cluster(&cluster.clone())?;
         config.persist(Some(args.config.skateconfig))
-    }
-    async fn delete_namespace(&self, args: DeleteNamespaceArgs) -> Result<(), SkateError> {
-        let config = Config::load(Some(args.config.skateconfig.clone()))?;
-        let ssh_mgr = self.deps.get();
-        let (conns, errors) = ssh_mgr
-            .cluster_connect(config.active_cluster(args.config.context)?)
-            .await;
-        if errors.is_some() {
-            eprintln!("{}", errors.unwrap())
-        }
-
-        if conns.is_none() {
-            return Ok(());
-        }
-
-        let conns = conns.unwrap();
-
-        let mut results = vec![];
-        let mut errors = vec![];
-
-        for conn in conns.clients {
-            match conn.remove_namespace(r_type.clone(), &args.name).await {
-                Ok(result) => {
-                    if !result.0.is_empty() {
-                        result
-                            .0
-                            .trim()
-                            .split("\n")
-                            .map(|line| format!("{} - {}", conn.node_name(), line))
-                            .for_each(|line| println!("{}", line))
-                    }
-                    results.push(result)
-                }
-                Err(e) => errors.push(e.to_string()),
-            }
-        }
-
-        match errors.is_empty() {
-            false => Err(anyhow!("\n{}", errors.join("\n")).into()),
-            true => {
-                println!(
-                    "{} deleted {} {}.{}",
-                    CHECKBOX_EMOJI, r_type, args.name, args.namespace
-                );
-                Ok(())
-            }
-        }
     }
 }

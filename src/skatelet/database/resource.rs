@@ -191,6 +191,12 @@ pub enum ResourceType {
     ClusterIssuer,
     #[strum(serialize = "nodes", serialize = "node", to_string = "node")]
     Node,
+    #[strum(
+        serialize = "namespaces",
+        serialize = "namespace",
+        to_string = "namespace"
+    )]
+    Namespace,
 }
 
 impl From<String> for ResourceType {
