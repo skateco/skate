@@ -515,6 +515,7 @@ async fn test_delete_namespace() -> Result<(), anyhow::Error> {
     skate_stdout("delete", &["namespace", "test-deployment"]).await?;
 
     let (stdout, stderr) = skate("get", &["pods", "-n", "test-deployment"]).await?;
-    assert!(stdout.trim().is_empty());
+    let lines = stdout.lines().skip(1);
+    assert_eq!(lines.clone().count(), 0);
     Ok(())
 }
