@@ -153,6 +153,7 @@ impl TryFrom<&SupportedResources> for ObjectListItem {
             SupportedResources::Secret(s) => &s.metadata,
             SupportedResources::Service(s) => &s.metadata,
             SupportedResources::ClusterIssuer(i) => &i.metadata,
+            SupportedResources::Namespace(ns) => &ns.metadata,
         };
 
         let name = get_skate_label_value(&meta.labels, &SkateLabels::Name).ok_or("no name")?;

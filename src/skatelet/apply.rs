@@ -101,6 +101,7 @@ async fn apply_supported_resource<D: ApplyDeps>(
             let ctrl = ClusterIssuerController::new(deps.get_db(), ingress_ctrl);
             ctrl.apply(issuer).await?;
         }
+        SupportedResources::Namespace(_) => {}
     }
     Ok(())
 }

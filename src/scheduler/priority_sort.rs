@@ -3,6 +3,7 @@ use k8s_openapi::api::core::v1::Pod;
 
 pub(crate) struct PrioritySort {}
 
+#[allow(unused)]
 pub fn pod_priority(pod: &Pod) -> i32 {
     pod.spec
         .as_ref()

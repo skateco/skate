@@ -855,6 +855,7 @@ impl DefaultScheduler {
             SupportedResources::Secret(secret) => Self::plan_secret(state, secret),
             SupportedResources::Service(service) => Self::plan_service(state, service),
             SupportedResources::ClusterIssuer(issuer) => Self::plan_cluster_issuer(state, issuer),
+            SupportedResources::Namespace(_ns) => todo!(),
         }
     }
 
