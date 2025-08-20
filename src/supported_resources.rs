@@ -102,9 +102,11 @@ impl TryFrom<&Value> for SupportedResources {
                     let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::ClusterIssuer(clusterissuer))
                 } else {
-                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind))
-                        .context("unsupported resource type")
-                        .into())
+                    Err(anyhow!(format!(
+                        "unsupported resource: version {}, kind {}",
+                        api_version, kind
+                    ))
+                    .into())
                 }
             }
             _ => Err(anyhow!("missing 'kind' and 'apiVersion' fields")
