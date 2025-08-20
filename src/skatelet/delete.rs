@@ -326,7 +326,8 @@ impl<D: DeleteDeps> Deleter<D> {
 
                 for resource in resources {
                     let manifest = serde_yaml::to_string(&resource)?;
-                    let object: SupportedResources = serde_yaml::from_str(&manifest)?;
+                    let object: serde_yaml::Value = serde_yaml::from_str(&manifest)?;
+                    let object: SupportedResources = object.try_into()?;
                     Box::pin(self.manifest_delete(&object, grace_period)).await?;
                 }
             }
