@@ -109,9 +109,7 @@ impl TryFrom<&Value> for SupportedResources {
                     .into())
                 }
             }
-            _ => Err(anyhow!("missing 'kind' and 'apiVersion' fields")
-                .context("unsupported resource type")
-                .into()),
+            _ => Err(anyhow!("resource missing 'kind' and 'apiVersion' fields").into()),
         }
     }
 }
