@@ -165,6 +165,9 @@ async fn e2e_test() {
     test_cronjob().await.expect("failed to test cronjob");
     test_secret().await.expect("failed to test secret");
     test_ingress().await.expect("failed to test ingresses");
+    test_delete_namespace()
+        .await
+        .expect("failed to delete namspace");
 }
 
 async fn test_cluster_creation() -> Result<(), anyhow::Error> {
@@ -505,5 +508,14 @@ async fn test_ingress() -> Result<(), anyhow::Error> {
         }
     }
 
+    Ok(())
+}
+
+async fn test_delete_namespace() -> Result<(), anyhow::Error> {
+    skate_stdout("delete", &["namespace", "test-deployment"]).await?;
+
+    let (stdout, _stderr) = skate("get", &["pods", "-n", "test-deployment"]).await?;
+    let lines = stdout.lines().skip(1);
+    assert_eq!(lines.clone().count(), 0);
     Ok(())
 }

@@ -28,6 +28,14 @@ pub enum DeleteCommands {
     Service(DeleteResourceArgs),
     ClusterIssuer(DeleteResourceArgs),
     Cluster(DeleteClusterArgs),
+    Namespace(DeleteNamespaceArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct DeleteNamespaceArgs {
+    name: String,
+    #[command(flatten)]
+    config: ConfigFileArgs,
 }
 
 #[derive(Debug, Args)]
@@ -81,6 +89,17 @@ impl<D: DeleteDeps> Delete<D> {
                     .await?
             }
             DeleteCommands::Cluster(args) => self.delete_cluster(args).await?,
+            DeleteCommands::Namespace(args) => {
+                self.delete_resource(
+                    ResourceType::Namespace,
+                    DeleteResourceArgs {
+                        name: args.name.clone(),
+                        namespace: args.name,
+                        config: args.config,
+                    },
+                )
+                .await?
+            }
         }
         Ok(())
     }

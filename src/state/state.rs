@@ -534,7 +534,7 @@ impl ClusterState {
         &mut self,
         filter_node: Option<&str>,
         filter_types: &[ResourceType],
-    ) -> Vec<MutCatalogueItem> {
+    ) -> Vec<MutCatalogueItem<'_>> {
         self.nodes
             .iter_mut()
             .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
@@ -559,7 +559,7 @@ impl ClusterState {
         filter_types: &[ResourceType],
         namespace: Option<&str>,
         name: Option<&str>,
-    ) -> Vec<CatalogueItem> {
+    ) -> Vec<CatalogueItem<'_, '_, '_, '_>> {
         let mut map: HashMap<String, CatalogueItem> = HashMap::new();
 
         for node in &self.nodes {

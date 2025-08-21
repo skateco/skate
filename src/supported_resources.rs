@@ -8,7 +8,7 @@ use anyhow::anyhow;
 use k8s_openapi::Resource;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
+use k8s_openapi::api::core::v1::{Namespace, Pod, PodTemplateSpec, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,8 @@ pub enum SupportedResources {
     Service(Service),
     #[strum(serialize = "ClusterIssuer")]
     ClusterIssuer(ClusterIssuer),
+    #[strum(serialize = "Namespace")]
+    Namespace(Namespace),
 }
 
 impl Into<ResourceType> for &SupportedResources {
@@ -48,6 +50,7 @@ impl Into<ResourceType> for &SupportedResources {
             SupportedResources::Secret(_) => ResourceType::Secret,
             SupportedResources::Service(_) => ResourceType::Service,
             SupportedResources::ClusterIssuer(_) => ResourceType::ClusterIssuer,
+            SupportedResources::Namespace(_) => ResourceType::Namespace,
         }
     }
 }
@@ -99,14 +102,14 @@ impl TryFrom<&Value> for SupportedResources {
                     let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::ClusterIssuer(clusterissuer))
                 } else {
-                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind))
-                        .context("unsupported resource type")
-                        .into())
+                    Err(anyhow!(format!(
+                        "unsupported resource: version {}, kind {}",
+                        api_version, kind
+                    ))
+                    .into())
                 }
             }
-            _ => Err(anyhow!("missing 'kind' and 'apiVersion' fields")
-                .context("unsupported resource type")
-                .into()),
+            _ => Err(anyhow!("resource missing 'kind' and 'apiVersion' fields").into()),
         }
     }
 }
@@ -122,6 +125,7 @@ impl SupportedResources {
             SupportedResources::Secret(s) => metadata_name(s),
             SupportedResources::Service(s) => metadata_name(s),
             SupportedResources::ClusterIssuer(c) => metadata_name(c),
+            SupportedResources::Namespace(n) => metadata_name(n),
         }
     }
 
@@ -243,6 +247,7 @@ impl SupportedResources {
             SupportedResources::Secret(_) => false,
             SupportedResources::Service(_) => false,
             SupportedResources::ClusterIssuer(_) => false,
+            SupportedResources::Namespace(_) => false,
         }
     }
     fn fixup_pod_template(
@@ -499,6 +504,10 @@ impl SupportedResources {
             }
             SupportedResources::ClusterIssuer(ref mut issuer) => {
                 issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
+                resource
+            }
+            SupportedResources::Namespace(ref mut ns) => {
+                ns.metadata = Self::fixup_metadata(ns.metadata.clone(), None)?;
                 resource
             }
         };
