@@ -1,8 +1,7 @@
-use crate::scheduler::plugins::{inverted_normalize_scores, Plugin, Score, ScoreError};
+use crate::scheduler::plugins::{Plugin, Score, ScoreError, inverted_normalize_scores};
 use crate::skatelet::system::podman::PodmanPodStatus;
 use crate::state::state::NodeState;
 use std::collections::BTreeMap;
-use std::error::Error;
 
 /// LeastPods is a scoring plugin that scores nodes based on the number of pods they are currently running.
 pub(crate) struct LeastPods {}
@@ -16,7 +15,7 @@ impl Plugin for LeastPods {
 impl Score for LeastPods {
     fn score(
         &self,
-        pod: &k8s_openapi::api::core::v1::Pod,
+        _: &k8s_openapi::api::core::v1::Pod,
         node: &NodeState,
     ) -> Result<u64, ScoreError> {
         if let Some(si) = node.system_info() {
@@ -44,10 +43,11 @@ impl Score for LeastPods {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::scheduler::least_pods::LeastPods;
     use crate::scheduler::plugins::Score;
-    use crate::test_helpers::objects::{node_state, WithPod};
+    use crate::test_helpers::objects::{WithPod, node_state};
     use k8s_openapi::api::core::v1::Pod;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 

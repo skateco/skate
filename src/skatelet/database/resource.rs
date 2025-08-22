@@ -142,6 +142,24 @@ pub async fn list_resources_by_type(
     Ok(resources)
 }
 
+pub async fn list_resources_by_namespace(
+    db: impl SqliteExecutor<'_>,
+    ns: &str,
+) -> super::Result<Vec<Resource>> {
+    let resources = sqlx::query_as!(
+        Resource,
+        r#" SELECT id as "id!: String", name as "name!: String", namespace as "namespace!: String", resource_type, manifest as "manifest!: serde_json::Value",  hash as "hash!: String", created_at as "created_at!: DateTime<Local>", updated_at as "updated_at!: DateTime<Local>", generation
+            FROM resources
+            WHERE namespace = $1
+        "#,
+        ns
+    )
+        .fetch_all(db)
+        .await?;
+
+    Ok(resources)
+}
+
 pub async fn list_resources(db: impl SqliteExecutor<'_>) -> super::Result<Vec<Resource>> {
     let resources = sqlx::query_as!(
         Resource,
@@ -191,6 +209,12 @@ pub enum ResourceType {
     ClusterIssuer,
     #[strum(serialize = "nodes", serialize = "node", to_string = "node")]
     Node,
+    #[strum(
+        serialize = "namespaces",
+        serialize = "namespace",
+        to_string = "namespace"
+    )]
+    Namespace,
 }
 
 impl From<String> for ResourceType {

@@ -4,7 +4,6 @@ use itertools::Itertools;
 use k8s_openapi::api::core::v1::Pod;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::ops::DerefMut;
 
 ///
 /// func getDefaultPlugins() *v1.Plugins {
@@ -56,6 +55,7 @@ pub(crate) trait Plugin {
 // limitations under the License.
 // */
 pub trait QueueSort: Plugin {
+    #[allow(unused)]
     fn less(&self, pod1: &Pod, pod2: &Pod) -> bool;
 }
 
@@ -133,18 +133,19 @@ pub(crate) fn inverted_normalize_scores(
 /// This plugin is called before the scheduler binds the Pod to a Node.
 /// It can be used to perform any final setup on the Node prior to binding, like setting up a
 /// network interface or preparing a volume
+#[allow(unused)]
 pub trait PreBind: Plugin {
     fn pre_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }
 
+#[allow(unused)]
 pub trait PostBind: Plugin {
     fn post_bind(&self, pod: &Pod, node: &NodeState) -> Result<(), Box<dyn Error>>;
 }
 
+#[cfg(test)]
 mod tests {
     use crate::scheduler::plugins::{Plugin, ScoreError};
-    use std::collections::BTreeMap;
-    use std::error::Error;
 
     struct TestScore {}
 
@@ -171,7 +172,7 @@ mod tests {
         scores.insert("node2".to_string(), 50);
         scores.insert("node3".to_string(), 75);
 
-        let mut plugin = TestScore {};
+        let plugin = TestScore {};
         plugin.normalize_scores(&mut scores).unwrap();
 
         assert_eq!(scores.get("node1").unwrap(), &0);

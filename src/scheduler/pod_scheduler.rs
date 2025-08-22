@@ -4,7 +4,6 @@ use crate::scheduler::node_name::NodeNameFilter;
 use crate::scheduler::node_resources_fit::{NodeResourcesFit, Strategy};
 use crate::scheduler::plugins::{Filter, PreFilter, QueueSort, Score};
 use crate::scheduler::priority_sort::PrioritySort;
-use crate::scheduler::resource_allocation::LeastAllocated;
 use crate::scheduler::unschedulable::UnschedulableFilter;
 use crate::scheduler::{NodeSelection, RejectedNode};
 use crate::state::state::NodeState;
@@ -17,6 +16,7 @@ pub const DEFAULT_MILLI_CPU_REQUEST: u64 = 100; // 0.1 CPU in milliCPU
 pub const DEFAULT_MEMORY_REQUEST: u64 = 200 * 1024 * 1024; // 200 MiB in bytes
 
 pub struct PodScheduler {
+    #[allow(unused)]
     sorter: Box<dyn QueueSort>,
     pre_filters: Vec<Box<dyn PreFilter>>,
     filters: Vec<Box<dyn Filter>>,

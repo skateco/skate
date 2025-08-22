@@ -1,14 +1,16 @@
+pub(crate) mod linux;
+
 use crate::exec::ShellExec;
 use crate::supported_resources::SupportedResources;
 use anyhow::anyhow;
-use base64::engine::general_purpose;
 use base64::Engine;
+use base64::engine::general_purpose;
 use chrono::{DateTime, Local};
 use deunicode::deunicode_char;
 use fs2::FileExt;
 use itertools::Itertools;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use k8s_openapi::Metadata;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use log::info;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -177,9 +179,11 @@ impl NamespacedName {
 
 pub trait GetSkateLabels {
     fn namespaced_name(&self) -> NamespacedName;
+    #[allow(unused)]
     fn hash(&self) -> String;
 }
 
+#[allow(unused)]
 pub fn get_label_value(
     labels: &Option<std::collections::BTreeMap<String, String>>,
     key: &str,
@@ -357,6 +361,7 @@ pub fn transfer_file_cmd(contents: &str, remote_path: &str) -> String {
 pub static RE_CIDR: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|24))").unwrap());
 pub static RE_IP: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([0-9]{1,3}\.){3}[0-9]{1,3}$").unwrap());
+pub static RE_HOST_SEGMENT: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[0-9a-z\-_]+$").unwrap());
 
 pub enum ImageTagFormat {
     None,
@@ -418,7 +423,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::util::{age, get_label_value, SkateLabels};
+    use crate::util::{SkateLabels, age, get_label_value};
     use chrono::{Duration, Local};
 
     #[test]

@@ -1,4 +1,4 @@
-use k8s_openapi::{apimachinery, ClusterResourceScope, Metadata, Resource};
+use k8s_openapi::{ClusterResourceScope, Metadata, Resource, apimachinery};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, PartialEq)]

@@ -15,7 +15,7 @@ use crate::logs::{LogArgs, Logs, LogsDeps};
 use crate::node_shell::{NodeShell, NodeShellArgs, NodeShellDeps};
 use crate::refresh::{Refresh, RefreshArgs, RefreshDeps};
 use crate::rollout::{Rollout, RolloutArgs, RolloutDeps};
-use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
+use crate::skate::Distribution::{Debian, Fedora, FedoraCoreOs, Raspbian, Ubuntu, Unknown};
 use crate::upgrade::{Upgrade, UpgradeArgs, UpgradeDeps};
 use crate::util;
 use clap::{Args, Parser, Subcommand};
@@ -237,6 +237,7 @@ pub enum Distribution {
     Raspbian,
     Ubuntu,
     Fedora,
+    FedoraCoreOs,
 }
 
 impl From<&str> for Distribution {
@@ -246,7 +247,23 @@ impl From<&str> for Distribution {
             s if s.starts_with("raspbian") => Raspbian,
             s if s.starts_with("ubuntu") => Ubuntu,
             s if s.starts_with("fedora") => Fedora,
+            s if s.starts_with("fcos") => FedoraCoreOs,
             _ => Unknown,
+        }
+    }
+}
+impl Distribution {
+    pub fn from_dist_variant(dist_name: &str, variant_id: &str) -> Self {
+        let d = Distribution::from(dist_name);
+        match d {
+            Fedora => {
+                if variant_id.starts_with("coreos") {
+                    FedoraCoreOs
+                } else {
+                    d
+                }
+            }
+            _ => d,
         }
     }
 }
@@ -267,10 +284,10 @@ mod tests {
     use crate::rollout::RolloutDeps;
     use crate::skate::Commands::Refresh;
     use crate::skate::Distribution::{Debian, Fedora, Raspbian, Ubuntu, Unknown};
-    use crate::skate::{skate_with_args, Cli, ConfigFileArgs, Distribution, Platform};
+    use crate::skate::{Cli, ConfigFileArgs, Distribution, Platform, skate_with_args};
     use crate::test_helpers::ssh_mocks::MockSshManager;
     use crate::upgrade::UpgradeDeps;
-    use crate::{skate, AllDeps};
+    use crate::{AllDeps, skate};
 
     struct TestDeps {}
 

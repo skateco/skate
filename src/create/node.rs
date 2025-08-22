@@ -2,37 +2,47 @@ use crate::apply::{Apply, ApplyArgs};
 use crate::config::{Cluster, Config, Node};
 use crate::create::CreateDeps;
 use crate::errors::SkateError;
+use crate::node_client::{NodeClient, NodeClients};
 use crate::refresh::Refresh;
 use crate::scheduler::{DefaultScheduler, Scheduler};
 use crate::skate::{ConfigFileArgs, Distribution};
-use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::VAR_PATH;
-use crate::ssh::{SshClient, SshClients};
+use crate::skatelet::database::resource::ResourceType;
 use crate::state::state::ClusterState;
 use crate::supported_resources::SupportedResources;
 use crate::util::{
-    split_container_image, ImageTagFormat, CHECKBOX_EMOJI, CROSS_EMOJI, RE_CIDR, RE_IP,
+    CHECKBOX_EMOJI, CROSS_EMOJI, ImageTagFormat, RE_CIDR, RE_HOST_SEGMENT, RE_IP,
+    split_container_image, transfer_file_cmd,
 };
-use crate::{oci, util};
+use crate::{oci, template, util};
 use anyhow::anyhow;
 use clap::Args;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use semver::{Version, VersionReq};
+use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Write;
-use std::net::ToSocketAddrs;
 use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
 const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
 
+const CONTAINERS_CONF: &str = include_str!("../resources/containers.conf");
+
+const PODMAN_VERSION_SEMVER_REQUEST: &str = ">=3.0.0";
+
 #[derive(Debug, Args, Validate)]
 pub struct CreateNodeArgs {
+    #[validate(
+        regex(path = *RE_HOST_SEGMENT, message = "name can only contain a-z, 0-9, _ or -"),
+        length(min = 1, max = 128)
+    )]
     #[arg(long, long_help = "Name of the node.")]
     name: String,
+    #[validate(length(max = 253))]
     #[arg(long, long_help = "IP or domain name of the node from skate cli.")]
     host: String,
     #[validate(regex(path = *RE_IP, message = "peer-host must be a valid ipv4 address"))]
@@ -59,11 +69,17 @@ trait CommandVariant {
     fn system_update(&self) -> String;
     fn install_podman(&self) -> String;
     fn install_keepalived(&self) -> String;
-    fn remove_apparmor(&self) -> String;
+    fn remove_kernel_security(&self) -> String;
+
+    fn configure_etc_containers_registries(&self) -> String;
+
+    fn configure_firewall(&self) -> String;
 }
 
 struct UbuntuProvisioner {}
 struct FedoraProvisioner {}
+
+struct FedoraCoreosProvisioner {}
 
 impl CommandVariant for UbuntuProvisioner {
     fn system_update(&self) -> String {
@@ -77,14 +93,22 @@ impl CommandVariant for UbuntuProvisioner {
         "sudo apt-get install -y keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
+    fn remove_kernel_security(&self) -> String {
         "sudo aa-teardown && sudo apt purge -y apparmor".into()
+    }
+    fn configure_etc_containers_registries(&self) -> String {
+        "".into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "".into()
     }
 }
 
 impl CommandVariant for FedoraProvisioner {
     fn system_update(&self) -> String {
-        "sudo dnf -y update && sudo dnf -y upgrade".into()
+        // fedora seems to be dodgy here so we don't error if it fails
+        "sudo dnf -y check-update; sudo dnf -y upgrade || exit 0".into()
     }
 
     fn install_podman(&self) -> String {
@@ -95,7 +119,43 @@ impl CommandVariant for FedoraProvisioner {
         "sudo dnf -y install keepalived".into()
     }
 
-    fn remove_apparmor(&self) -> String {
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
+        "sudo systemctl stop firewalld; sudo systemctl disable firewalld".into()
+    }
+}
+
+impl CommandVariant for FedoraCoreosProvisioner {
+    fn system_update(&self) -> String {
+        "".into()
+    }
+
+    fn install_podman(&self) -> String {
+        "".into()
+    }
+
+    fn install_keepalived(&self) -> String {
+        "".into()
+    }
+
+    fn remove_kernel_security(&self) -> String {
+        "sudo setenforce 0; sudo sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config"
+            .into()
+    }
+
+    fn configure_etc_containers_registries(&self) -> String {
+        r#"sudo bash -c "sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf""#.into()
+    }
+
+    fn configure_firewall(&self) -> String {
         "".into()
     }
 }
@@ -164,7 +224,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             Box::new(UbuntuProvisioner {})
         }
         Distribution::Fedora => Box::new(FedoraProvisioner {}),
-        _ => {
+        Distribution::FedoraCoreOs => Box::new(FedoraCoreosProvisioner {}),
+        Distribution::Unknown => {
             return Err(anyhow!("unknown distribution").into());
         }
     };
@@ -174,17 +235,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     match info.podman_version.as_ref() {
         Some(version) => {
-            let min_podman_ver = ">=3.0.0";
-            let req = VersionReq::parse(min_podman_ver).unwrap();
-            let version = Version::parse(version).unwrap();
+            validate_podman_version(version)?;
 
-            if !req.matches(&version) {
-                return Err(anyhow!(
-                    "podman version too old, must be {}, see https://podman.io/docs/installation",
-                    min_podman_ver
-                )
-                .into());
-            }
             println!(
                 "podman version {} already installed {} ",
                 version, CHECKBOX_EMOJI
@@ -195,8 +247,8 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
             let command = provisioner.install_podman();
 
             let installed = {
-                println!("installing podman with command {}", command);
-                let result = conn.execute(&command).await;
+                println!("installing podman");
+                let result = conn.execute_stdout(&command, true, true).await;
                 match result {
                     Ok(_) => {
                         println!("podman installed successfully {} ", CHECKBOX_EMOJI);
@@ -218,21 +270,17 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         }
     }
 
-    // seems to be missing when using kube play
-    // TODO - might not need this anymore
-    let cmd =
-        "sudo podman image exists k8s.gcr.io/pause:3.5 || sudo podman pull  k8s.gcr.io/pause:3.5";
-    let _ = conn.execute_stdout(cmd, true, true).await;
+    // enable the restart service
+    conn.execute_stdout("sudo systemctl enable podman-restart.service && sudo systemctl start podman-restart.service", true, true).await?;
 
     let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
-    let all_conns = &all_conns.unwrap_or(SshClients { clients: vec![] });
+    let all_conns = &all_conns.unwrap_or(NodeClients { clients: vec![] });
 
-    let skate_dirs = [
+    let skate_dirs: [&str; 4] = [
         &format!("{VAR_PATH}/ingress"),
         &format!("{VAR_PATH}/ingress/letsencrypt_storage"),
         &format!("{VAR_PATH}/dns"),
         &format!("{VAR_PATH}/keepalived"),
-        "/etc/skate",
     ];
 
     conn.execute_stdout(
@@ -252,14 +300,30 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         true,
     )
     .await?;
+
+    // ensure syslog user exists
+    conn.execute_stdout(
+        "sudo useradd syslog -g adm || echo \"syslog user already exists\"",
+        true,
+        true,
+    )
+    .await?;
+
     conn.execute_stdout(
         "sudo chown syslog:adm /etc/rsyslog.d/10-skate.conf",
         true,
         true,
     )
     .await?;
+
+    conn.execute_stdout("sudo touch /var/log/skate.log", true, true)
+        .await?;
+
+    conn.execute_stdout("sudo chown syslog:adm /var/log/skate.log", true, true)
+        .await?;
+    // particularly important for fedora
     conn.execute_stdout(
-        "sudo touch /var/log/skate.log && sudo chown syslog:adm /var/log/skate.log",
+        "sudo mkdir -p /var/lib/rsyslog && sudo chown syslog:adm /var/lib/rsyslog",
         true,
         true,
     )
@@ -297,6 +361,26 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     Ok(())
 }
 
+fn validate_podman_version(version: &str) -> Result<(), Box<dyn Error>> {
+    // HACK since I can't get the request to make semver accept the rc
+    // TODO - check later if the request can be formulated to do this
+    let version = version.split('-').collect_vec();
+    let version = version.get(0).unwrap();
+
+    let req = VersionReq::parse(PODMAN_VERSION_SEMVER_REQUEST).unwrap();
+    let version = Version::parse(version).unwrap();
+
+    if !req.matches(&version) {
+        return Err(anyhow!(
+                    "podman version {} does not match constraint {}, see https://podman.io/docs/installation",
+                    version,
+                    PODMAN_VERSION_SEMVER_REQUEST
+                )
+            .into());
+    }
+    Ok(())
+}
+
 fn get_coredns_image() -> Result<(String, ImageTagFormat), Box<dyn Error>> {
     let manifest: DaemonSet = serde_yaml::from_str(COREDNS_MANIFEST)?;
 
@@ -319,7 +403,7 @@ fn get_coredns_image() -> Result<(String, ImageTagFormat), Box<dyn Error>> {
 // could be to take only resources that are the same on all nodes, log others
 async fn propagate_static_resources(
     _conf: &Config,
-    all_conns: &SshClients,
+    all_conns: &NodeClients,
     node: &Node,
     state: &ClusterState,
 ) -> Result<(), Box<dyn Error>> {
@@ -343,12 +427,14 @@ async fn propagate_static_resources(
     println!("propagating {} resources", all_manifests.len());
 
     let mut filtered_state = state.clone();
-    filtered_state.nodes = vec![state
-        .nodes
-        .iter()
-        .find(|n| n.node_name == node.name)
-        .cloned()
-        .unwrap()];
+    filtered_state.nodes = vec![
+        state
+            .nodes
+            .iter()
+            .find(|n| n.node_name == node.name)
+            .cloned()
+            .unwrap(),
+    ];
 
     let scheduler = DefaultScheduler::new();
 
@@ -360,6 +446,42 @@ async fn propagate_static_resources(
     Ok(())
 }
 
+fn template_coredns_manifest(config: &Cluster) -> String {
+    let noop_dns_server = "127.0.0.1:6053";
+
+    let mut gathersrv_list = vec![];
+    let mut forward_list = vec![];
+    let mut rewrite_list = vec![];
+
+    let padding = " ".repeat(15); // get past the yaml indentation
+
+    // the gathersrv stanza needs a list of upstreams to forward to
+    config.nodes.iter().enumerate().for_each(|(i, n)| {
+        let node_name = &n.name;
+        let domain = format!("pod.n-{node_name}.skate.",);
+        let peer_host = &n.peer_host;
+
+        gathersrv_list.push(format!("{padding}{domain} {i}"));
+
+        forward_list.push(format!(
+            r#"{padding}forward {domain} {peer_host}:5553 {noop_dns_server} {{
+{padding}    policy sequential
+{padding}    health_check 0.5s
+{padding}}}"#,
+        ));
+        rewrite_list.push(format!(
+            "{padding}rewrite name suffix .n-{node_name}.skate. .cluster.skate."
+        ))
+    });
+
+    let coredns_yaml = COREDNS_MANIFEST
+        .replace("%%rewrite_list%%", &rewrite_list.join("\n"))
+        .replace("%%forward_list%%", &forward_list.join("\n"))
+        .replace("%%gathersrv_list%%", &gathersrv_list.join("\n"));
+
+    coredns_yaml
+}
+
 pub async fn install_cluster_manifests<D: CreateDeps>(
     deps: &D,
     args: &ConfigFileArgs,
@@ -369,18 +491,10 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
     // COREDNS
     // coredns listens on port 53 and 5533
     // port 53 serves .cluster.skate by forwarding to all coredns instances on port 5553
-    // uses fanout plugin
+    // uses gathersrv plugin
+    let coredns_yaml = template_coredns_manifest(config);
 
-    // replace forward list in coredns config with that of other hosts
-    let fanout_list = config
-        .nodes
-        .iter()
-        .map(|n| n.peer_host.clone() + ":5553")
-        .join(" ");
-
-    let coredns_yaml = COREDNS_MANIFEST.replace("%%fanout_list%%", &fanout_list);
-
-    let coredns_yaml_path = "/tmp/skate-coredns.yaml".to_string();
+    let coredns_yaml_path = format!("/tmp/skate-coredns.yaml");
     let mut file = File::create(&coredns_yaml_path)?;
     file.write_all(coredns_yaml.as_bytes())?;
 
@@ -417,8 +531,8 @@ pub async fn install_cluster_manifests<D: CreateDeps>(
 
 // TODO don't run things unless they need to be
 async fn setup_networking(
-    conn: &Box<dyn SshClient>,
-    all_conns: &SshClients,
+    conn: &Box<dyn NodeClient>,
+    all_conns: &NodeClients,
     cluster_conf: &Cluster,
     node: &Node,
     coredns_image: String,
@@ -443,25 +557,31 @@ async fn setup_networking(
     conn.execute_stdout("sudo systemctl start keepalived", true, true)
         .await?;
 
-    if conn
-        .execute_stdout("test -f /etc/containers/containers.conf", true, true)
-        .await
-        .is_err()
-    {
-        let cmd = "sudo cp /usr/share/containers/containers.conf /etc/containers/containers.conf";
-        conn.execute_stdout(cmd, true, true).await?;
-    } else {
-        println!("containers.conf already setup {} ", CHECKBOX_EMOJI);
-    }
+    let mut handlebars = template::new();
+    handlebars
+        .register_template_string("containers", CONTAINERS_CONF)
+        .map_err(|e| anyhow!(e).context("failed to load containers conf template"))?;
 
-    let cmd = format!("sudo sed -i 's&#default_subnet[ =].*&default_subnet = \"{}\"&' /etc/containers/containers.conf", node.subnet_cidr);
-    conn.execute_stdout(&cmd, true, true).await?;
+    let containers_conf = handlebars.render(
+        "containers",
+        &json!({
+            "default_subnet": node.subnet_cidr,
+            "network_backend": network_backend,
+        }),
+    )?;
 
-    let cmd = format!("sudo sed -i 's&#network_backend[ =].*&network_backend = \"{}\"&' /etc/containers/containers.conf", network_backend);
-    conn.execute_stdout(&cmd, true, true).await?;
+    conn.execute_stdout(
+        &transfer_file_cmd(&containers_conf, "/etc/containers/containers.conf"),
+        true,
+        true,
+    )
+    .await?;
 
     let current_backend = conn
-        .execute_noisy("sudo podman info |grep networkBackend: | awk '{print $2}'")
+        .execute(
+            "sudo podman info |grep networkBackend: | awk '{print $2}'",
+            true,
+        )
         .await?;
     if current_backend.trim() != network_backend {
         // Since we've changed the network backend we need to reset
@@ -492,13 +612,21 @@ async fn setup_networking(
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
     conn.execute_stdout(cmd, true, true).await?;
 
+    let cmd = provisioner.configure_etc_containers_registries();
+    if !cmd.is_empty() {
+        conn.execute_stdout(&cmd, true, true).await?
+    }
+
     for conn in &all_conns.clients {
-        create_replace_routes_file(conn, cluster_conf).await?;
+        // sync peers
+        sync_peers(&conn, cluster_conf).await?
     }
 
     let coredns_tag = coredns_tag.to_suffix();
 
-    let cmd = format!("sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}");
+    let cmd = format!(
+        "sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}"
+    );
     conn.execute_stdout(&cmd, true, true).await?;
 
     // In ubuntu 24.04 there's an issue with apparmor and podman
@@ -514,39 +642,53 @@ async fn setup_networking(
             .await?;
     }
 
-    let cmd = provisioner.remove_apparmor();
+    let cmd = provisioner.remove_kernel_security();
+    _ = conn.execute_stdout(&cmd, true, true).await;
+    let cmd = provisioner.configure_firewall();
     _ = conn.execute_stdout(&cmd, true, true).await;
 
-    // disable dns services if exists
-    for dns_service in ["dnsmasq", "systemd-resolved"] {
-        let _ = conn.execute_stdout(&format!("sudo bash -c 'systemctl disable {dns_service}; sudo systemctl stop {dns_service}'"), true, true).await;
-    }
+    // create dropin dir for resolved
+    conn.execute_stdout(
+        "sudo mkdir -p  /etc/systemd/resolved.conf.d/ /etc/dnsmasq.d/",
+        true,
+        true,
+    )
+    .await?;
 
-    // changed /etc/resolv.conf to be 127.0.0.1
-    // neeed to use a symlink so that it's respected and not overridden by systemd
-    let cmd = "sudo bash -c 'echo 127.0.0.1 > /etc/resolv-manual.conf'";
-    conn.execute_stdout(cmd, true, true).await?;
-    let cmd = "sudo bash -c 'rm /etc/resolv.conf; ln -s /etc/resolv-manual.conf /etc/resolv.conf'";
-    match conn.execute_stdout(cmd, true, true).await {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!(
-                "failed to change resolv.conf, we're probably inside a container: {}",
-                e
-            );
-        }
+    conn.execute_stdout(
+        &transfer_file_cmd(
+            "[Resolve]\nDNS=127.0.0.1:5053#cluster.skate\n",
+            "/etc/systemd/resolved.conf.d/skate.conf",
+        ),
+        true,
+        true,
+    )
+    .await?;
+
+    // no-resolv here is to ensure it respects our localhost upstream, otherwise it'll see localhost
+    // in /etc/resolv.conf and ignore ours
+    conn.execute_stdout(
+        &transfer_file_cmd(
+            "server=/cluster.skate/127.0.0.1#5053\nno-resolv\ncache-size=0\n",
+            "/etc/dnsmasq.d/skate.conf",
+        ),
+        true,
+        true,
+    )
+    .await?;
+
+    for dns_service in ["dnsmasq", "systemd-resolved"] {
+        let _ = conn
+            .execute_stdout(&format!("sudo systemctl restart {dns_service}"), true, true)
+            .await;
     }
 
     Ok(())
 }
 
-async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Error>> {
-    conn.execute_stdout(
-        "sudo mkdir -p /usr/share/containers/oci/hooks.d",
-        true,
-        true,
-    )
-    .await?;
+async fn install_oci_hooks(conn: &Box<dyn NodeClient>) -> Result<(), Box<dyn Error>> {
+    conn.execute_stdout("sudo mkdir -p /etc/containers/oci/hooks.d", true, true)
+        .await?;
 
     let oci_poststart_hook = oci::HookConfig {
         version: "1.0.0".to_string(),
@@ -568,9 +710,9 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         },
         stages: vec![oci::Stage::PostStart],
     };
-    // serialize to /usr/share/containers/oci/hooks.d/skatelet-poststart.json
+    // serialize to /etc/containers/oci/hooks.d/skatelet-poststart.json
     let serialized = serde_json::to_string(&oci_poststart_hook).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststart.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststart.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
@@ -599,7 +741,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
         stages: vec![oci::Stage::PostStop],
     };
     let serialized = serde_json::to_string(&oci_poststop).unwrap();
-    let path = "/usr/share/containers/oci/hooks.d/skatelet-poststop.json";
+    let path = "/etc/containers/oci/hooks.d/skatelet-poststop.json";
     conn.execute_stdout(
         &util::transfer_file_cmd(serialized.as_str(), path),
         true,
@@ -610,7 +752,7 @@ async fn install_oci_hooks(conn: &Box<dyn SshClient>) -> Result<(), Box<dyn Erro
 }
 
 async fn setup_netavark(
-    conn: &Box<dyn SshClient>,
+    conn: &Box<dyn NodeClient>,
     gateway: String,
     subnet_cidr: String,
 ) -> Result<(), Box<dyn Error>> {
@@ -640,68 +782,26 @@ async fn setup_netavark(
     Ok(())
 }
 
-async fn create_replace_routes_file(
-    conn: &Box<dyn SshClient>,
+async fn sync_peers(
+    conn: &Box<dyn NodeClient>,
     cluster_conf: &Cluster,
 ) -> Result<(), Box<dyn Error>> {
-    let cmd = "sudo mkdir -p /etc/skate";
-    conn.execute_stdout(cmd, true, true).await?;
-
-    let other_nodes: Vec<_> = cluster_conf
+    let peers = cluster_conf
         .nodes
         .iter()
         .filter(|n| n.name != conn.node_name())
-        .collect();
+        .collect::<Vec<_>>();
 
-    let mut route_file = "#!/bin/bash
-"
-    .to_string();
+    let peers_args = peers
+        .iter()
+        .map(|p| format!("--peer {}:{}:{}", p.name, p.peer_host, p.subnet_cidr))
+        .collect::<Vec<_>>()
+        .join(" ");
 
-    for other_node in &other_nodes {
-        let ip = format!("{}:22", other_node.peer_host)
-            .to_socket_addrs()
-            .unwrap()
-            .next()
-            .unwrap()
-            .ip()
-            .to_string();
-        route_file += format!("ip route add {} via {}\n", other_node.subnet_cidr, ip).as_str();
-    }
-
-    // load kernel modules
-    route_file +=
-        "modprobe -- ip_vs\nmodprobe -- ip_vs_rr\nmodprobe -- ip_vs_wrr\nmodprobe -- ip_vs_sh\n";
-
-    route_file += "sysctl -w net.ipv4.ip_forward=1\n";
-    route_file += "sysctl fs.inotify.max_user_instances=1280\n";
-    route_file += "sysctl fs.inotify.max_user_watches=655360\n";
-
-    // Virtual Server stuff
-    // taken from https://github.com/kubernetes/kubernetes/blob/master/pkg/proxy/ipvs/proxier.go#L295
-    route_file += "sysctl -w net.ipv4.vs.conntrack=1\n";
-    // since we're using conntrac we need to increase the max so we dont exhaust it
-    route_file += "sysctl net.nf_conntrack_max=512000\n";
-    route_file += "sysctl -w net.ipv4.vs.conn_reuse_mode=0\n";
-    route_file += "sysctl -w net.ipv4.vs.expire_nodest_conn=1\n";
-    route_file += "sysctl -w net.ipv4.vs.expire_quiescent_template=1\n";
-    // configurable in kube-proxy
-    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_ignore=1\n";
-    // route_file = route_file + "sysctl -w net.ipv4.conf.all.arp_announce=2\n";
-
-    route_file += "sysctl -p\n";
-
-    conn.execute_stdout(
-        &util::transfer_file_cmd(&route_file, "/etc/skate/routes.sh"),
-        true,
-        true,
-    )
-    .await?;
-    conn.execute_stdout(
-        "sudo chmod +x /etc/skate/routes.sh; sudo /etc/skate/routes.sh",
-        true,
-        true,
-    )
-    .await?;
+    conn.execute_stdout(&format!("sudo skatelet peers set {peers_args}"), true, true)
+        .await?;
+    conn.execute_stdout("sudo skatelet routes", true, true)
+        .await?;
 
     // Create systemd unit file to call the skate routes file on startup after internet
     // TODO - only add if different
@@ -719,4 +819,138 @@ async fn create_replace_routes_file(
         .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::{Cluster, Node};
+    use crate::create::node::{template_coredns_manifest, validate_podman_version};
+    use k8s_openapi::api::apps::v1::DaemonSet;
+
+    #[test]
+    fn test_should_template_coredns_manifest() {
+        let cluster = Cluster {
+            name: "".to_string(),
+            default_user: None,
+            default_key: None,
+            nodes: vec![
+                Node {
+                    name: "node-1".to_string(),
+                    host: "".to_string(),
+                    peer_host: "10.0.0.1".to_string(),
+                    ..Default::default()
+                },
+                Node {
+                    name: "node-2".to_string(),
+                    host: "".to_string(),
+                    peer_host: "10.0.0.2".to_string(),
+                    ..Default::default()
+                },
+            ],
+        };
+
+        let manifest = template_coredns_manifest(&cluster);
+
+        println!("{manifest}");
+
+        let daemonset: DaemonSet = serde_yaml::from_str(&manifest).unwrap();
+
+        let envs = daemonset
+            .spec
+            .unwrap_or_default()
+            .template
+            .spec
+            .unwrap_or_default()
+            .containers[0]
+            .env
+            .clone()
+            .unwrap_or_default();
+        let core_file_env = envs.into_iter().find(|e| e.name == "CORE_FILE");
+        assert!(core_file_env.is_some());
+        let core_file = core_file_env.unwrap();
+
+        let expect = r#"
+# What's going on here you might ask? This is to provide at least 2 upstreams to the forward plugin in
+# order for it to keep doing healthchecks. It doesnt if there's only 1 upstream.
+.:6053 {
+
+}
+# serve dns for this node
+.:5553 {
+
+    # rewrite name suffix .n-node-1.skate. .cluster.skate.
+    # rewrite name suffix .n-node-2.skate. .cluster.skate.
+    #...
+                   rewrite name suffix .n-node-1.skate. .cluster.skate.
+   rewrite name suffix .n-node-2.skate. .cluster.skate.
+
+    # public since other nodes need to reach this
+    bind lo 0.0.0.0
+
+    hosts /var/lib/skate/dns/addnhosts
+}
+
+svc.cluster.skate:5053 {
+    
+        bind lo
+    
+        hosts /var/lib/skate/dns/addnhosts
+    
+}
+
+pod.cluster.skate:5053 {
+
+    bind lo
+
+    gathersrv pod.cluster.skate. {
+      # n-node-1.skate. 1-
+                     pod.n-node-1.skate. 0
+   pod.n-node-2.skate. 1
+    }
+
+    #forward pod.n-node-1.skate. 127.0.0.1:5553 127.0.0.1:6053 {
+    #  policy sequential
+    #  prefer_udp
+    #  health_check 0.1s
+    #}
+                   forward pod.n-node-1.skate. 10.0.0.1:5553 127.0.0.1:6053 {
+       policy sequential
+       health_check 0.5s
+   }
+   forward pod.n-node-2.skate. 10.0.0.2:5553 127.0.0.1:6053 {
+       policy sequential
+       health_check 0.5s
+   }
+
+    cache {
+        disable success
+    }
+
+    loadbalance round_robin
+
+}
+.:5053 {
+    bind lo 0.0.0.0
+    forward . 8.8.8.8
+}
+"#;
+        assert_eq!(core_file.value.clone().unwrap().as_str(), expect);
+    }
+
+    #[test]
+    fn test_validate_podman_version() {
+        let table = [
+            ("2.9.9", false),
+            ("3.0.0", true),
+            ("4.0.0", true),
+            ("5.0.0", true),
+            ("5.0.0-rc99", true),
+        ];
+
+        for (input, expected) in table {
+            let got = validate_podman_version(input);
+            let got = got.is_ok();
+            assert_eq!(got, expected, "input: {}", input);
+        }
+    }
 }

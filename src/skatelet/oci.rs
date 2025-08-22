@@ -1,8 +1,8 @@
 use crate::errors::SkateError;
 use crate::exec::{RealExec, ShellExec};
+use crate::skatelet::VAR_PATH;
 use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
-use crate::skatelet::VAR_PATH;
 use crate::util::spawn_orphan_process;
 use clap::{Args, Subcommand};
 use log::{error, info};

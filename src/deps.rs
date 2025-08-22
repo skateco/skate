@@ -1,9 +1,9 @@
 use crate::config::{Cluster, Node};
 use crate::exec::{RealExec, ShellExec};
-use crate::ssh::{RealSsh, SshClient, SshClients, SshError, SshErrors};
+use crate::node_client::{NodeClient, NodeClientError, NodeClientErrors, NodeClients, RealSsh};
 use async_trait::async_trait;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use sqlx::SqlitePool;
 
@@ -39,14 +39,20 @@ pub trait SshManager {
         &self,
         cluster: &Cluster,
         node: &Node,
-    ) -> Result<Box<dyn SshClient>, SshError>;
-    async fn cluster_connect(&self, cluster: &Cluster) -> (Option<SshClients>, Option<SshErrors>);
+    ) -> Result<Box<dyn NodeClient>, NodeClientError>;
+    async fn cluster_connect(
+        &self,
+        cluster: &Cluster,
+    ) -> (Option<NodeClients>, Option<NodeClientErrors>);
 }
 
 pub struct RealSshManager {}
 
 impl RealSshManager {
-    async fn _node_connect(cluster: &Cluster, node: &Node) -> Result<Box<dyn SshClient>, SshError> {
+    async fn _node_connect(
+        cluster: &Cluster,
+        node: &Node,
+    ) -> Result<Box<dyn NodeClient>, NodeClientError> {
         let node = node.with_cluster_defaults(cluster);
         match RealSsh::connect(&node).await {
             Ok(c) => Ok(Box::new(c)),
@@ -61,10 +67,13 @@ impl SshManager for RealSshManager {
         &self,
         cluster: &Cluster,
         node: &Node,
-    ) -> Result<Box<dyn SshClient>, SshError> {
+    ) -> Result<Box<dyn NodeClient>, NodeClientError> {
         Self::_node_connect(cluster, node).await
     }
-    async fn cluster_connect(&self, cluster: &Cluster) -> (Option<SshClients>, Option<SshErrors>) {
+    async fn cluster_connect(
+        &self,
+        cluster: &Cluster,
+    ) -> (Option<NodeClients>, Option<NodeClientErrors>) {
         let fut: FuturesUnordered<_> = cluster
             .nodes
             .iter()
@@ -73,7 +82,7 @@ impl SshManager for RealSshManager {
 
         let results: Vec<_> = fut.collect().await;
 
-        let (clients, errs): (Vec<_>, Vec<SshError>) =
+        let (clients, errs): (Vec<_>, Vec<NodeClientError>) =
             results.into_iter().partition_map(|r| match r {
                 Ok(client) => Either::Left(client),
                 Err(err) => Either::Right(err),
@@ -83,13 +92,13 @@ impl SshManager for RealSshManager {
             match clients.len() {
                 0 => None,
                 _ => {
-                    let clients = SshClients { clients };
+                    let clients = NodeClients { clients };
                     Some(clients)
                 }
             },
             match errs.len() {
                 0 => None,
-                _ => Some(SshErrors { errors: errs }),
+                _ => Some(NodeClientErrors { errors: errs }),
             },
         )
     }

@@ -1,11 +1,12 @@
 use crate::exec::ShellExec;
+use crate::skatelet::VAR_PATH;
 use crate::skatelet::database::resource;
 use crate::skatelet::database::resource::{
-    delete_resource, list_resources_by_type, upsert_resource, ResourceType,
+    ResourceType, delete_resource, list_resources_by_type, upsert_resource,
 };
-use crate::skatelet::VAR_PATH;
 use crate::spec::cert::ClusterIssuer;
-use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
+use crate::util::linux::get_resolv_conf_dns;
+use crate::util::{SkateLabels, get_skate_label_value, metadata_name};
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::networking::v1::Ingress;
@@ -218,7 +219,14 @@ impl IngressController {
             endpoint
         };
 
+        // get resolver from /etc/resolv.conf -> nameserver [ip]
+        let resolver = get_resolv_conf_dns().unwrap_or_else(|e| {
+            log::warn!("failed to get resolver from /etc/resolv.conf: {}", e);
+            "".to_string()
+        });
+
         let main_template_data = json!({
+            "resolver": resolver,
             "letsEncrypt": {
                 "endpoint": endpoint, //
                 "email": email,

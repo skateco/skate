@@ -13,7 +13,10 @@ pub(crate) mod services;
 pub(crate) mod system;
 mod template;
 
+mod peers;
+mod routes;
+
 pub use create::JobArgs;
-pub use skatelet::skatelet;
 pub use skatelet::VAR_PATH;
+pub use skatelet::skatelet;
 pub use system::SystemInfo;

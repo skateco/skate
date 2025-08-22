@@ -1,7 +1,7 @@
 use crate::controllers::pod::PodController;
 use crate::exec::ShellExec;
 use crate::skatelet::database::resource;
-use crate::util::{get_skate_label_value, metadata_name, SkateLabels};
+use crate::util::{SkateLabels, get_skate_label_value, metadata_name};
 use k8s_openapi::api::apps::v1::DaemonSet;
 use sqlx::SqlitePool;
 use std::error::Error;

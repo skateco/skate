@@ -1,18 +1,18 @@
 use crate::config::{Cluster, Node};
 use crate::github;
 use crate::skate::{Distribution, Platform};
-use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::SystemInfo;
+use crate::skatelet::database::resource::ResourceType;
 use crate::state::state::{NodeState, NodeStatus};
 use anyhow::anyhow;
 use async_ssh2_tokio::client::Client;
 use async_ssh2_tokio::{AuthMethod, ServerCheckMethod};
 use async_trait::async_trait;
-use base64::engine::general_purpose;
 use base64::Engine;
+use base64::engine::general_purpose;
 use colored::Colorize;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 use russh::{ChannelMsg, CryptoVec};
 use semver::Version;
@@ -28,7 +28,7 @@ use tokio::sync::mpsc;
 const FALLBACK_SKATELET_VERSION: &str = "v0.1.55";
 
 #[async_trait]
-pub trait SshClient: Send + Sync {
+pub trait NodeClient: Send + Sync {
     async fn get_node_system_info(&self) -> Result<HostInfo, Box<dyn Error>>;
     async fn install_skatelet(&self, platform: Platform) -> Result<(), Box<dyn Error>>;
     async fn apply_resource(&self, manifest: &str) -> Result<(String, String), Box<dyn Error>>;
@@ -53,12 +53,9 @@ pub trait SshClient: Send + Sync {
         cmd: &str,
         sender: mpsc::Sender<String>,
     ) -> Result<(), Box<dyn Error>>;
-    // TODO-merge this into execute_stdout
-    async fn execute_noisy(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
-    async fn execute(&self, cmd: &str) -> Result<String, Box<dyn Error>>;
+    async fn execute(&self, cmd: &str, print_cmd: bool) -> Result<String, Box<dyn Error>>;
     fn node_name(&self) -> String;
-
-    async fn connect(n: &Node) -> Result<Self, SshError>
+    async fn connect(n: &Node) -> Result<Self, NodeClientError>
     where
         Self: Sized;
 }
@@ -77,8 +74,8 @@ impl Debug for RealSsh {
     }
 }
 
-pub struct SshClients {
-    pub clients: Vec<Box<dyn SshClient>>,
+pub struct NodeClients {
+    pub clients: Vec<Box<dyn NodeClient>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -167,19 +164,51 @@ impl RealSsh {
     }
 }
 
+struct OsRelease {
+    name: String,
+    variant_id: String,
+}
+
+impl OsRelease {
+    fn from_str(s: &str) -> OsRelease {
+        let mut name = "".to_string();
+        let mut variant_id = "".to_string();
+        for line in s.lines() {
+            if let Some((k, v)) = line.split_once('=') {
+                match k {
+                    "NAME" => name = v.to_string(),
+                    "VARIANT_ID" => variant_id = v.to_string(),
+                    _ => {}
+                }
+            }
+        }
+        OsRelease { name, variant_id }
+    }
+}
+
 #[async_trait]
-impl SshClient for RealSsh {
+impl NodeClient for RealSsh {
     fn node_name(&self) -> String {
         self.node_name.clone()
     }
 
-    async fn connect(node: &Node) -> Result<Self, SshError> {
-        let default_key = "";
-        let key = node.key.clone().unwrap_or(default_key.to_string());
-        let key = shellexpand::tilde(&key).to_string();
+    async fn connect(node: &Node) -> Result<Self, NodeClientError> {
+        let key = node.key.as_ref().and_then(|k| {
+            let key = k.trim();
+            if key.is_empty() {
+                None
+            } else {
+                Some(shellexpand::tilde(key).to_string())
+            }
+        });
+
+        let auth_method = match key {
+            Some(key) => AuthMethod::with_key_file(key, None),
+            None => AuthMethod::with_agent(),
+        };
+
         let timeout = Duration::from_secs(5);
 
-        let auth_method = AuthMethod::with_key_file(&key, None);
         let result = tokio::time::timeout(
             timeout,
             Client::connect(
@@ -196,7 +225,7 @@ impl SshClient for RealSsh {
             _ => Err(anyhow!("timeout").into()),
         };
 
-        let ssh_client = result.map_err(|e| SshError {
+        let ssh_client = result.map_err(|e| NodeClientError {
             node_name: node.name.clone(),
             error: e.to_string(),
         })?;
@@ -212,7 +241,6 @@ impl SshClient for RealSsh {
 hostname > /tmp/hostname-$$ &
 arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
-{ { grep -e "^NAME=" /etc/os-release|head -1|awk '{print substr($0,index($0,"=")+1)}'; }  || echo '' ; } > /tmp/distro-$$ &
 skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
 sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
@@ -223,7 +251,7 @@ wait;
 echo hostname="$(cat /tmp/hostname-$$)";
 echo arch="$(cat /tmp/arch-$$)";
 echo os="$(cat /tmp/os-$$)";
-echo distro="$(cat /tmp/distro-$$)";
+echo osrelease="$(cat /etc/os-release|base64 -w0)";
 echo skatelet="$(cat /tmp/skatelet-$$)";
 echo podman="$(cat /tmp/podman-$$)";
 echo sys="$(cat /tmp/sys-$$)";
@@ -255,7 +283,14 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 match k {
                     "hostname" => host_info.hostname = v.to_string(),
                     "arch" => arch = Some(v.to_string()),
-                    "distro" => host_info.platform.distribution = Distribution::from(v),
+                    "osrelease" => {
+                        let v = general_purpose::STANDARD.decode(v)?;
+                        let os_release = OsRelease::from_str(String::from_utf8_lossy(&v).as_ref());
+                        host_info.platform.distribution = Distribution::from_dist_variant(
+                            &os_release.name,
+                            &os_release.variant_id,
+                        );
+                    }
                     "skatelet" => {
                         host_info.skatelet_version = match v {
                             "" => None,
@@ -332,13 +367,18 @@ echo ovs="$(cat /tmp/ovs-$$)";
                 eprintln!("ERROR: falling back to blind url download");
 
                 let (dl_arch, dl_os, dl_gnu) = platform.arch_as_linux_target_triple();
-                format!("https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz")
+                format!(
+                    "https://github.com/skateco/skate/releases/download/v{version}/skatelet-{dl_arch}-{dl_os}-{dl_gnu}.tar.gz"
+                )
             }
         };
 
         println!("installing skatelet version {}", version);
 
-        let cmd = format!("cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && chmod +x skatelet && sudo mv skatelet /usr/local/bin", download_url);
+        let cmd = format!(
+            "cd /tmp && wget {} -O skatelet.tar.gz && tar -xvf ./skatelet.tar.gz && chmod +x skatelet && sudo mv skatelet /usr/local/bin",
+            download_url
+        );
         self.execute_stdout(&cmd, true, true).await?;
 
         Ok(())
@@ -520,13 +560,12 @@ echo ovs="$(cat /tmp/ovs-$$)";
         }
         Err(anyhow!("exit status {}", result.unwrap()).into())
     }
-    // TODO-merge this into execute_stdout
-    async fn execute_noisy(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
-        cmd.lines()
-            .for_each(|l| println!("{} | > {}", self.node_name, l.green()));
-        self.execute(cmd).await
-    }
-    async fn execute(self: &RealSsh, cmd: &str) -> Result<String, Box<dyn Error>> {
+    async fn execute(self: &RealSsh, cmd: &str, print_cmd: bool) -> Result<String, Box<dyn Error>> {
+        if print_cmd {
+            cmd.lines()
+                .for_each(|l| println!("{} | > {}", self.node_name, l.green()));
+        }
+
         let result = self
             .client
             .execute(cmd)
@@ -545,25 +584,25 @@ echo ovs="$(cat /tmp/ovs-$$)";
 }
 
 #[derive(Error, Debug)]
-pub struct SshError {
+pub struct NodeClientError {
     pub node_name: String,
     pub error: String,
 }
 
-impl fmt::Display for SshError {
+impl fmt::Display for NodeClientError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {}", self.node_name, self.error)
     }
 }
 
 #[derive(Debug)]
-pub struct SshErrors {
-    pub errors: Vec<SshError>,
+pub struct NodeClientErrors {
+    pub errors: Vec<NodeClientError>,
 }
 
-impl Error for SshErrors {}
+impl Error for NodeClientErrors {}
 
-impl fmt::Display for SshErrors {
+impl fmt::Display for NodeClientErrors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let strs: Vec<String> = self.errors.iter().map(|ce| format!("{}", ce)).collect();
         write!(f, "{}", strs.join("\n"))
@@ -584,68 +623,16 @@ impl Node {
     }
 }
 
-// pub async fn node_connection(cluster: &Cluster, node: &Node) -> Result<RealSsh, SshError> {
-//     let node = node.with_cluster_defaults(cluster);
-//     match connect_node(&node).await {
-//         Ok(c) => Ok(c),
-//         Err(err) => {
-//             Err(SshError { node_name: node.name.clone(), error: err })
-//         }
-//     }
-// }
-//
-// pub async fn cluster_connections(cluster: &Cluster) -> (Option<RealSshClients>, Option<SshErrors>) {
-//     let fut: FuturesUnordered<_> = cluster.nodes.iter().map(|n| node_connection(cluster, n)).collect();
-//
-//
-//     let results: Vec<_> = fut.collect().await;
-//     let (clients, errs): (Vec<RealSsh>, Vec<SshError>) = results.into_iter().partition_map(|r| match r {
-//         Ok(client) => Either::Left(client),
-//         Err(err) => Either::Right(err)
-//     });
-//
-//
-//     (
-//         match clients.len() {
-//             0 => None,
-//             _ => Some(RealSshClients { clients })
-//         },
-//         match errs.len() {
-//             0 => None,
-//             _ => Some(SshErrors { errors: errs })
-//         }
-//     )
-// }
-
-impl SshClients {
-    pub fn find(&self, node_name: &str) -> Option<&Box<dyn SshClient>> {
+impl NodeClients {
+    pub fn find(&self, node_name: &str) -> Option<&Box<dyn NodeClient>> {
         self.clients.iter().find(|c| c.node_name() == node_name)
     }
 
     pub async fn execute(&self, command: &str) -> Vec<(String, Result<String, Box<dyn Error>>)> {
-        let fut: FuturesUnordered<_> = self.clients.iter().map(|c| c.execute(command)).collect();
-        let result: Vec<Result<_, _>> = fut.collect().await;
-
-        result
-            .into_iter()
-            .enumerate()
-            .map(|(i, r)| {
-                let node_name = self.clients[i].node_name().clone();
-                (node_name, r)
-            })
-            .collect()
-    }
-
-    pub async fn execute_noisy(
-        &self,
-        command: &str,
-        args: &[&str],
-    ) -> Vec<(String, Result<String, Box<dyn Error>>)> {
-        let concat_command = &format!("{} {}", &command, args.join(" "));
         let fut: FuturesUnordered<_> = self
             .clients
             .iter()
-            .map(|c| c.execute_noisy(concat_command))
+            .map(|c| c.execute(command, true))
             .collect();
         let result: Vec<Result<_, _>> = fut.collect().await;
 
@@ -658,6 +645,7 @@ impl SshClients {
             })
             .collect()
     }
+
     pub async fn get_nodes_system_info(&self) -> Vec<Result<HostInfo, Box<dyn Error>>> {
         let fut: FuturesUnordered<_> = self
             .clients

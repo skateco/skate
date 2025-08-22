@@ -1,4 +1,4 @@
-use handlebars::{handlebars_helper, Handlebars, JsonRender};
+use handlebars::{Handlebars, JsonRender, handlebars_helper};
 use serde_json::Value;
 
 pub fn new<'reg>() -> Handlebars<'reg> {

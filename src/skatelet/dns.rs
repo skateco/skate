@@ -1,9 +1,9 @@
 use crate::deps::With;
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
+use crate::skatelet::VAR_PATH;
 use crate::skatelet::services::dns::DnsService;
 use crate::skatelet::skatelet::log_panic;
-use crate::skatelet::VAR_PATH;
 use clap::{Args, Subcommand};
 use std::panic;
 

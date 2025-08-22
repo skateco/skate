@@ -2,12 +2,11 @@ use crate::skatelet::apply::StdinCommand;
 use crate::supported_resources::SupportedResources;
 use crate::supported_resources::SupportedResources::{ClusterIssuer, CronJob, Ingress, Service};
 use clap::{Args, Subcommand};
+use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;
+use k8s_openapi::api::core::v1::{Namespace, Secret};
 use std::collections::BTreeMap;
 use std::io;
 use std::io::Read;
-
-use k8s_openapi::api::batch::v1::CronJob as K8sCronJob;
-use k8s_openapi::api::core::v1::Secret;
 
 use crate::controllers::clusterissuer::ClusterIssuerController;
 use crate::controllers::cronjob::CronjobController;
@@ -20,8 +19,8 @@ use crate::controllers::service::ServiceController;
 use crate::deps::{With, WithDB};
 use crate::errors::SkateError;
 use crate::exec::ShellExec;
-use crate::filestore::Store;
 use crate::skatelet::VAR_PATH;
+use crate::skatelet::database::resource::list_resources_by_namespace;
 use crate::spec;
 use crate::util::SkateLabels;
 use k8s_openapi::api::core::v1::Service as K8sService;
@@ -47,6 +46,7 @@ pub enum DeleteResourceCommands {
     Daemonset(DeleteResourceArgs),
     Service(DeleteResourceArgs),
     Clusterissuer(DeleteResourceArgs),
+    Namespace(DeleteResourceArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -61,16 +61,13 @@ pub struct DeleteArgs {
     command: DeleteResourceCommands,
 }
 
-pub trait DeleteDeps: With<dyn Store> + With<dyn ShellExec> + WithDB {}
+pub trait DeleteDeps: With<dyn ShellExec> + WithDB {}
 
 pub struct Deleter<D: DeleteDeps> {
     pub deps: D,
 }
 
 impl<D: DeleteDeps> Deleter<D> {
-    fn store(&self) -> Box<dyn Store> {
-        With::<dyn Store>::get(&self.deps)
-    }
     fn execer(&self) -> Box<dyn ShellExec> {
         With::<dyn ShellExec>::get(&self.deps)
     }
@@ -103,6 +100,10 @@ impl<D: DeleteDeps> Deleter<D> {
             }
             DeleteResourceCommands::Clusterissuer(resource_args) => {
                 self.delete_cluster_issuer(args.clone(), resource_args.clone())
+                    .await
+            }
+            DeleteResourceCommands::Namespace(resource_args) => {
+                self.delete_namespace(args.clone(), resource_args.clone())
                     .await
             }
         }
@@ -247,6 +248,23 @@ impl<D: DeleteDeps> Deleter<D> {
         Ok(())
     }
 
+    async fn delete_namespace(
+        &self,
+        delete_args: DeleteArgs,
+        resource_args: DeleteResourceArgs,
+    ) -> Result<(), SkateError> {
+        self.manifest_delete(
+            &SupportedResources::Namespace(Namespace {
+                metadata: Self::deletion_metadata(resource_args),
+                spec: None,
+                status: None,
+            }),
+            delete_args.termination_grace_period,
+        )
+        .await?;
+        Ok(())
+    }
+
     async fn manifest_delete(
         &self,
         object: &SupportedResources,
@@ -274,7 +292,7 @@ impl<D: DeleteDeps> Deleter<D> {
                 ctrl.delete(ingress).await?;
             }
             SupportedResources::CronJob(cron) => {
-                let ctrl = CronjobController::new(self.store(), self.deps.get_db(), self.execer());
+                let ctrl = CronjobController::new(self.deps.get_db(), self.execer());
                 ctrl.delete(cron).await?;
             }
             SupportedResources::Secret(secret) => {
@@ -294,6 +312,25 @@ impl<D: DeleteDeps> Deleter<D> {
                 let ingress_controller = IngressController::new(self.deps.get_db(), self.execer());
                 let ctrl = ClusterIssuerController::new(self.deps.get_db(), ingress_controller);
                 ctrl.delete(issuer).await?;
+            }
+            SupportedResources::Namespace(ns) => {
+                // find all resources within the ns in the db
+                // run manifest delete on all of those
+                // report any errors
+                let name = match &ns.metadata.name {
+                    Some(n) => n,
+                    None => return Err(SkateError::String("no metadata name".to_string())),
+                };
+                let resources =
+                    list_resources_by_namespace(&self.deps.get_db(), name.as_str()).await?;
+
+                for resource in resources {
+                    let str_manifest = serde_yaml::to_string(&resource.manifest)?;
+                    let object: serde_yaml::Value = serde_yaml::from_str(&str_manifest)?;
+                    let object = SupportedResources::try_from(&object)?;
+                    println!("deleting {} {}", resource.resource_type, resource.name);
+                    Box::pin(self.manifest_delete(&object, grace_period)).await?;
+                }
             }
         }
         Ok(())

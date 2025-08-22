@@ -1,16 +1,16 @@
-use crate::filestore::ObjectListItem;
+use crate::node_client::NodeClients;
+use crate::object_list_item::ObjectListItem;
 use crate::skatelet::database::resource::ResourceType;
 use crate::spec::cert::ClusterIssuer;
-use crate::ssh::SshClients;
 use crate::state::state::NodeState;
-use crate::util::{metadata_name, NamespacedName, SkateLabels};
+use crate::util::{NamespacedName, SkateLabels, metadata_name};
 use anyhow::anyhow;
+use k8s_openapi::Resource;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
 use k8s_openapi::api::batch::v1::CronJob;
-use k8s_openapi::api::core::v1::{Pod, PodTemplateSpec, Secret, Service};
+use k8s_openapi::api::core::v1::{Namespace, Pod, PodTemplateSpec, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::Resource;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::collections::HashMap;
@@ -35,6 +35,8 @@ pub enum SupportedResources {
     Service(Service),
     #[strum(serialize = "ClusterIssuer")]
     ClusterIssuer(ClusterIssuer),
+    #[strum(serialize = "Namespace")]
+    Namespace(Namespace),
 }
 
 impl Into<ResourceType> for &SupportedResources {
@@ -48,6 +50,7 @@ impl Into<ResourceType> for &SupportedResources {
             SupportedResources::Secret(_) => ResourceType::Secret,
             SupportedResources::Service(_) => ResourceType::Service,
             SupportedResources::ClusterIssuer(_) => ResourceType::ClusterIssuer,
+            SupportedResources::Namespace(_) => ResourceType::Namespace,
         }
     }
 }
@@ -99,14 +102,14 @@ impl TryFrom<&Value> for SupportedResources {
                     let clusterissuer: ClusterIssuer = serde::Deserialize::deserialize(value)?;
                     Ok(SupportedResources::ClusterIssuer(clusterissuer))
                 } else {
-                    Err(anyhow!(format!("version: {}, kind {}", api_version, kind))
-                        .context("unsupported resource type")
-                        .into())
+                    Err(anyhow!(format!(
+                        "unsupported resource: version {}, kind {}",
+                        api_version, kind
+                    ))
+                    .into())
                 }
             }
-            _ => Err(anyhow!("missing 'kind' and 'apiVersion' fields")
-                .context("unsupported resource type")
-                .into()),
+            _ => Err(anyhow!("resource missing 'kind' and 'apiVersion' fields").into()),
         }
     }
 }
@@ -122,13 +125,14 @@ impl SupportedResources {
             SupportedResources::Secret(s) => metadata_name(s),
             SupportedResources::Service(s) => metadata_name(s),
             SupportedResources::ClusterIssuer(c) => metadata_name(c),
+            SupportedResources::Namespace(n) => metadata_name(n),
         }
     }
 
     pub async fn pre_remove_hook(
         &self,
         node: &NodeState,
-        conns: &SshClients,
+        conns: &NodeClients,
     ) -> Result<(), Box<dyn Error>> {
         match self {
             SupportedResources::Pod(pod) => {
@@ -137,10 +141,13 @@ impl SupportedResources {
                 let ips: Vec<_> = match conns
                     .find(&node.node_name)
                     .unwrap()
-                    .execute(&format!(
-                        "sudo skatelet dns remove --pod-id {}",
-                        &pod.metadata.name.clone().unwrap()
-                    ))
+                    .execute(
+                        &format!(
+                            "sudo skatelet dns remove --pod-id {}",
+                            &pod.metadata.name.clone().unwrap()
+                        ),
+                        false,
+                    )
                     .await
                 {
                     Ok(ips) => {
@@ -181,11 +188,12 @@ impl SupportedResources {
                 });
 
                 if !errs.is_empty() {
-                    return Err(anyhow!(errs
-                        .iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<String>>()
-                        .join(". "))
+                    return Err(anyhow!(
+                        errs.iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<String>>()
+                            .join(". ")
+                    )
                     .context("failed to run pre-remove hook")
                     .into());
                 }
@@ -239,6 +247,7 @@ impl SupportedResources {
             SupportedResources::Secret(_) => false,
             SupportedResources::Service(_) => false,
             SupportedResources::ClusterIssuer(_) => false,
+            SupportedResources::Namespace(_) => false,
         }
     }
     fn fixup_pod_template(
@@ -495,6 +504,10 @@ impl SupportedResources {
             }
             SupportedResources::ClusterIssuer(ref mut issuer) => {
                 issuer.metadata = Self::fixup_metadata(issuer.metadata.clone(), None)?;
+                resource
+            }
+            SupportedResources::Namespace(ref mut ns) => {
+                ns.metadata = Self::fixup_metadata(ns.metadata.clone(), None)?;
                 resource
             }
         };

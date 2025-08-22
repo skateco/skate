@@ -1,22 +1,20 @@
-use crate::errors::SkateError;
 use crate::skatelet::database::resource::{Resource, ResourceType};
 use crate::spec::cert::ClusterIssuer;
 use crate::supported_resources::SupportedResources;
-use crate::util::{get_skate_label_value, metadata_name, NamespacedName, SkateLabels};
+use crate::util::{NamespacedName, SkateLabels, get_skate_label_value, metadata_name};
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use k8s_openapi::api::batch::v1::CronJob;
 use k8s_openapi::api::core::v1::{Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::{kind, Metadata};
+use k8s_openapi::{Metadata, kind};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 use std::error::Error;
-use std::fs::{create_dir_all, DirEntry};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::fs::DirEntry;
+use std::path::Path;
 use std::str::FromStr;
 use tabled::Tabled;
 
@@ -27,10 +25,6 @@ use tabled::Tabled;
 // directory structure example is
 // /var/lib/skate/store/ingress/ingress-name.namespace/80.conf
 // /var/lib/skate/store/ingress/ingress-name.namespace/443.conf
-#[derive(Clone)]
-pub struct FileStore {
-    base_path: String,
-}
 
 #[derive(Tabled, Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
 #[tabled(rename_all = "UPPERCASE")]
@@ -159,6 +153,7 @@ impl TryFrom<&SupportedResources> for ObjectListItem {
             SupportedResources::Secret(s) => &s.metadata,
             SupportedResources::Service(s) => &s.metadata,
             SupportedResources::ClusterIssuer(i) => &i.metadata,
+            SupportedResources::Namespace(ns) => &ns.metadata,
         };
 
         let name = get_skate_label_value(&meta.labels, &SkateLabels::Name).ok_or("no name")?;
@@ -233,134 +228,4 @@ impl TryFrom<Resource> for ObjectListItem {
             updated_at: value.updated_at,
         })
     }
-}
-
-impl FileStore {
-    pub fn new(base_path: String) -> Self {
-        FileStore { base_path }
-    }
-
-    fn get_path(&self, parts: &[&str]) -> String {
-        let mut path = PathBuf::from(self.base_path.clone());
-        path.extend(parts);
-        path.to_string_lossy().to_string()
-    }
-}
-
-impl Store for FileStore {
-    // will clobber
-    fn write_file(
-        &self,
-        object_type: &str,
-        object_name: &str,
-        file_name: &str,
-        file_contents: &[u8],
-    ) -> Result<String, SkateError> {
-        let dir = self.get_path(&[object_type, object_name]);
-        create_dir_all(&dir)
-            .map_err(|e| anyhow!(e).context(format!("failed to create directory {}", dir)))?;
-        let file_path = format!(
-            "{}/{}/{}/{}",
-            self.base_path, object_type, object_name, file_name
-        );
-
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&file_path);
-        match file.map_err(|e| anyhow!(e).context(format!("failed to create file {}", file_path))) {
-            Err(e) => Err(e.into()),
-            Ok(mut file) => Ok(file.write_all(file_contents).map(|_| file_path)?),
-        }
-    }
-    fn remove_file(
-        &self,
-        object_type: &str,
-        object_name: &str,
-        file_name: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let file_path = self.get_path(&[object_type, object_name, file_name]);
-        let result = std::fs::remove_file(&file_path)
-            .map_err(|e| anyhow!(e).context(format!("failed to remove file {}", file_path)));
-        if result.is_err() {
-            return Err(result.err().unwrap().into());
-        }
-        Ok(())
-    }
-    fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool {
-        let file_path = self.get_path(&[object_type, object_name, file_name]);
-        std::path::Path::new(&file_path).exists()
-    }
-    // returns true if the object was removed, false if it didn't exist
-    fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>> {
-        let dir = self.get_path(&[object_type, object_name]);
-        match std::fs::remove_dir_all(&dir) {
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::NotFound => Ok(false),
-                _ => Err(anyhow!(err)
-                    .context(format!("failed to remove directory {}", dir))
-                    .into()),
-            },
-            Ok(_) => Ok(true),
-        }
-    }
-    fn get_object(
-        &self,
-        object_type: &str,
-        object_name: &str,
-    ) -> Result<ObjectListItem, Box<dyn Error>> {
-        let dir = self.get_path(&[object_type, object_name]);
-
-        let obj = ObjectListItem::try_from(dir.as_str())?;
-        Ok(obj)
-    }
-    fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>> {
-        let dir = self.get_path(&[object_type]);
-        let entries = match std::fs::read_dir(&dir) {
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-                _ => {
-                    return Err(anyhow!(e)
-                        .context(format!("failed to read directory {}", dir))
-                        .into())
-                }
-            },
-            Ok(result) => result,
-        };
-
-        let mut result = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|e| anyhow!(e).context("failed to read entry"))?;
-            let obj = ObjectListItem::try_from(entry)?;
-            result.push(obj);
-        }
-        Ok(result)
-    }
-}
-
-pub trait Store {
-    // will clobber
-    fn write_file(
-        &self,
-        object_type: &str,
-        object_name: &str,
-        file_name: &str,
-        file_contents: &[u8],
-    ) -> Result<String, SkateError>;
-    fn remove_file(
-        &self,
-        object_type: &str,
-        object_name: &str,
-        file_name: &str,
-    ) -> Result<(), Box<dyn Error>>;
-    fn exists_file(&self, object_type: &str, object_name: &str, file_name: &str) -> bool;
-    // returns true if the object was removed, false if it didn't exist
-    fn remove_object(&self, object_type: &str, object_name: &str) -> Result<bool, Box<dyn Error>>;
-    fn get_object(
-        &self,
-        object_type: &str,
-        object_name: &str,
-    ) -> Result<ObjectListItem, Box<dyn Error>>;
-    fn list_objects(&self, object_type: &str) -> Result<Vec<ObjectListItem>, Box<dyn Error>>;
 }

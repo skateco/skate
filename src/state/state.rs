@@ -1,6 +1,6 @@
-use crate::config::{cache_dir, Config};
-use crate::filestore::ObjectListItem;
+use crate::config::{Config, cache_dir};
 use crate::get::lister::NameFilters;
+use crate::object_list_item::ObjectListItem;
 use anyhow::anyhow;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment};
@@ -18,13 +18,13 @@ use std::path::Path;
 use strum_macros::Display;
 use tabled::Tabled;
 
+use crate::node_client::HostInfo;
+use crate::skatelet::SystemInfo;
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::{PodmanPodInfo, PodmanPodStatus};
-use crate::skatelet::SystemInfo;
-use crate::ssh::HostInfo;
 use crate::state::state::NodeStatus::{Healthy, Unhealthy, Unknown};
 use crate::supported_resources::SupportedResources;
-use crate::util::{metadata_name, slugify, tabled_display_option, SkateLabels};
+use crate::util::{SkateLabels, metadata_name, slugify, tabled_display_option};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Display, PartialEq, Default)]
 pub enum NodeStatus {
@@ -534,7 +534,7 @@ impl ClusterState {
         &mut self,
         filter_node: Option<&str>,
         filter_types: &[ResourceType],
-    ) -> Vec<MutCatalogueItem> {
+    ) -> Vec<MutCatalogueItem<'_>> {
         self.nodes
             .iter_mut()
             .filter(|n| filter_node.is_none() || n.node_name == filter_node.unwrap())
@@ -559,7 +559,7 @@ impl ClusterState {
         filter_types: &[ResourceType],
         namespace: Option<&str>,
         name: Option<&str>,
-    ) -> Vec<CatalogueItem> {
+    ) -> Vec<CatalogueItem<'_, '_, '_, '_>> {
         let mut map: HashMap<String, CatalogueItem> = HashMap::new();
 
         for node in &self.nodes {
@@ -736,12 +736,11 @@ pub struct CatalogueItem<'a, 'b, 'c, 'd> {
 
 #[cfg(test)]
 mod tests {
-    use crate::filestore::ObjectListItem;
-    use crate::skatelet::database::resource::ResourceType;
+    use crate::node_client::HostInfo;
+    use crate::object_list_item::ObjectListItem;
     use crate::skatelet::SystemInfo;
-    use crate::ssh::HostInfo;
+    use crate::skatelet::database::resource::ResourceType;
     use crate::state::state::{ClusterState, NodeState, NodeStatus};
-    use crate::util::NamespacedName;
 
     #[test]
     fn should_detect_conflicts() {

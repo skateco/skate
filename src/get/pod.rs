@@ -1,9 +1,9 @@
-use crate::get::lister::{Lister, NameFilters};
 use crate::get::GetObjectArgs;
+use crate::get::lister::{Lister, NameFilters};
 use crate::skatelet::database::resource::ResourceType;
 use crate::skatelet::system::podman::PodmanPodInfo;
 use crate::state::state::ClusterState;
-use crate::util::{age, SkateLabels};
+use crate::util::{SkateLabels, age};
 use k8s_openapi::api::core::v1::Pod;
 use serde::Serialize;
 use tabled::Tabled;

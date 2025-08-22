@@ -2,7 +2,7 @@ use crate::errors::SkateError;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::{create_dir, File};
+use std::fs::{File, create_dir};
 use std::hash::Hash;
 use std::path::Path;
 
@@ -24,7 +24,7 @@ pub struct Cluster {
 fn default_string() -> String {
     "".to_string()
 }
-#[derive(Serialize, Deserialize, Clone, Debug, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, Hash, Default)]
 pub struct Node {
     pub name: String,
     pub host: String,
