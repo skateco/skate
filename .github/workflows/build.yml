@@ -299,7 +299,7 @@ jobs:
           tar -cvf sind-$TARGET.tar.gz sind
           gh release upload ${{github.ref_name}}  *.tar.gz
   fcos-image:
-    needs: [release ]
+    needs: [ release ]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     env:
@@ -332,7 +332,7 @@ jobs:
           build-args: VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          file: ./ContainerFile
+          file: ./images/fcos-skate/ContainerFile
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
