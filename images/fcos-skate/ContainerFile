@@ -7,4 +7,5 @@ RUN rpm-ostree install \
     keepalived && \
     # set registry short name mode to permissive
     sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf && \
+    curl -sL https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skate.sh | bash  && \
     ostree container commit
