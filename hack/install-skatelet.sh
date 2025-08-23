@@ -57,7 +57,7 @@ get_install_alternatives(){
 triple="$arch-$vendor-$os"
 echo "Triple: $triple"
 
-archive_name="skate-$triple.tar.gz"
+archive_name="skatelet-$triple.tar.gz"
 
 install_url=$(get_install_alternatives|grep "$archive_name" | head -n 1)
 
@@ -68,17 +68,17 @@ fi
 
 echo "Installing from $install_url"
 
-rm -rf /tmp/skate-install
-mkdir -p /tmp/skate-install
-curl -sSL -o "/tmp/skate-install/skate.tar.gz" "$install_url"
+rm -rf /tmp/skatelet-install
+mkdir -p /tmp/skatelet-install
+curl -sSL -o "/tmp/skatelet-install/skatelet.tar.gz" "$install_url"
 
-cd /tmp/skate-install
-tar -xvf skate.tar.gz
+cd /tmp/skatelet-install
+tar -xvf skatelet.tar.gz
 
 
 
-sudo mv skate "${INSTALL_PATH}/skate"
-sudo chmod +x "${INSTALL_PATH}/skate"
+sudo mv skatelet "${INSTALL_PATH}/skatelet"
+sudo chmod +x "${INSTALL_PATH}/skatelet"
 
 echo "Skate installed successfully in ${INSTALL_PATH}"
 
