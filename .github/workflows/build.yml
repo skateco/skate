@@ -305,6 +305,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v4
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5 #  see https://github.com/docker/metadata-action
@@ -333,4 +334,5 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
 
