@@ -298,3 +298,39 @@ jobs:
           tar -cvf skatelet-$TARGET.tar.gz skatelet
           tar -cvf sind-$TARGET.tar.gz sind
           gh release upload ${{github.ref_name}}  *.tar.gz
+  fcos-image:
+    needs: [release ]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5 #  see https://github.com/docker/metadata-action
+        with:
+          images: ghcr.io/skateco/fcos-skate
+          # sha = short git hash
+          # ref = branch or tag, sanitized
+          # semver = semver tag, sanitized
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build and export to Docker
+        uses: docker/build-push-action@v6
+        with:
+          # Since we need the cargo workspace, we need to make the repo root the context
+          context: ./images/fcos-skate
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
