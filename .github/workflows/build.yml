@@ -299,9 +299,9 @@ jobs:
           tar -cvf sind-$TARGET.tar.gz sind
           gh release upload ${{github.ref_name}}  *.tar.gz
   fcos-image:
-    #needs: [ release ]
+    needs: [ release ]
     runs-on: ubuntu-latest
-    #if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag'
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -328,8 +328,8 @@ jobs:
         with:
           # Since we need the cargo workspace, we need to make the repo root the context
           context: ./images/fcos-skate
-          push: false
-          #build-args: VERSION=${{ github.ref_name }}
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           file: ./images/fcos-skate/ContainerFile
