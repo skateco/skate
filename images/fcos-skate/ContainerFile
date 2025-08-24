@@ -2,8 +2,7 @@ FROM quay.io/fedora/fedora-coreos:stable
 
 ARG VERSION
 
-RUN echo "Running rpm install" && \
-    dnf install -y \
+RUN dnf install -y \
     rsyslog  \
     wget \
     keepalived && \
