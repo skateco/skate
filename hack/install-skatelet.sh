@@ -7,7 +7,13 @@ if [[ -n "${DEBUG:-}" ]]; then
 fi
 
 INSTALL_PATH=${INSTALL_PATH:-/usr/local/bin}
-VERSION=${VERSION:-latest}
+VERSION=${VERSION:-}
+
+if [[ -z "$VERSION" ]]; then
+  URL_SUFFIX="latest"
+else
+  URL_SUFFIX="tags/$VERSION"
+fi
 
 os=$(uname -o)
 arch=$(uname -m)
@@ -43,7 +49,7 @@ fi
 
 get_install_alternatives(){
   # shellcheck disable=SC2068
-  output=$(curl ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} -f --retry 5 --retry-max-time 30 --retry-all-errors --silent "https://api.github.com/repos/skateco/skate/releases/${VERSION}")
+  output=$(curl ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} -f --retry 5 --retry-max-time 30 --retry-all-errors --silent "https://api.github.com/repos/skateco/skate/releases/${URL_SUFFIX}")
 
   echo "$output" \
     | grep "browser_download_url.*tar.gz" \
@@ -80,5 +86,5 @@ tar -xvf skatelet.tar.gz
 sudo mv skatelet "${INSTALL_PATH}/skatelet"
 sudo chmod +x "${INSTALL_PATH}/skatelet"
 
-echo "Skate installed successfully in ${INSTALL_PATH}"
+echo "Skatelet installed successfully in ${INSTALL_PATH}"
 
