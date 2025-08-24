@@ -86,5 +86,5 @@ tar -xvf skatelet.tar.gz
 sudo mv skatelet "${INSTALL_PATH}/skatelet"
 sudo chmod +x "${INSTALL_PATH}/skatelet"
 
-echo "Skate installed successfully in ${INSTALL_PATH}"
+echo "Skatelet installed successfully in ${INSTALL_PATH}"
 
