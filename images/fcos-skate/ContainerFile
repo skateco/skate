@@ -3,7 +3,7 @@ FROM quay.io/fedora/fedora-coreos:stable
 ARG VERSION
 
 RUN echo "Running rpm install" && \
-    rpm-ostree install \
+    dnf install -y \
     rsyslog  \
     wget \
     keepalived && \
