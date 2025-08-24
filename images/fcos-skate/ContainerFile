@@ -2,11 +2,13 @@ FROM quay.io/fedora/fedora-coreos:stable
 
 ARG VERSION
 
-RUN rpm-ostree install \
+RUN echo "Running rpm install" && \
+    dnf install -y \
     rsyslog  \
     wget \
     keepalived && \
     # set registry short name mode to permissive
     sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf && \
-    curl -sL https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skatelet.sh | INSTALL_PATH=/usr/sbin VERSION=$VERSION bash  && \
+    wget -O /tmp/install-skatelet.sh https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skatelet.sh && \
+    INSTALL_PATH=/usr/sbin VERSION=$VERSION bash /tmp/install-skatelet.sh && \
     ostree container commit
