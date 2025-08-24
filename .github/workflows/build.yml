@@ -301,11 +301,19 @@ jobs:
   fcos-image:
     needs: [ release ]
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     if: github.ref_type == 'tag'
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: https://ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5 #  see https://github.com/docker/metadata-action
@@ -329,7 +337,7 @@ jobs:
           # Since we need the cargo workspace, we need to make the repo root the context
           context: ./images/fcos-skate
           push: true
-          #build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ github.ref_name }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           file: ./images/fcos-skate/ContainerFile
