@@ -299,9 +299,11 @@ jobs:
           tar -cvf sind-$TARGET.tar.gz sind
           gh release upload ${{github.ref_name}}  *.tar.gz
   fcos-image:
-    needs: [ release ]
+    #needs: [ release ]
     runs-on: ubuntu-latest
-    if: github.ref_type == 'tag'
+    permissions:
+      packages: write
+    #if: github.ref_type == 'tag'
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
