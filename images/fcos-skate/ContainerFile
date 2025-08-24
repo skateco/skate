@@ -8,11 +8,7 @@ RUN echo "Running rpm install" && \
     wget \
     keepalived && \
     # set registry short name mode to permissive
-    echo "set registry short name mode to permissive" && \
     sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf && \
-    echo "downloading skatelet installer" && \
     wget -O /tmp/install-skatelet.sh https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skatelet.sh && \
-    echo "installing skatelet" && \
     INSTALL_PATH=/usr/sbin VERSION=$VERSION bash /tmp/install-skatelet.sh && \
-    echo "committing" && \
     ostree container commit
