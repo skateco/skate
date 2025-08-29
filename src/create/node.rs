@@ -577,15 +577,6 @@ async fn setup_networking(
     )
     .await?;
 
-    // if /etc/skate/containers.conf exists, prepend it to
-    // /etc/containers/containers.conf
-
-    conn.execute_stdout(
-        "sudo bash -c 'cat /etc/skate/containers.conf /etc/containers/containers.conf > /etc/containers/containers.conf.new; mv /etc/containers/containers.conf.new /etc/containers/containers.conf'",
-        true,
-        true,
-    ).await?;
-
     let current_backend = conn
         .execute(
             "sudo podman info |grep networkBackend: | awk '{print $2}'",
