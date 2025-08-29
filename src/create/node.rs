@@ -581,7 +581,7 @@ async fn setup_networking(
     // /etc/containers/containers.conf
 
     conn.execute_stdout(
-        "cat /etc/skate/containers.conf /etc/containers/containers.conf > /etc/containers/containers.conf.new; mv /etc/containers/containers.conf.new /etc/containers/containers.conf",
+        "sudo bash -c 'cat /etc/skate/containers.conf /etc/containers/containers.conf > /etc/containers/containers.conf.new; mv /etc/containers/containers.conf.new /etc/containers/containers.conf'",
         true,
         true,
     ).await?;
