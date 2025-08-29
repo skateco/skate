@@ -82,7 +82,7 @@ ADD https://raw.githubusercontent.com/containers/storage/main/storage.conf /etc/
  #runtime="crun"
 
 # chmod containers.conf and adjust storage.conf to enable Fuse storage.
-RUN mkdir -p /etc/containers && \
+RUN mkdir -p /etc/containers /etc/skate && \
     echo "server=1.1.1.1" >> /etc/dnsmasq.conf && \
     echo "server=8.8.8.8" >> /etc/dnsmasq.conf && \
     sed -i -e \
@@ -94,7 +94,7 @@ RUN mkdir -p /etc/containers && \
         's|^[\#]\?cgroups\s\?=.*|cgroups="disabled"|g' -e \
         's|^[\#]\?cgroup_manager\s\?=.*|cgroup_manager="cgroupfs"|g' -e \
         's|^[\#]\?events_logger\s\?=.*|events_logger="file"|g' \
-        /usr/share/containers/containers.conf && \
+        /etc/skate/containers.conf && \
     sed -i -e 's|^#mount_program|mount_program|g' -e \
         '/additionalimage.*/a "/var/lib/shared",' -e \
         's|^mountopt[[:space:]]*=.*$|mountopt = "nodev,fsync=0"|g' \
