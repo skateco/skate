@@ -14,13 +14,13 @@ use crate::util::{
     CHECKBOX_EMOJI, CROSS_EMOJI, ImageTagFormat, RE_CIDR, RE_HOST_SEGMENT, RE_IP,
     split_container_image, transfer_file_cmd,
 };
-use crate::{oci, template, util};
+use crate::{oci, util};
 use anyhow::anyhow;
 use clap::Args;
+use ini::Ini;
 use itertools::Itertools;
 use k8s_openapi::api::apps::v1::DaemonSet;
 use semver::{Version, VersionReq};
-use serde_json::json;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -29,8 +29,6 @@ use validator::Validate;
 
 const COREDNS_MANIFEST: &str = include_str!("../../manifests/coredns.yaml");
 const INGRESS_MANIFEST: &str = include_str!("../../manifests/ingress.yaml");
-
-const CONTAINERS_CONF: &str = include_str!("../resources/containers.conf");
 
 const PODMAN_VERSION_SEMVER_REQUEST: &str = ">=3.0.0";
 
@@ -557,18 +555,26 @@ async fn setup_networking(
     conn.execute_stdout("sudo systemctl start keepalived", true, true)
         .await?;
 
-    let mut handlebars = template::new();
-    handlebars
-        .register_template_string("containers", CONTAINERS_CONF)
-        .map_err(|e| anyhow!(e).context("failed to load containers conf template"))?;
+    let existing_containers_conf = conn
+        .execute("sudo cat /etc/containers/containers.conf", true)
+        .await;
 
-    let containers_conf = handlebars.render(
-        "containers",
-        &json!({
-            "default_subnet": node.subnet_cidr,
-            "network_backend": network_backend,
-        }),
-    )?;
+    let mut conf = match existing_containers_conf {
+        Ok(conf) => Ini::load_from_str(&conf).unwrap(),
+        _ => Ini::new(),
+    };
+
+    let mut engine_section = conf.with_section(Some("engine"));
+    engine_section.set("hooks_dir", "/etc/containers/oci/hooks.d");
+
+    let mut network_section = conf.with_section(Some("network"));
+    network_section.set("network_backend", network_backend);
+    network_section.set("default_subnet", node.subnet_cidr.clone());
+
+    let mut buf = Vec::new();
+
+    conf.write_to(&mut buf)?;
+    let containers_conf = String::from_utf8_lossy(&buf);
 
     conn.execute_stdout(
         &transfer_file_cmd(&containers_conf, "/etc/containers/containers.conf"),
