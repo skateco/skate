@@ -61,7 +61,7 @@ ADD https://raw.githubusercontent.com/containers/image_build/master/podman/conta
 ADD https://raw.githubusercontent.com/containers/image_build/master/podman/podman-containers.conf /home/podman/.config/containers/containers.conf
 ADD https://raw.githubusercontent.com/containers/storage/main/storage.conf /etc/containers/storage.conf
 
-COPY <<EOF /root/.config/containers/containers.conf
+COPY <<EOF /etc/containers/containers.conf.d/01-sind.conf
 [containers]
 netns="host"
 userns="host"
