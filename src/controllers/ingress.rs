@@ -138,7 +138,6 @@ impl IngressController {
 
     pub fn reload(&self) -> Result<(), Box<dyn Error>> {
         // trigger SIGHUP to ingress container
-        // sudo bash -c "podman kill --signal HUP \$(podman ps --filter label=skate.io/namespace=skate --filter label=skate.io/daemonset=nginx-ingress -q)"
         let id = self.execer.exec(
             "podman",
             &[
