@@ -170,7 +170,7 @@ impl<D: LogsDeps> Logs<D> {
         let log_cmd = args.to_podman_log_args().join(" ");
 
         let cmd = format!(
-            "for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;",
+            "for id in $(podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;",
             resource_type.to_string().to_lowercase(),
             name,
             ns,
