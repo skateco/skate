@@ -127,9 +127,8 @@ async fn info(db: SqlitePool, execer: Box<dyn ShellExec>) -> Result<(), Box<dyn 
     let sys = System::new_with_specifics(RefreshKind::everything());
 
     let pod_list_result = match execer.exec(
-        "sudo",
+        "podman",
         &[
-            "podman",
             "pod",
             "ps",
             "--filter",

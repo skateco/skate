@@ -83,7 +83,7 @@ struct FedoraCoreosProvisioner {}
 
 impl CommandVariant for UbuntuProvisioner {
     fn system_update(&self) -> String {
-        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade".into()
+        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && sudo DEBIAN_FRONTEND=noninteractive apt-get -y install acl".into()
     }
 
     fn install_podman(&self) -> String {
@@ -295,7 +295,14 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
 
     conn.execute_stdout(&format!("sudo chown -R root:skate {VAR_PATH}"), true, true)
         .await?;
+    // add current user to group
+    conn.execute_stdout(&format!("sudo usermod -a -G skate $(whoami)"), true, true)
+        .await?;
+    // new files are owned by group skate automatically
     conn.execute_stdout(&format!("sudo chmod g+x {VAR_PATH}"), true, true)
+        .await?;
+    // new files in var_path get g::rw automatically
+    conn.execute_stdout(&format!("sudo setfacl -d -m g::rw {VAR_PATH}"), true, true)
         .await?;
 
     // copy rsyslog config
