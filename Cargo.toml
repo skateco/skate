@@ -42,7 +42,7 @@ reqwest = { version = "0.12.23", features = ["json"] }
 shadow-rs = "1.3.0"
 openssl = { version = "0.10.73", features = ["vendored"] }
 validator = { version = "0.20.0", features= ["derive"] }
-regex = "1.11.2"
+regex = "1.11.3"
 once_cell = "1.21.3"
 sqlx = {  version="0.8.6", features = ["sqlite", "time", "chrono", "runtime-tokio"] }
 uuid = { version="1.18.1", features=["v4"] }
