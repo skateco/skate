@@ -298,12 +298,6 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     // add current user to group
     conn.execute_stdout(&format!("sudo usermod -a -G skate $(whoami)"), true, true)
         .await?;
-    // new files are owned by group skate automatically
-    conn.execute_stdout(&format!("sudo chmod g+x {VAR_PATH}"), true, true)
-        .await?;
-    // new files in var_path get g::rw automatically
-    conn.execute_stdout(&format!("sudo setfacl -d -m g::rw {VAR_PATH}"), true, true)
-        .await?;
 
     // copy rsyslog config
     conn.execute_stdout(
