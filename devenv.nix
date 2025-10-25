@@ -6,6 +6,7 @@
   env.SSH_PRIVATE_KEY = "/tmp/skate-e2e-key";
   env.SKATELET_DB_PATH = "${config.devenv.root}/skatelet.db";
   env.DATABASE_URL = "sqlite:${config.devenv.root}/skatelet.db";
+  env.CROSS_CUSTOM_TOOLCHAIN= "1";
 
   # https://devenv.sh/packages/
     packages = [
@@ -64,7 +65,19 @@
     enable = true;
     # https://devenv.sh/reference/options/#languagesrustchannel
     channel = "stable";
-    targets = [] ++ lib.optionals pkgs.stdenv.isDarwin [ "aarch64-unknown-linux-musl" ];
+     # Rust components
+    components = [
+      "rustc"
+      "cargo"
+      "clippy"
+      "rustfmt"
+      "rust-src"
+      "rust-docs"
+    ];
+    targets = [
+    "x86_64-unknown-linux-gnu"
+    "aarch64-unknown-linux-gnu"
+    ] ++ lib.optionals pkgs.stdenv.isDarwin [];
   };
 
 }
