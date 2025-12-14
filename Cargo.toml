@@ -12,7 +12,7 @@ shadow-rs = "1.4.0"
 anyhow = "1.0.100"
 async-ssh2-tokio = { version = "0.10.0", features = ["openssl"] }
 async-trait = "0.1.89"
-clap = { version = "4.5.50", features = ["derive", "env", "string"] }
+clap = { version = "4.5.53", features = ["derive", "env", "string"] }
 futures = "0.3.31"
 k8s-openapi = { version = "0.25.0", features = ["latest"] }
 semver = "1.0.27"
