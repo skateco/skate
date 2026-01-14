@@ -15,9 +15,6 @@
       pkgs.go
       pkgs.sqlite
     ] ++ lib.optionals pkgs.stdenv.isDarwin [
-      # Seems like some part of sqlx needs this if on mac
-      # Symptom was "ld: framework not found SystemConfiguration"
-      pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
     ];
 
 

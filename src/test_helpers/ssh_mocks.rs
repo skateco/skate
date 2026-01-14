@@ -3,6 +3,7 @@ use crate::deps::SshManager;
 use crate::node_client::{NodeClient, NodeClientError, NodeClientErrors, NodeClients};
 use async_trait::async_trait;
 
+#[allow(unused)]
 pub struct MockSshManager {}
 
 #[async_trait]
