@@ -115,7 +115,7 @@ where
     format!("{:x}", hasher.finish())
 }
 
-pub fn calc_k8s_resource_hash(obj: (impl Metadata<Ty = ObjectMeta> + Serialize + Clone)) -> String {
+pub fn calc_k8s_resource_hash(obj: impl Metadata<Ty = ObjectMeta> + Serialize + Clone) -> String {
     let mut obj = obj.clone();
 
     let mut labels = obj.metadata().labels.clone().unwrap_or_default();
