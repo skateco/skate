@@ -98,8 +98,7 @@ impl PeersDeps for SkateletDeps {}
 pub async fn skatelet() -> Result<(), SkateError> {
     let args = Cli::parse();
 
-    let db_path =
-        env::var("SKATELET_DB_PATH").unwrap_or_else(|_| "/var/lib/skate/db.sqlite".to_string());
+    let db_path = env::var("SKATELET_DB_PATH").unwrap_or_else(|_| format!("{VAR_PATH}/db.sqlite"));
 
     let opts = SqliteConnectOptions::new()
         .filename(db_path)

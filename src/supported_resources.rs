@@ -143,7 +143,7 @@ impl SupportedResources {
                     .unwrap()
                     .execute(
                         &format!(
-                            "sudo skatelet dns remove --pod-id {}",
+                            "skatelet dns remove --pod-id {}",
                             &pod.metadata.name.clone().unwrap()
                         ),
                         false,
@@ -174,7 +174,7 @@ impl SupportedResources {
                 };
 
                 let cmd = format!(
-                    r#"sudo skatelet ipvs disable-ip {} {} && sudo $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#,
+                    r#"skatelet ipvs disable-ip {} {} && $(systemctl cat skate-ipvsmon-{}.service|grep ExecStart|sed 's/ExecStart=//')"#,
                     &fq_deployment_name,
                     ips.join(" "),
                     &fq_deployment_name
