@@ -6,7 +6,7 @@ build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
-shadow-rs = "1.5.0"
+shadow-rs = "1.7.0"
 
 [dependencies]
 anyhow = "1.0.100"
@@ -39,7 +39,7 @@ syslog = "7.0.0"
 tabled = "0.20.0"
 dialoguer = "0.12.0"
 reqwest = { version = "0.13.1", features = ["json"] }
-shadow-rs = "1.5.0"
+shadow-rs = "1.7.0"
 openssl = { version = "0.10.75", features = ["vendored"] }
 validator = { version = "0.20.0", features= ["derive"] }
 regex = "1.12.2"
