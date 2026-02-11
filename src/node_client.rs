@@ -243,7 +243,7 @@ arch > /tmp/arch-$$ &
 uname -s > /tmp/os-$$ &
 skatelet -V|awk '{print $NF}' > /tmp/skatelet-$$ &
 podman --version|awk '{print $NF}' > /tmp/podman-$$ &
-sudo skatelet system info|base64 -w0 > /tmp/sys-$$ &
+skatelet system info 2>&1|base64 -w0 > /tmp/sys-$$ &
 ovs-vsctl --version|head -1| awk '{print $NF}' > /tmp/ovs-$$ &
 
 wait;
@@ -310,7 +310,12 @@ echo ovs="$(cat /tmp/ovs-$$)";
                     "sys" => {
                         if !v.is_empty() {
                             let v = general_purpose::STANDARD.decode(v)?;
-                            let sys_info = serde_json::from_slice(&v)?;
+                            let sys_info = serde_json::from_slice(&v).map_err(|e| {
+                                anyhow!(e).context(format!(
+                                    "failed to deserialize the following: {}",
+                                    String::from_utf8_lossy(&v)
+                                ))
+                            })?;
                             host_info.system_info = sys_info
                         }
                     }
@@ -388,7 +393,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let result = self
             .client
             .execute(&format!(
-                "echo '{}'| base64 --decode|sudo skatelet apply -",
+                "echo '{}'| base64 --decode| skatelet apply -",
                 base64_manifest
             ))
             .await?;
@@ -420,7 +425,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let result = self
             .client
             .execute(&format!(
-                "sudo skatelet delete {} --name {} --namespace {}",
+                "skatelet delete {} --name {} --namespace {}",
                 resource_type.to_string().to_lowercase(),
                 name,
                 namespace
@@ -451,7 +456,7 @@ echo ovs="$(cat /tmp/ovs-$$)";
         let result = self
             .client
             .execute(&format!(
-                "echo '{}' |base64  --decode|sudo skatelet delete -",
+                "echo '{}' |base64  --decode|skatelet delete -",
                 base64_manifest
             ))
             .await?;
