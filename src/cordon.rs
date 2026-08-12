@@ -41,8 +41,7 @@ impl<D: CordonDeps> Cordon<D> {
         let mgr = self.deps.get();
         let conn = mgr.node_connect(cluster, node).await?;
 
-        conn.execute_stdout("sudo skatelet cordon", false, false)
-            .await?;
+        conn.execute_stdout("skatelet cordon", false, false).await?;
         Ok(())
     }
 
@@ -63,7 +62,7 @@ impl<D: CordonDeps> Cordon<D> {
             .await
             .map_err(|e| -> Box<dyn Error> { anyhow!("{}", e).into() })?;
 
-        conn.execute_stdout("sudo skatelet uncordon", false, false)
+        conn.execute_stdout("skatelet uncordon", false, false)
             .await?;
         Ok(())
     }

@@ -6,6 +6,7 @@ RUN dnf install -y \
     rsyslog  \
     wget \
     keepalived && \
+    acl && \
     # set registry short name mode to permissive
     sed -i 's|^[\#]\?short-name-mode\s\?=.*|short-name-mode=\"permissive\"|g' /etc/containers/registries.conf && \
     wget -O /tmp/install-skatelet.sh https://raw.githubusercontent.com/skateco/skate/refs/heads/main/hack/install-skatelet.sh && \

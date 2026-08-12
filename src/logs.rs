@@ -29,7 +29,7 @@ pub struct LogArgs {
 
 impl LogArgs {
     pub fn to_podman_log_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = ["sudo", "podman", "pod", "logs", "--names", "--timestamps"]
+        let mut cmd: Vec<_> = ["podman", "pod", "logs", "--names", "--timestamps"]
             .map(String::from)
             .to_vec();
 
@@ -44,15 +44,9 @@ impl LogArgs {
     }
 
     pub fn to_journalctl_args(&self) -> Vec<String> {
-        let mut cmd: Vec<_> = [
-            "sudo",
-            "journalctl",
-            "--output",
-            "short-iso-precise",
-            "--quiet",
-        ]
-        .map(String::from)
-        .to_vec();
+        let mut cmd: Vec<_> = ["journalctl", "--output", "short-iso-precise", "--quiet"]
+            .map(String::from)
+            .to_vec();
 
         if self.follow {
             cmd.push("-f".to_string());
@@ -170,7 +164,7 @@ impl<D: LogsDeps> Logs<D> {
         let log_cmd = args.to_podman_log_args().join(" ");
 
         let cmd = format!(
-            "for id in $(sudo podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;",
+            "for id in $(podman pod ls --filter label=skate.io/{}={} --filter label=skate.io/namespace={} -q); do {} $id & done; wait;",
             resource_type.to_string().to_lowercase(),
             name,
             ns,
