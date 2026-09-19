@@ -1,4 +1,6 @@
 inputs:
+  git-hooks:
+    url: github:cachix/git-hooks.nix
   fenix:
     url: github:nix-community/fenix
     inputs:
