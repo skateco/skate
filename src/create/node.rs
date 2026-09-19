@@ -83,7 +83,7 @@ struct FedoraCoreosProvisioner {}
 
 impl CommandVariant for UbuntuProvisioner {
     fn system_update(&self) -> String {
-        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade".into()
+        "sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade && sudo DEBIAN_FRONTEND=noninteractive apt-get -y install acl".into()
     }
 
     fn install_podman(&self) -> String {
@@ -276,6 +276,9 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
     let (all_conns, _) = deps.get().cluster_connect(&cluster).await;
     let all_conns = &all_conns.unwrap_or(NodeClients { clients: vec![] });
 
+    // crate 'skate' group
+    let _ = conn.execute_stdout("sudo groupadd skate", true, true).await;
+
     let skate_dirs: [&str; 4] = [
         &format!("{VAR_PATH}/ingress"),
         &format!("{VAR_PATH}/ingress/letsencrypt_storage"),
@@ -289,6 +292,12 @@ pub async fn create_node<D: CreateDeps>(deps: &D, args: CreateNodeArgs) -> Resul
         true,
     )
     .await?;
+
+    conn.execute_stdout(&format!("sudo chown -R root:skate {VAR_PATH}"), true, true)
+        .await?;
+    // add current user to group
+    conn.execute_stdout(&format!("sudo usermod -a -G skate $(whoami)"), true, true)
+        .await?;
 
     // copy rsyslog config
     conn.execute_stdout(
@@ -578,10 +587,7 @@ async fn setup_networking(
     .await?;
 
     let current_backend = conn
-        .execute(
-            "sudo podman info |grep networkBackend: | awk '{print $2}'",
-            true,
-        )
+        .execute("podman info |grep networkBackend: | awk '{print $2}'", true)
         .await?;
     if current_backend.trim() != network_backend {
         // Since we've changed the network backend we need to reset
@@ -606,7 +612,7 @@ async fn setup_networking(
 
     install_oci_hooks(conn).await?;
 
-    let cmd = "sudo podman run --rm busybox echo '1'";
+    let cmd = "podman run --rm busybox echo '1'";
     conn.execute_stdout(cmd, true, true).await?;
 
     let cmd = "sudo bash -c \"grep -q '^unqualified-search-registries' /etc/containers/registries.conf ||  echo 'unqualified-search-registries = [\\\"docker.io\\\"]' >> /etc/containers/registries.conf\"";
@@ -625,7 +631,7 @@ async fn setup_networking(
     let coredns_tag = coredns_tag.to_suffix();
 
     let cmd = format!(
-        "sudo podman image exists {coredns_image}{coredns_tag} || sudo podman pull {coredns_image}{coredns_tag}"
+        "podman image exists {coredns_image}{coredns_tag} || podman pull {coredns_image}{coredns_tag}"
     );
     conn.execute_stdout(&cmd, true, true).await?;
 
