@@ -175,15 +175,15 @@ impl DefaultScheduler {
 
         for node in unschedulable_nodes {
             let existing_pods = node.filter_pods(&|p| {
-                p.labels.contains_key(&SkateLabels::Daemonset.to_string())
-                    && p.labels
-                        .get(&SkateLabels::Daemonset.to_string())
-                        .unwrap_or_default()
-                        == &daemonset_name
-                    && p.labels
-                        .get(&SkateLabels::Namespace.to_string())
-                        .unwrap_or_default()
-                        == &ns
+                let Some(ds_name) = p.labels.get(&SkateLabels::Daemonset.to_string()) else {
+                    return false;
+                };
+
+                let Some(ns_name) = p.labels.get(&SkateLabels::Namespace.to_string()) else {
+                    return false;
+                };
+
+                ds_name == &daemonset_name && ns_name == &ns
             });
             for pod_info in existing_pods {
                 let pod: Pod = (&pod_info).into();
@@ -470,7 +470,7 @@ impl DefaultScheduler {
 
         // smuggle node selectors as labels
         if let Some(spec) = new_pod.spec.as_ref() {
-            if let Some(ns) = spec.node_selector {
+            if let Some(ns) = &spec.node_selector {
                 let selector_labels = ns
                     .iter()
                     .map(|(k, v)| (format!("nodeselector/{}", k), v.clone()));
@@ -906,7 +906,7 @@ impl DefaultScheduler {
             for mut op in ops {
                 match op.operation {
                     OpType::Delete => {
-                        let node = op.node.ok_or("Node not found")?;
+                        let node = op.node.clone().ok_or("Node not found")?;
                         let node_name = node.node_name;
                         if dry_run {
                             let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
