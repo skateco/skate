@@ -16,7 +16,7 @@ use crate::spec::cert::ClusterIssuer;
 use crate::state::state::{CatalogueItem, ClusterState, NodeState};
 use crate::supported_resources::SupportedResources;
 use crate::util::{CROSS_EMOJI, NamespacedName, SkateLabels, hash_k8s_resource, metadata_name};
-use anyhow::anyhow;
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use colored::Colorize;
 use itertools::Itertools;
@@ -176,8 +176,14 @@ impl DefaultScheduler {
         for node in unschedulable_nodes {
             let existing_pods = node.filter_pods(&|p| {
                 p.labels.contains_key(&SkateLabels::Daemonset.to_string())
-                    && p.labels.get(&SkateLabels::Daemonset.to_string()).unwrap() == &daemonset_name
-                    && p.labels.get(&SkateLabels::Namespace.to_string()).unwrap() == &ns
+                    && p.labels
+                        .get(&SkateLabels::Daemonset.to_string())
+                        .unwrap_or_default()
+                        == &daemonset_name
+                    && p.labels
+                        .get(&SkateLabels::Namespace.to_string())
+                        .unwrap_or_default()
+                        == &ns
             });
             for pod_info in existing_pods {
                 let pod: Pod = (&pod_info).into();
@@ -464,8 +470,7 @@ impl DefaultScheduler {
 
         // smuggle node selectors as labels
         if let Some(spec) = new_pod.spec.as_ref() {
-            if spec.node_selector.is_some() {
-                let ns = spec.node_selector.clone().unwrap();
+            if let Some(ns) = spec.node_selector {
                 let selector_labels = ns
                     .iter()
                     .map(|(k, v)| (format!("nodeselector/{}", k), v.clone()));
@@ -551,7 +556,10 @@ impl DefaultScheduler {
 
         let op_types = match existing_cron {
             Some(existing_cron) => {
-                let node = existing_cron.nodes.first().unwrap();
+                let node = existing_cron
+                    .nodes
+                    .first()
+                    .ok_or(anyhow!("not even one node on existing cron catalogue item"))?;
                 if existing_cron.object.manifest_hash == new_hash && node.schedulable() {
                     vec![(OpType::Unchanged, Some(node))]
                 } else {
@@ -863,21 +871,23 @@ impl DefaultScheduler {
         conns: &NodeClients,
         resource: ScheduledOperation,
     ) -> Result<(String, String), Box<dyn Error>> {
-        let hook_result = resource
-            .resource
-            .pre_remove_hook(resource.node.as_ref().unwrap(), conns)
-            .await;
+        let node = resource
+            .node
+            .as_ref()
+            .ok_or(anyhow!("no node in scheduled operation"))?;
+
+        let hook_result = resource.resource.pre_remove_hook(node, conns).await;
 
         let conn = conns
-            .find(&resource.node.unwrap().node_name)
+            .find(&node.node_name)
             .ok_or("failed to find connection to host")?;
 
         let manifest =
-            serde_yaml::to_string(&resource.resource).expect("failed to serialize manifest");
+            serde_yaml::to_string(&resource.resource).context("failed to serialize manifest")?;
         let remove_result = conn.remove_resource_by_manifest(&manifest).await;
 
-        if hook_result.is_err() {
-            return Err(hook_result.err().unwrap());
+        if let Err(hook_err) = hook_result {
+            return Err(hook_err);
         }
 
         remove_result
@@ -896,7 +906,8 @@ impl DefaultScheduler {
             for mut op in ops {
                 match op.operation {
                     OpType::Delete => {
-                        let node_name = op.node.clone().unwrap().node_name;
+                        let node = op.node.ok_or("Node not found")?;
+                        let node_name = node.node_name;
                         if dry_run {
                             let _ = state.reconcile_object_deletion(&op.resource, &node_name)?;
                             if !op.silent {
@@ -993,7 +1004,7 @@ impl DefaultScheduler {
                             }
                         };
 
-                        if selection.selected.is_none() {
+                        let Some(selected) = selection.selected else {
                             let reasons = selection
                                 .rejected
                                 .iter()
@@ -1012,9 +1023,9 @@ impl DefaultScheduler {
                                 reasons
                             )
                             .into());
-                        }
+                        };
 
-                        let node_name = selection.selected.unwrap().node_name.clone();
+                        let node_name = selected.node_name;
 
                         if dry_run {
                             let _ = state.reconcile_object_creation(&op.resource, &node_name)?;
@@ -1030,9 +1041,12 @@ impl DefaultScheduler {
                             continue;
                         }
 
-                        let client = conns.find(&node_name).unwrap();
+                        let Some(client) = conns.find(&node_name) else {
+                            return Err(anyhow!("no client for node {}", node_name).into());
+                        };
+
                         let serialized = serde_yaml::to_string(&op.resource)
-                            .expect("failed to serialize object");
+                            .context("failed to serialize object")?;
 
                         match client.apply_resource(&serialized).await {
                             Ok((_, stderr)) => {
@@ -1073,7 +1087,7 @@ impl DefaultScheduler {
                         }
                     }
                     OpType::Info => {
-                        let node_name = op.node.clone().unwrap().node_name;
+                        let node_name = op.node.clone().map(|n| n.node_name).unwrap_or_default();
 
                         if !op.silent {
                             println!(
@@ -1086,7 +1100,7 @@ impl DefaultScheduler {
                         result.push(op.clone());
                     }
                     OpType::Unchanged => {
-                        let node_name = op.node.clone().unwrap().node_name;
+                        let node_name = op.node.clone().map(|n| n.node_name).unwrap_or_default();
 
                         if !op.silent {
                             println!(
