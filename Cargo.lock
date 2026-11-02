@@ -3426,7 +3426,7 @@ dependencies = [
  "anyhow",
  "async-ssh2-tokio",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "clap",
  "colored",
