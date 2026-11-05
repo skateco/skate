@@ -183,7 +183,7 @@ jobs:
       - name: Load sind image
         if: needs.changes.outputs.images-sind-fcos == 'true'
         run: |
-            docker load -i /tmp/sind-image.tar
+            docker load -i ./sind-image.tar
       - name: Build binaries
         run: cargo build --locked --release
       - name: E2E Tests in Sind
@@ -235,7 +235,7 @@ jobs:
       - name: Load sind image
         if: needs.changes.outputs.images-sind-fcos == 'true'
         run: |
-          docker load -i /tmp/sind-fcos-image.tar
+          docker load -i ./sind-fcos-image.tar
       - name: Build binaries
         run: cargo build --locked --release
       - name: E2E Tests in Sind (Fedora)
