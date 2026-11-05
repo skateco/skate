@@ -155,7 +155,11 @@ jobs:
 
   e2e-test:
     runs-on: ubuntu-latest
-    needs: [ images-sind ]
+    needs: [ images-sind, changes ]
+    # run even if images-sind hasn't run
+    if:  always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     env:
       SQLX_OFFLINE: 1
     steps:
@@ -203,7 +207,11 @@ jobs:
             e2e-evidence/
   e2e-test-fedora:
     runs-on: ubuntu-latest
-    needs: [ images-sind-fcos ]
+    needs: [ images-sind-fcos, changes ]
+    # run even if images-sind hasn't run
+    if:  always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     env:
       SQLX_OFFLINE: 1
     steps:
