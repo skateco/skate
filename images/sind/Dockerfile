@@ -14,7 +14,7 @@
 
 # Modified for skate
 
-ARG BASE_IMAGE=ubuntu:24.04
+ARG BASE_IMAGE=ubuntu:26.04
 FROM $BASE_IMAGE AS base
 
 COPY --chmod=0755 files/usr/local/bin/clean-install /usr/local/bin/
@@ -48,7 +48,7 @@ DEBIAN_FRONTEND=noninteractive clean-install \
         && rm -f /lib/systemd/system/sockets.target.wants/*initctl* \
         && rm -f /lib/systemd/system/basic.target.wants/* \
         && echo "ReadKMsg=no" >> /etc/systemd/journald.conf \
-        && ln -s "$(which systemd)" /sbin/init
+        && ln -s "/usr/lib/systemd/systemd" /sbin/init
 
 RUN useradd skate; \
 echo skate:200000:65536 > /etc/subuid; \

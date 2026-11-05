@@ -5,7 +5,7 @@ build-and-push:
 .PHONY: build
 build: guard-TAG
 build:
-	docker buildx build --platform linux/arm64,linux/amd64  -t ghcr.io/skateco/sind:${TAG} .
+	docker buildx build --platform linux/arm64,linux/amd64  -t ghcr.io/skateco/sind:${TAG} --load .
 
 guard-%:
 	@ if [ "${${*}}" = "" ]; then \
