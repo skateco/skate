@@ -23,9 +23,9 @@ jobs:
       images-coredns: ${{ steps.filter.outputs.images-coredns }}
       images-nginx-ingress: ${{ steps.filter.outputs.images-nginx-ingress }}
       images-sind: ${{ steps.filter.outputs.images-sind }}
+      images-sind-fcos: ${{ steps.filter.outputs.images-sind-fcos }}
     steps:
       - uses: actions/checkout@v4
-      # For pull requests it's not necessary to checkout the code
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -36,6 +36,8 @@ jobs:
               - 'images/nginx-ingress/**'
             images-sind:
                - 'images/sind/**'
+            images-sind-fcos:
+                - 'images/sind-fedora/**'
 
   install-script-test:
     strategy:
@@ -116,10 +118,47 @@ jobs:
         run: |
           cd images/sind
           TAG=latest make build
-    
+      - name: Save image to disk
+        run: |
+          docker save ghcr.io/skateco/sind:latest -o /tmp/sind-image.tar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sind-image
+          path: /tmp/sind-image.tar
+
+  images-sind-fcos:
+    if: ${{ needs.changes.outputs.images-sind-fcos == 'true' }}
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        run: |
+          cd images/sind-fedora
+          TAG=latest make build
+      - name: Save image to disk
+        run: |
+          docker save ghcr.io/skateco/sind:fedora -o /tmp/sind-fcos-image.tar
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sind-fcos-image
+          path: /tmp/sind-fcos-image.tar
+
 
   e2e-test:
     runs-on: ubuntu-latest
+    needs: [ images-sind, changes ]
+    # run even if images-sind hasn't run
+    if:  always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     env:
       SQLX_OFFLINE: 1
     steps:
@@ -135,6 +174,15 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
+      - name: Download sind image
+        if: needs.changes.outputs.images-sind == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: sind-image
+      - name: Load sind image
+        if: needs.changes.outputs.images-sind-fcos == 'true'
+        run: |
+            docker load -i ./sind-image.tar
       - name: Build binaries
         run: cargo build --locked --release
       - name: E2E Tests in Sind
@@ -158,6 +206,11 @@ jobs:
             e2e-evidence/
   e2e-test-fedora:
     runs-on: ubuntu-latest
+    needs: [ images-sind-fcos, changes ]
+    # run even if images-sind hasn't run
+    if:  always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     env:
       SQLX_OFFLINE: 1
     steps:
@@ -173,6 +226,15 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
+      - name: Download sind image
+        if: needs.changes.outputs.images-sind == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: sind-fcos-image
+      - name: Load sind image
+        if: needs.changes.outputs.images-sind-fcos == 'true'
+        run: |
+          docker load -i ./sind-fcos-image.tar
       - name: Build binaries
         run: cargo build --locked --release
       - name: E2E Tests in Sind (Fedora)
@@ -202,9 +264,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04
+            os: ubuntu-26.04
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-24.04
+            os: ubuntu-26.04
     runs-on: ${{ matrix.os }}
     env:
       TARGET: ${{ matrix.TARGET }}
